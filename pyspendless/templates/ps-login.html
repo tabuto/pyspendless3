@@ -1,0 +1,14 @@
+{% extends 'ps-auth.html' %}
+
+{% block title %}Login - PySpendless{% endblock %}
+
+{% block auth_content %}
+<div class="d-flex justify-content-center align-items-center" style="min-height: 60vh;">
+    <div class="text-center">
+        <h2 class="mb-4">Accedi a PySpendless</h2>
+        <a href="/auth/login" class="btn btn-primary btn-lg" id="login-google-btn">
+            <i class="bi bi-google"></i> Login with Google
+        </a>
+    </div>
+</div>
+{% endblock %}

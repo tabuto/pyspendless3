@@ -1,0 +1,27 @@
+{% extends 'ps-base.html' %}
+
+{% block content %}
+<div class="app-wrapper">
+  <aside class="app-sidebar bg-body-secondary shadow" data-bs-theme="dark">
+    <!--begin::Sidebar Brand-->
+    <div class="sidebar-brand">
+      <a href="./index.html" class="brand-link">
+        <img src="./assets/img/AdminLTELogo.png" alt="AdminLTE Logo" class="brand-image opacity-75 shadow" />
+        <span class="brand-text fw-light">AdminLTE 4</span>
+      </a>
+    </div>
+    <div class="sidebar-wrapper">
+      <nav class="mt-2">
+        <!--begin::Sidebar Menu-->
+        <ul class="nav sidebar-menu flex-column" data-lte-toggle="treeview" role="navigation" aria-label="Main navigation" data-accordion="false" id="navigation">
+          <!-- ...sidebar menu items from index3.html... -->
+        </ul>
+        <!--end::Sidebar Menu-->
+      </nav>
+    </div>
+  </aside>
+  <main class="app-main">
+    {% block nav_content %}{% endblock %}
+  </main>
+</div>
+{% endblock %}

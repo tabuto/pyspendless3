@@ -1,0 +1,16 @@
+{% extends 'ps-nav.html' %}
+
+{% block nav_content %}
+<div class="container mt-4">
+  <h1>Benvenuto su PySpendless!</h1>
+  {% if user_email %}
+    <div class="alert alert-success">Login effettuato come: <strong>{{ user_email }}</strong></div>
+  {% endif %}
+  <p>Gestisci le tue spese personali e condivise in modo semplice e sicuro.</p>
+  <ul>
+    <li>Visualizza e aggiungi movimenti</li>
+    <li>Gestisci wallet e categorie</li>
+    <li>Invita altri utenti nei tuoi gruppi</li>
+  </ul>
+</div>
+{% endblock %}

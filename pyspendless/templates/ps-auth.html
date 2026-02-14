@@ -1,0 +1,15 @@
+{% extends 'ps-base.html' %}
+
+{% block body_class %} class="login-page bg-body-secondary"{% endblock %}
+
+    <div class="login-box">
+      <div class="card card-outline card-primary">
+        <div class="card-header">
+                <div class="card-body login-card-body">
+{% block content %}
+    {% block auth_content %}{% endblock %}
+{% endblock %}
+                </div>
+        </div>
+      </div>
+    </div>  

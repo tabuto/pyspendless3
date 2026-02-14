@@ -1,0 +1,8 @@
+Flask
+SQLAlchemy
+Flask-SQLAlchemy
+Authlib
+python-dotenv
+marshmallow
+alembic
+requests

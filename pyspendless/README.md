@@ -10,6 +10,8 @@ Per avviare l'applicazione:
 
 ```
 .venv/bin/python -m pyspendless.app
+
+ pyspendless/.venv/bin/python -m pyspendless.app
 ```
 
 Oppure, se preferisci usare Flask CLI:

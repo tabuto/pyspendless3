@@ -48,5 +48,20 @@ def home():
     user_email = session.get('user_email')
     return render_template("ps-home.html", user_email=user_email)
 
+@app.route("/create")
+def create():
+    # Dummy data for the form
+    categories = []
+    wallets = []
+    users = []
+    return render_template("ps-add-mov.html", categories=categories, wallets=wallets, users=users)
+
+@app.route("/add_movement", methods=['POST'])
+def add_movement():
+    # In a real app, you'd get form data and save it to the DB
+    # e.g., date = request.form.get('move_date')
+    flash('Movimento salvato con successo!', 'success')
+    return redirect(url_for('home'))
+
 if __name__ == "__main__":
     app.run(debug=True)

@@ -1,0 +1,62 @@
+{% extends 'ps-base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="row justify-content-center">
+    <div class="col-md-8">
+      <div class="card card-primary">
+        <div class="card-header">
+          <h3 class="card-title">Nuovo Movimento Spesa</h3>
+        </div>
+        <form method="post" action="{{ url_for('add_movement') }}">
+          <div class="card-body">
+            <div class="mb-3">
+              <label for="move_date" class="form-label">Data</label>
+              <input type="date" class="form-control" id="move_date" name="move_date" required>
+            </div>
+            <div class="mb-3">
+              <label for="category" class="form-label">Categoria</label>
+              <select class="form-select" id="category" name="category" required>
+                {% for cat in categories %}
+                  <option value="{{ cat.id }}">{{ cat.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="mb-3">
+              <label for="wallet" class="form-label">Wallet</label>
+              <select class="form-select" id="wallet" name="wallet" required>
+                {% for wal in wallets %}
+                  <option value="{{ wal.id }}">{{ wal.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="mb-3">
+              <label for="income" class="form-label">Entrata (€)</label>
+              <input type="number" step="0.01" class="form-control" id="income" name="income">
+            </div>
+            <div class="mb-3">
+              <label for="expense" class="form-label">Spesa (€)</label>
+              <input type="number" step="0.01" class="form-control" id="expense" name="expense">
+            </div>
+            <div class="mb-3">
+              <label for="note" class="form-label">Nota</label>
+              <textarea class="form-control" id="note" name="note" rows="2"></textarea>
+            </div>
+            <div class="mb-3">
+              <label for="user" class="form-label">Utente</label>
+              <select class="form-select" id="user" name="user" required>
+                {% for usr in users %}
+                  <option value="{{ usr.id }}">{{ usr.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <div class="card-footer text-end">
+            <button type="submit" class="btn btn-primary">Salva Movimento</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

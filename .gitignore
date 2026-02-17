@@ -6,3 +6,4 @@
 
 # Ignora cache di Python
 __pycache__/
+data/pyspendless.db

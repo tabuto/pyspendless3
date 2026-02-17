@@ -98,7 +98,7 @@ Applicazione web per la gestione di spese personali e condivise. Registrazione t
    - wallet_id: Integer FK -> Wallet.id
    Questi possono essere nullable per mantenere compatibilità con i record esistenti.
 
-6. Group
+6. UserGroup
    - id: Integer PK
    - name: String (nomeGruppo)
    - account_id: FK -> Account
@@ -119,7 +119,7 @@ Applicazione web per la gestione di spese personali e condivise. Registrazione t
 - Wallet(1) — Movements(N)
 - User(1) — Movements(N)
 - Category(1) — Movements(N)
-- Group(1) — GroupMembership(N) — User(N)
+- UserGroup(1) — GroupMembership(N) — User(N)
 
 ## Rotte principali (API) — da implementare in `app.py`
 - Auth
@@ -207,7 +207,7 @@ Authorization: tutte le rotte scrittura devono verificare che l'utente apparteng
 - WHITELIST_EMAILS=alice@example.com,bob@example.com
 
 ## repository.py
-- Funzioni CRUD per ogni entità (Account, User, Wallet, Category, Movement, Group, Invite)
+- Funzioni CRUD per ogni entità (Account, User, Wallet, Category, Movement, UserGroup, Invite)
 - Metodi consigliati:
   - create_user_from_oauth(info)
   - get_or_create_account(name)

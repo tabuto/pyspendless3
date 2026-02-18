@@ -7,3 +7,7 @@
 # Ignora cache di Python
 __pycache__/
 data/pyspendless.db
+.DS_Store
+.gitignore
+data/pyspendless3.db
+pyspendless/.env_pa

@@ -7,10 +7,26 @@
     <div class="alert alert-success">Login effettuato come: <strong>{{ user_email }}</strong></div>
   {% endif %}
   <p>Gestisci le tue spese personali e condivise in modo semplice e sicuro.</p>
-  <ul>
-    <li>Visualizza e aggiungi movimenti</li>
-    <li>Gestisci wallet e categorie</li>
-    <li>Invita altri utenti nei tuoi gruppi</li>
-  </ul>
+  
+  <div class="row mt-4">
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title">Nuovo Movimento</h5>
+          <p class="card-text">Inserisci una nuova spesa o entrata</p>
+          <a href="{{ url_for('create') }}" class="btn btn-primary">Crea Movimento</a>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title">Visualizza Movimenti</h5>
+          <p class="card-text">Consulta e filtra i tuoi movimenti</p>
+          <a href="{{ url_for('movements') }}" class="btn btn-info">Vedi Movimenti</a>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}

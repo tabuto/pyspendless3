@@ -266,7 +266,9 @@ class MovementRepository:
         wallet_id: Optional[int] = None,
         user_id: Optional[int] = None,
         year: Optional[int] = None,
-        month: Optional[int] = None
+        month: Optional[int] = None,
+        category_id: Optional[int] = None,
+        category_type: Optional[str] = None
     ) -> List[Movement]:
         """
         Recupera i movimenti di un account con filtri opzionali
@@ -281,8 +283,14 @@ class MovementRepository:
             query = query.filter_by(move_year=year)
         if month:
             query = query.filter_by(move_month=month)
+        if category_id:
+            query = query.filter_by(category_id=category_id)
         
-        return query.all()
+        # Filtra per tipo categoria (tramite join)
+        if category_type:
+            query = query.join(Category, Movement.category_id == Category.id).filter(Category.type == category_type)
+        
+        return query.order_by(Movement.move_date.desc()).all()
     
     def get_movement(self, movement_id: str) -> Optional[Movement]:
         """Recupera un movimento tramite ID"""
@@ -317,6 +325,76 @@ class MovementRepository:
         self.db.delete(movement)
         self.db.commit()
         return True
+    
+    def get_movements_stats(
+        self,
+        account_id: int,
+        wallet_id: Optional[int] = None,
+        user_id: Optional[int] = None,
+        year: Optional[int] = None,
+        month: Optional[int] = None,
+        category_id: Optional[int] = None,
+        category_type: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Calcola statistiche aggregate sui movimenti
+        Returns:
+            Dict con: total_income, total_expense, balance, expenses_by_category
+        """
+        from sqlalchemy import func
+        
+        # Recupera i movimenti filtrati
+        movements = self.get_movements_for_account(
+            account_id=account_id,
+            wallet_id=wallet_id,
+            user_id=user_id,
+            year=year,
+            month=month,
+            category_id=category_id,
+            category_type=category_type
+        )
+        
+        # Calcola totali
+        total_income = sum(float(m.income) if m.income else 0 for m in movements)
+        total_expense = sum(float(m.expense) if m.expense else 0 for m in movements)
+        balance = total_income - total_expense
+        
+        # Raggruppa spese per categoria
+        query = self.db.query(
+            Category.name,
+            func.sum(Movement.expense).label('total')
+        ).join(
+            Movement, Movement.category_id == Category.id
+        ).filter(
+            Movement.account_id == account_id,
+            Movement.expense.isnot(None)
+        )
+        
+        # Applica gli stessi filtri
+        if wallet_id:
+            query = query.filter(Movement.wallet_id == wallet_id)
+        if user_id:
+            query = query.filter(Movement.user_id == user_id)
+        if year:
+            query = query.filter(Movement.move_year == year)
+        if month:
+            query = query.filter(Movement.move_month == month)
+        if category_id:
+            query = query.filter(Movement.category_id == category_id)
+        if category_type:
+            query = query.filter(Category.type == category_type)
+        
+        expenses_by_category = query.group_by(Category.name).all()
+        
+        return {
+            'total_income': total_income,
+            'total_expense': total_expense,
+            'balance': balance,
+            'expenses_by_category': [
+                {'category': cat, 'total': float(total) if total else 0}
+                for cat, total in expenses_by_category
+            ]
+        }
 
 
 class GroupRepository:

@@ -1,24 +1,35 @@
-{% extends 'ps-base.html' %}
+{% extends 'ps-nav.html' %}
 
-{% block content %}
+{% block nav_content %}
 <div class="container mt-4">
   <div class="row justify-content-center">
     <div class="col-md-8">
+      <!-- Alert container per messaggi di successo/errore -->
+      <div id="alert-container"></div>
+
       <div class="card card-primary">
         <div class="card-header">
-          <h3 class="card-title">Nuovo Movimento Spesa</h3>
+          <h3 class="card-title">Nuovo Movimento</h3>
         </div>
-        <form method="post" action="{{ url_for('add_movement') }}">
+        <form id="movement-form">
           <div class="card-body">
             <div class="mb-3">
               <label for="move_date" class="form-label">Data</label>
               <input type="date" class="form-control" id="move_date" name="move_date" required>
             </div>
             <div class="mb-3">
+              <label for="movement_type" class="form-label">Tipo Movimento</label>
+              <select class="form-select" id="movement_type" name="movement_type" required>
+                <option value="expense" selected>Uscita</option>
+                <option value="income">Entrata</option>
+              </select>
+            </div>
+            <div class="mb-3">
               <label for="category" class="form-label">Categoria</label>
               <select class="form-select" id="category" name="category" required>
+                <option value="">Seleziona una categoria</option>
                 {% for cat in categories %}
-                  <option value="{{ cat.id }}">{{ cat.name }}</option>
+                  <option value="{{ cat.id }}" data-type="{{ cat.type }}">{{ cat.name }}</option>
                 {% endfor %}
               </select>
             </div>
@@ -31,32 +42,142 @@
               </select>
             </div>
             <div class="mb-3">
-              <label for="income" class="form-label">Entrata (€)</label>
-              <input type="number" step="0.01" class="form-control" id="income" name="income">
-            </div>
-            <div class="mb-3">
-              <label for="expense" class="form-label">Spesa (€)</label>
-              <input type="number" step="0.01" class="form-control" id="expense" name="expense">
+              <label for="amount" class="form-label">Importo (€)</label>
+              <input type="number" step="0.01" class="form-control" id="amount" name="amount" required min="0.01">
             </div>
             <div class="mb-3">
               <label for="note" class="form-label">Nota</label>
               <textarea class="form-control" id="note" name="note" rows="2"></textarea>
             </div>
-            <div class="mb-3">
-              <label for="user" class="form-label">Utente</label>
-              <select class="form-select" id="user" name="user" required>
-                {% for usr in users %}
-                  <option value="{{ usr.id }}">{{ usr.name }}</option>
-                {% endfor %}
-              </select>
-            </div>
           </div>
           <div class="card-footer text-end">
-            <button type="submit" class="btn btn-primary">Salva Movimento</button>
+            <button type="submit" class="btn btn-primary" id="submit-btn">Salva Movimento</button>
           </div>
         </form>
       </div>
     </div>
   </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Imposta la data odierna come default
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('move_date').value = today;
+
+  // Elementi del form
+  const form = document.getElementById('movement-form');
+  const submitBtn = document.getElementById('submit-btn');
+  const alertContainer = document.getElementById('alert-container');
+  const movementTypeSelect = document.getElementById('movement_type');
+  const categorySelect = document.getElementById('category');
+  
+  // Salva tutte le opzioni delle categorie
+  const allCategoryOptions = Array.from(categorySelect.querySelectorAll('option'));
+  
+  // Funzione per filtrare le categorie in base al tipo di movimento
+  function filterCategories() {
+    const selectedType = movementTypeSelect.value;
+    
+    // Pulisci le opzioni correnti
+    categorySelect.innerHTML = '<option value="">Seleziona una categoria</option>';
+    
+    // Aggiungi solo le categorie del tipo selezionato
+    allCategoryOptions.forEach(option => {
+      if (option.value === '') {
+        // Salta l'opzione vuota iniziale
+        return;
+      }
+      
+      const categoryType = option.getAttribute('data-type');
+      if (categoryType === selectedType) {
+        categorySelect.appendChild(option.cloneNode(true));
+      }
+    });
+  }
+  
+  // Filtra le categorie al cambio del tipo movimento
+  movementTypeSelect.addEventListener('change', filterCategories);
+  
+  // Filtra le categorie al caricamento iniziale
+  filterCategories();
+
+  // Gestione submit del form
+  form.addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    // Disabilita il pulsante durante il salvataggio
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Salvataggio...';
+
+    // Raccogli i dati dal form
+    const movementType = document.getElementById('movement_type').value;
+    const amount = document.getElementById('amount').value;
+    
+    // Prepara i dati: salva l'importo nella colonna corretta
+    const formData = {
+      move_date: document.getElementById('move_date').value,
+      category_id: parseInt(document.getElementById('category').value),
+      wallet_id: parseInt(document.getElementById('wallet').value),
+      income: movementType === 'income' ? parseFloat(amount) : null,
+      expense: movementType === 'expense' ? parseFloat(amount) : null,
+      note: document.getElementById('note').value
+    };
+
+    try {
+      // Invia richiesta POST all'API
+      const response = await fetch('/api/movements', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        // Successo - mostra messaggio e resetta il form
+        showAlert('Salvataggio avvenuto con successo!', 'success');
+        form.reset();
+        // Reimposta la data odierna e tipo movimento di default
+        document.getElementById('move_date').value = today;
+        document.getElementById('movement_type').value = 'expense';
+        // Rifiltra le categorie dopo il reset
+        filterCategories();
+      } else {
+        // Errore - mostra messaggio di errore
+        showAlert(result.error || 'Errore durante il salvataggio', 'danger');
+      }
+    } catch (error) {
+      // Errore di rete o altro
+      showAlert('Errore di comunicazione con il server: ' + error.message, 'danger');
+    } finally {
+      // Riabilita il pulsante
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Salva Movimento';
+    }
+  });
+
+  // Funzione per mostrare gli alert
+  function showAlert(message, type) {
+    const alert = document.createElement('div');
+    alert.className = `alert alert-${type} alert-dismissible fade show`;
+    alert.role = 'alert';
+    alert.innerHTML = `
+      ${message}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    
+    alertContainer.innerHTML = '';
+    alertContainer.appendChild(alert);
+
+    // Auto-nascondi dopo 5 secondi
+    setTimeout(() => {
+      alert.classList.remove('show');
+      setTimeout(() => alert.remove(), 150);
+    }, 5000);
+  }
+});
+</script>
 {% endblock %}

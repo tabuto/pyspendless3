@@ -254,7 +254,22 @@ Authorization: tutte le rotte scrittura devono verificare che l'utente apparteng
 
 ## UI e Template Bootstrap
 
-- Utilizzare un template Bootstrap per l'interfaccia utente, seguendo le best practice Flask per la gestione di template e static files.
+- **Template**: Tutte le pagine devono utilizzare il template Bootstrap **AdminLTE 3** (riferimento: [AdminLTE v3 Index3](https://adminlte.io/themes/v3/index3.html)).
+- **Libreria Grafici**: I grafici devono essere renderizzati utilizzando **Chart.js**.
+- **Comunicazione FE-BE**: Il Front End comunica con il Back End esclusivamente tramite chiamate **API REST** con **AJAX** e formato dati **JSON**.
+- **Layout e Navigazione**:
+  - **Con Sidebar**: Tutte le pagine relative ad un utente loggato devono includere la barra di navigazione laterale. Queste pagine includono:
+    - Home
+    - Crea nuovo movimento
+    - Visualizza movimenti
+    - Settings
+    - Profilo
+  - **Senza Sidebar**: Le seguenti pagine devono essere prive della barra di navigazione laterale:
+    - Login
+    - Inizializzazione account
+    - Onboarding
+    - Errori bloccanti
+
 - Struttura consigliata del progetto per frontend:
 
   ├── app.py
@@ -263,15 +278,17 @@ Authorization: tutte le rotte scrittura devono verificare che l'utente apparteng
   ├── models.py
   ├── static/
   │   ├── css/
-  │   │   └── bootstrap.min.css  (opzionale se non si usa CDN)
+  │   │   └── adminlte.min.css
   │   └── js/
+  │       └── adminlte.min.js
   ├── templates/
-  │   ├── base.html              <-- Il "guscio" del sito che sfrutta Jinja2
-  │   └── index.html             <-- La pagina specifica che estende base
+  │   ├── base.html              <-- Layout base con sidebar (per utenti loggati)
+  │   ├── base_auth.html         <-- Layout base senza sidebar (per login/errori)
+  │   └── ...
 
 - Per includere risorse statiche (CSS/JS), usare sempre `url_for`:
   
-  `<link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">`
+  `<link rel="stylesheet" href="{{ url_for('static', filename='css/adminlte.min.css') }}">`
 
 - Integrare il sistema di messaggistica di Flask (`flask.flash`) con gli Alerts di Bootstrap per mostrare errori o successi all'utente. Esempio in Jinja2:
 
@@ -288,5 +305,5 @@ Authorization: tutte le rotte scrittura devono verificare che l'utente apparteng
   {% endwith %}
   ```
 
-- Le pagine HTML devono estendere `base.html` e sfruttare i blocchi Jinja2 per contenuto dinamico.
+- Le pagine HTML devono estendere `base.html` (o `base_auth.html`) e sfruttare i blocchi Jinja2 per contenuto dinamico.
 

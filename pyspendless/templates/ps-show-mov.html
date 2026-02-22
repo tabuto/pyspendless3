@@ -1,0 +1,218 @@
+{% extends 'ps-nav.html' %}
+
+{% block nav_content %}
+<div class="container-fluid mt-4">
+  <!-- Barra dei Filtri -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <h5 class="card-title mb-0">Filtri</h5>
+    </div>
+    <div class="card-body">
+      <form method="GET" action="{{ url_for('movements') }}" class="row g-3">
+        <div class="col-md-2">
+          <label for="year" class="form-label">Anno</label>
+          <select class="form-select" id="year" name="year">
+            {% for y in years %}
+              <option value="{{ y }}" {% if y == filters.year %}selected{% endif %}>{{ y }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label for="month" class="form-label">Mese</label>
+          <select class="form-select" id="month" name="month">
+            {% for m in months %}
+              <option value="{{ m.value }}" {% if m.value == filters.month %}selected{% endif %}>{{ m.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label for="wallet_id" class="form-label">Wallet</label>
+          <select class="form-select" id="wallet_id" name="wallet_id">
+            <option value="">Tutti</option>
+            {% for wallet in wallets %}
+              <option value="{{ wallet.id }}" {% if wallet.id == filters.wallet_id %}selected{% endif %}>{{ wallet.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label for="category_type" class="form-label">Tipo</label>
+          <select class="form-select" id="category_type" name="category_type">
+            <option value="">Tutti</option>
+            {% for ct in category_types %}
+              <option value="{{ ct.value }}" {% if ct.value == filters.category_type %}selected{% endif %}>{{ ct.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label for="category_id" class="form-label">Categoria</label>
+          <select class="form-select" id="category_id" name="category_id">
+            <option value="">Tutte</option>
+            {% for cat in categories %}
+              <option value="{{ cat.id }}" {% if cat.id == filters.category_id %}selected{% endif %}>{{ cat.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-1 d-flex align-items-end">
+          <button type="submit" class="btn btn-primary w-100">Filtra</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Sezione Statistiche (KPI Cards) -->
+  <div class="row mb-4">
+    <div class="col-md-4">
+      <div class="card text-white bg-success">
+        <div class="card-body">
+          <h5 class="card-title">Totale Entrate</h5>
+          <h2 class="mb-0">€ {{ "%.2f"|format(stats.total_income) }}</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card text-white bg-danger">
+        <div class="card-body">
+          <h5 class="card-title">Totale Uscite</h5>
+          <h2 class="mb-0">€ {{ "%.2f"|format(stats.total_expense) }}</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card text-white {% if stats.balance >= 0 %}bg-info{% else %}bg-warning{% endif %}">
+        <div class="card-body">
+          <h5 class="card-title">Bilancio</h5>
+          <h2 class="mb-0">€ {{ "%.2f"|format(stats.balance) }}</h2>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Grafico Spese per Categoria -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Spese per Categoria</h5>
+        </div>
+        <div class="card-body">
+          <canvas id="expensesChart" style="max-height: 400px;"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabella Movimenti -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Elenco Movimenti</h5>
+        </div>
+        <div class="card-body">
+          <table id="movementsTable" class="table table-striped table-bordered table-hover">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Categoria</th>
+                <th>Wallet</th>
+                <th>Nota</th>
+                <th>Utente</th>
+                <th class="text-end">Entrata</th>
+                <th class="text-end">Uscita</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for mov in movements %}
+              <tr>
+                <td>{{ mov.move_date.strftime('%d/%m/%Y') }}</td>
+                <td>{{ mov.category }}</td>
+                <td>{{ mov.wallet }}</td>
+                <td>{{ mov.note if mov.note else '-' }}</td>
+                <td>{{ mov.user }}</td>
+                <td class="text-end text-success">
+                  {% if mov.income %}€ {{ "%.2f"|format(mov.income) }}{% else %}-{% endif %}
+                </td>
+                <td class="text-end text-danger">
+                  {% if mov.expense %}€ {{ "%.2f"|format(mov.expense) }}{% else %}-{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<!-- DataTables -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Inizializza DataTables
+  $('#movementsTable').DataTable({
+    language: {
+      url: 'https://cdn.datatables.net/plug-ins/1.13.7/i18n/it-IT.json'
+    },
+    order: [[0, 'desc']], // Ordina per data decrescente
+    pageLength: 25,
+    responsive: true
+  });
+
+  // Prepara dati per il grafico
+  const expensesData = {{ stats.expenses_by_category | tojson }};
+  
+  const labels = expensesData.map(item => item.category);
+  const data = expensesData.map(item => item.total);
+
+  // Crea il grafico
+  const ctx = document.getElementById('expensesChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Spese (€)',
+        data: data,
+        backgroundColor: 'rgba(220, 53, 69, 0.7)',
+        borderColor: 'rgba(220, 53, 69, 1)',
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: function(value) {
+              return '€ ' + value.toFixed(2);
+            }
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return '€ ' + context.parsed.y.toFixed(2);
+            }
+          }
+        }
+      }
+    }
+  });
+});
+</script>
+{% endblock %}

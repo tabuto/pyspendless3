@@ -1,0 +1,257 @@
+{% extends 'ps-nav.html' %}
+
+{% block nav_content %}
+<div class="container-fluid mt-4">
+  <h1 class="mb-4">Gestione Wallet</h1>
+  
+  <!-- Alert per messaggi -->
+  <div id="alertContainer"></div>
+  
+  <div class="row mb-4">
+    <div class="col-12">
+      <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addWalletModal">
+        <i class="bi bi-plus-circle"></i> Aggiungi Wallet
+      </button>
+    </div>
+  </div>
+  
+  <div class="row" id="walletsContainer">
+    <!-- Popolato dinamicamente con card dei wallet -->
+  </div>
+</div>
+
+<!-- Modal Aggiungi Wallet -->
+<div class="modal fade" id="addWalletModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Aggiungi Wallet</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="addWalletForm">
+          <div class="mb-3">
+            <label for="walletName" class="form-label">Nome</label>
+            <input type="text" class="form-control" id="walletName" required>
+          </div>
+          <div class="mb-3">
+            <label for="walletCurrency" class="form-label">Valuta</label>
+            <select class="form-select" id="walletCurrency">
+              <option value="EUR" selected>EUR (€)</option>
+              <option value="USD">USD ($)</option>
+              <option value="GBP">GBP (£)</option>
+            </select>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-primary" onclick="addWallet()">Salva</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Modifica Wallet -->
+<div class="modal fade" id="editWalletModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Modifica Wallet</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="editWalletForm">
+          <input type="hidden" id="editWalletId">
+          <div class="mb-3">
+            <label for="editWalletName" class="form-label">Nome</label>
+            <input type="text" class="form-control" id="editWalletName" required>
+          </div>
+          <div class="mb-3">
+            <label for="editWalletCurrency" class="form-label">Valuta</label>
+            <select class="form-select" id="editWalletCurrency">
+              <option value="EUR">EUR (€)</option>
+              <option value="USD">USD ($)</option>
+              <option value="GBP">GBP (£)</option>
+            </select>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-primary" onclick="updateWallet()">Salva</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const accountId = {{ session.account_id }};
+
+// Carica i wallet all'avvio
+document.addEventListener('DOMContentLoaded', function() {
+  loadWallets();
+});
+
+function showAlert(message, type = 'success') {
+  const alertDiv = document.createElement('div');
+  alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+  alertDiv.innerHTML = `
+    ${message}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  `;
+  document.getElementById('alertContainer').appendChild(alertDiv);
+  
+  setTimeout(() => {
+    alertDiv.remove();
+  }, 5000);
+}
+
+function getCurrencySymbol(currency) {
+  const symbols = {
+    'EUR': '€',
+    'USD': '$',
+    'GBP': '£'
+  };
+  return symbols[currency] || currency;
+}
+
+function loadWallets() {
+  fetch(`/api/accounts/${accountId}/wallets`)
+    .then(response => response.json())
+    .then(wallets => {
+      const container = document.getElementById('walletsContainer');
+      container.innerHTML = '';
+      
+      wallets.forEach(wallet => {
+        const balanceClass = wallet.balance >= 0 ? 'text-success' : 'text-danger';
+        const card = document.createElement('div');
+        card.className = 'col-md-4 mb-3';
+        card.innerHTML = `
+          <div class="card">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-start mb-3">
+                <h5 class="card-title">${wallet.name}</h5>
+                <span class="badge bg-secondary">${wallet.code}</span>
+              </div>
+              <p class="card-text">
+                <strong>Saldo:</strong> 
+                <span class="${balanceClass}">${wallet.balance.toFixed(2)} ${getCurrencySymbol(wallet.currency)}</span>
+              </p>
+              <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-warning" onclick="openEditModal(${wallet.id}, '${wallet.name}', '${wallet.currency}')">
+                  <i class="bi bi-pencil"></i> Rinomina
+                </button>
+                <button class="btn btn-sm btn-danger" onclick="deleteWallet(${wallet.id})">
+                  <i class="bi bi-trash"></i> Elimina
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    })
+    .catch(error => {
+      console.error('Errore:', error);
+      showAlert('Errore durante il caricamento dei wallet', 'danger');
+    });
+}
+
+function addWallet() {
+  const name = document.getElementById('walletName').value;
+  const currency = document.getElementById('walletCurrency').value;
+  
+  if (!name) {
+    showAlert('Il nome è obbligatorio', 'warning');
+    return;
+  }
+  
+  fetch(`/api/accounts/${accountId}/wallets`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ name, currency })
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.error) {
+      showAlert(data.error, 'danger');
+    } else {
+      showAlert('Wallet creato con successo', 'success');
+      loadWallets();
+      document.getElementById('addWalletForm').reset();
+      bootstrap.Modal.getInstance(document.getElementById('addWalletModal')).hide();
+    }
+  })
+  .catch(error => {
+    console.error('Errore:', error);
+    showAlert('Errore durante la creazione del wallet', 'danger');
+  });
+}
+
+function openEditModal(id, name, currency) {
+  document.getElementById('editWalletId').value = id;
+  document.getElementById('editWalletName').value = name;
+  document.getElementById('editWalletCurrency').value = currency;
+  
+  const modal = new bootstrap.Modal(document.getElementById('editWalletModal'));
+  modal.show();
+}
+
+function updateWallet() {
+  const id = document.getElementById('editWalletId').value;
+  const name = document.getElementById('editWalletName').value;
+  const currency = document.getElementById('editWalletCurrency').value;
+  
+  fetch(`/api/wallets/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ name, currency })
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.error) {
+      showAlert(data.error, 'danger');
+    } else {
+      showAlert('Wallet aggiornato con successo', 'success');
+      loadWallets();
+      bootstrap.Modal.getInstance(document.getElementById('editWalletModal')).hide();
+    }
+  })
+  .catch(error => {
+    console.error('Errore:', error);
+    showAlert('Errore durante l\'aggiornamento del wallet', 'danger');
+  });
+}
+
+function deleteWallet(id) {
+  if (!confirm('Sei sicuro di voler eliminare questo wallet?')) {
+    return;
+  }
+  
+  fetch(`/api/wallets/${id}`, {
+    method: 'DELETE'
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.error) {
+      showAlert(data.error, 'danger');
+    } else {
+      showAlert('Wallet eliminato con successo', 'success');
+      loadWallets();
+    }
+  })
+  .catch(error => {
+    console.error('Errore:', error);
+    showAlert('Errore durante l\'eliminazione del wallet', 'danger');
+  });
+}
+</script>
+{% endblock %}

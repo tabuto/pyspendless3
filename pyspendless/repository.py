@@ -151,6 +151,19 @@ class AccountRepository:
         self.db.add(account)
         self.db.commit()
         return account
+    
+    def update_account(self, account_id: int, data: Dict[str, Any]) -> Optional[Account]:
+        """Aggiorna un account"""
+        account = self.get_account(account_id)
+        if not account:
+            return None
+        
+        for key, value in data.items():
+            if hasattr(account, key):
+                setattr(account, key, value)
+        
+        self.db.commit()
+        return account
 
 
 class WalletRepository:

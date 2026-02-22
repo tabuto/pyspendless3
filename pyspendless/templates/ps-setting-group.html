@@ -1,0 +1,355 @@
+{% extends 'ps-nav.html' %}
+
+{% block nav_content %}
+<div class="container-fluid mt-4">
+  <h1 class="mb-4">Gestione Gruppo e Account</h1>
+  
+  <!-- Alert per messaggi -->
+  <div id="alertContainer"></div>
+  
+  <div class="row">
+    <!-- Account Info -->
+    <div class="col-md-12 mb-4">
+      <div class="card">
+        <div class="card-header bg-primary text-white">
+          <div class="d-flex justify-content-between align-items-center">
+            <h3 class="card-title mb-0"><i class="bi bi-building"></i> Informazioni Account</h3>
+            <button type="button" class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#editAccountModal">
+              <i class="bi bi-pencil"></i> Rinomina Account
+            </button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-6">
+              <p><strong>Nome Account:</strong> <span id="accountName">{{ account.name if account else 'N/A' }}</span></p>
+            </div>
+            <div class="col-md-6">
+              <p><strong>Creato il:</strong> {{ account.created_at.strftime('%d/%m/%Y') if account and account.created_at else 'N/A' }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">
+          <div class="d-flex justify-content-between align-items-center">
+            <h3 class="card-title">Membri del Gruppo</h3>
+            <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#inviteModal">
+              <i class="bi bi-person-plus"></i> Invita Utente
+            </button>
+          </div>
+        </div>
+        <div class="card-body">
+          <table class="table" id="membersTable">
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Nome</th>
+                <th>Stato</th>
+                <th>Azioni</th>
+              </tr>
+            </thead>
+            <tbody id="membersTableBody">
+              <!-- Popolato dinamicamente -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Inviti Pendenti</h3>
+        </div>
+        <div class="card-body">
+          <table class="table" id="pendingInvitesTable">
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Data Invito</th>
+              </tr>
+            </thead>
+            <tbody id="pendingInvitesBody">
+              <!-- Popolato dinamicamente -->
+            </tbody>
+          </table>
+          <p class="text-muted" id="noPendingMessage" style="display: none;">
+            Nessun invito in attesa
+          </p>
+        </div>
+      </div>
+      
+      <div class="card mt-3">
+        <div class="card-header bg-info text-white">
+          <h3 class="card-title"><i class="bi bi-info-circle"></i> Informazioni</h3>
+        </div>
+        <div class="card-body">
+          <p>Solo il proprietario dell'account può invitare nuovi membri al gruppo.</p>
+          <p>Gli utenti invitati riceveranno un link di accettazione (funzionalità in sviluppo).</p>
+          <p>I membri del gruppo condividono l'accesso ai wallet e ai movimenti dell'account.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Modifica Account -->
+<div class="modal fade" id="editAccountModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Rinomina Account</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="editAccountForm">
+          <div class="mb-3">
+            <label for="accountNameInput" class="form-label">Nome Account</label>
+            <input type="text" class="form-control" id="accountNameInput" 
+                   value="{{ account.name if account else '' }}" required>
+            <div class="form-text">Il nome dell'account è condiviso con tutti i membri del gruppo</div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-primary" onclick="updateAccountName()">Salva</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Invita Utente -->
+<div class="modal fade" id="inviteModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Invita Utente al Gruppo</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="inviteForm">
+          <div class="mb-3">
+            <label for="inviteEmail" class="form-label">Email dell'utente da invitare</label>
+            <input type="email" class="form-control" id="inviteEmail" required 
+                   placeholder="utente@esempio.com">
+            <div class="form-text">L'utente riceverà un invito per unirsi al gruppo</div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-primary" onclick="inviteUser()">Invia Invito</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const accountId = {{ session.account_id }};
+let currentGroupId = null;
+
+// Carica i dati all'avvio
+document.addEventListener('DOMContentLoaded', function() {
+  // Per ora creiamo un gruppo fittizio se non esiste
+  // In produzione, dovremmo gestire la creazione del gruppo
+  loadGroupMembers();
+  
+  // Event listener per reset modal quando viene chiuso
+  const editAccountModal = document.getElementById('editAccountModal');
+  if (editAccountModal) {
+    editAccountModal.addEventListener('hidden.bs.modal', function () {
+      // Reset del form quando il modal si chiude
+      document.getElementById('editAccountForm').reset();
+    });
+  }
+});
+
+function showAlert(message, type = 'success') {
+  const alertDiv = document.createElement('div');
+  alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+  alertDiv.innerHTML = `
+    ${message}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  `;
+  document.getElementById('alertContainer').appendChild(alertDiv);
+  
+  setTimeout(() => {
+    alertDiv.remove();
+  }, 5000);
+}
+
+function updateAccountName() {
+  const name = document.getElementById('accountNameInput').value.trim();
+  
+  if (!name) {
+    showAlert('Il nome dell\'account è obbligatorio', 'warning');
+    return;
+  }
+  
+  // Trova il pulsante di salvataggio
+  const modal = document.getElementById('editAccountModal');
+  const saveBtn = modal.querySelector('.btn-primary');
+  const originalText = saveBtn.innerHTML;
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Salvando...';
+  
+  fetch(`/api/accounts/${accountId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ name: name })
+  })
+  .then(response => response.json())
+  .then(data => {
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = originalText;
+    
+    if (data.error) {
+      showAlert(data.error, 'danger');
+    } else {
+      showAlert('Nome account aggiornato con successo', 'success');
+      document.getElementById('accountName').textContent = data.name;
+      
+      // Chiudi il modal in modo completo
+      closeModal('editAccountModal');
+    }
+  })
+  .catch(error => {
+    console.error('Errore:', error);
+    showAlert('Errore durante l\'aggiornamento del nome account', 'danger');
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = originalText;
+  });
+}
+
+function closeModal(modalId) {
+  const modalElement = document.getElementById(modalId);
+  const modalInstance = bootstrap.Modal.getInstance(modalElement);
+  
+  if (modalInstance) {
+    modalInstance.hide();
+  }
+  
+  // Forza la rimozione del backdrop e cleanup
+  setTimeout(() => {
+    // Rimuovi tutti i backdrop rimasti
+    const backdrops = document.querySelectorAll('.modal-backdrop');
+    backdrops.forEach(backdrop => backdrop.remove());
+    
+    // Rimuovi la classe modal-open dal body
+    document.body.classList.remove('modal-open');
+    document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
+  }, 300); // Aspetta che l'animazione del modal finisca
+}
+
+function loadGroupMembers() {
+  // Nota: Questa è una implementazione semplificata
+  // In produzione dovremmo prima ottenere l'ID del gruppo associato all'account
+  
+  // Per ora mostriamo un messaggio informativo se non ci sono gruppi
+  const tbody = document.getElementById('membersTableBody');
+  tbody.innerHTML = `
+    <tr>
+      <td colspan="4" class="text-center text-muted">
+        <p class="mb-0">La gestione gruppi è in fase di sviluppo.</p>
+        <p class="mb-0">Al momento l'account è utilizzato solo dal proprietario.</p>
+      </td>
+    </tr>
+  `;
+  
+  // Nascondi inviti pendenti
+  document.getElementById('noPendingMessage').style.display = 'block';
+  document.getElementById('pendingInvitesTable').style.display = 'none';
+}
+
+function inviteUser() {
+  const email = document.getElementById('inviteEmail').value;
+  
+  if (!email) {
+    showAlert('Email è obbligatoria', 'warning');
+    return;
+  }
+  
+  // Verifica formato email
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    showAlert('Formato email non valido', 'warning');
+    return;
+  }
+  
+  // Per ora mostriamo solo un messaggio di funzionalità in sviluppo
+  showAlert('Funzionalità in sviluppo. Gli inviti saranno implementati nella prossima versione.', 'info');
+  
+  document.getElementById('inviteForm').reset();
+  bootstrap.Modal.getInstance(document.getElementById('inviteModal')).hide();
+  
+  /* Implementazione completa (quando i gruppi saranno attivi):
+  
+  if (!currentGroupId) {
+    showAlert('Nessun gruppo disponibile', 'danger');
+    return;
+  }
+  
+  fetch(`/api/groups/${currentGroupId}/invite`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ email })
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.error) {
+      showAlert(data.error, 'danger');
+    } else {
+      showAlert('Invito inviato con successo', 'success');
+      loadGroupMembers();
+      document.getElementById('inviteForm').reset();
+      bootstrap.Modal.getInstance(document.getElementById('inviteModal')).hide();
+    }
+  })
+  .catch(error => {
+    console.error('Errore:', error);
+    showAlert('Errore durante l\'invio dell\'invito', 'danger');
+  });
+  */
+}
+
+function removeMember(memberId) {
+  if (!confirm('Sei sicuro di voler rimuovere questo membro dal gruppo?')) {
+    return;
+  }
+  
+  showAlert('Funzionalità in sviluppo', 'info');
+  
+  /* Implementazione completa:
+  fetch(`/api/memberships/${memberId}`, {
+    method: 'DELETE'
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.error) {
+      showAlert(data.error, 'danger');
+    } else {
+      showAlert('Membro rimosso con successo', 'success');
+      loadGroupMembers();
+    }
+  })
+  .catch(error => {
+    console.error('Errore:', error);
+    showAlert('Errore durante la rimozione del membro', 'danger');
+  });
+  */
+}
+</script>
+{% endblock %}

@@ -3,7 +3,7 @@
 
 from flask import Flask, render_template, redirect, url_for, session, request, flash, jsonify
 from conf import load_env, SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI, get_db_session
-from repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, UnauthorizedError
+from repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, UnauthorizedError
 
 import os
 import logging
@@ -379,6 +379,569 @@ def api_create_movement():
         logger.error(f"Errore durante la creazione del movimento: {str(e)}")
         logger.debug(traceback.format_exc())
         return jsonify({'error': f'Errore interno: {str(e)}'}), 500
+
+
+# ========== SETTINGS ROUTES ==========
+
+@app.route("/settings/categories")
+def settings_categories():
+    """Pagina gestione categorie"""
+    if not session.get('user_id'):
+        flash('Devi effettuare il login', 'warning')
+        return redirect(url_for('login'))
+    return render_template("ps-setting-categories.html")
+
+
+@app.route("/settings/wallets")
+def settings_wallets():
+    """Pagina gestione wallet"""
+    if not session.get('user_id'):
+        flash('Devi effettuare il login', 'warning')
+        return redirect(url_for('login'))
+    return render_template("ps-setting-wallet.html")
+
+
+@app.route("/settings/group")
+def settings_group():
+    """Pagina gestione gruppo"""
+    if not session.get('user_id'):
+        flash('Devi effettuare il login', 'warning')
+        return redirect(url_for('login'))
+    
+    account_id = session.get('account_id')
+    
+    db = get_db_session()
+    try:
+        account_repo = AccountRepository(db)
+        account = account_repo.get_account(account_id)
+        
+        return render_template("ps-setting-group.html", account=account)
+    finally:
+        db.close()
+
+
+@app.route("/settings/import-export")
+def settings_import_export():
+    """Pagina import/export"""
+    if not session.get('user_id'):
+        flash('Devi effettuare il login', 'warning')
+        return redirect(url_for('login'))
+    return render_template("ps-setting-import-export.html")
+
+
+# ========== API CATEGORIES CRUD ==========
+
+@app.route("/api/accounts/<int:account_id>/categories", methods=['POST'])
+def api_create_category(account_id):
+    """API per creare una nuova categoria"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    if session.get('account_id') != account_id:
+        return jsonify({'error': 'Accesso non autorizzato'}), 403
+    
+    data = request.get_json()
+    if not data or not data.get('name') or not data.get('type'):
+        return jsonify({'error': 'Nome e tipo sono obbligatori'}), 400
+    
+    db = get_db_session()
+    try:
+        category_repo = CategoryRepository(db)
+        category = category_repo.create_category(
+            name=data['name'],
+            account_id=account_id,
+            type=data['type']
+        )
+        return jsonify({
+            'id': category.id,
+            'name': category.name,
+            'type': category.type
+        }), 201
+    finally:
+        db.close()
+
+
+@app.route("/api/categories/<int:category_id>", methods=['PUT'])
+def api_update_category(category_id):
+    """API per aggiornare una categoria"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    account_id = session.get('account_id')
+    data = request.get_json()
+    
+    db = get_db_session()
+    try:
+        category_repo = CategoryRepository(db)
+        category = category_repo.get_category(category_id)
+        
+        if not category:
+            return jsonify({'error': 'Categoria non trovata'}), 404
+        
+        if category.account_id != account_id:
+            return jsonify({'error': 'Accesso non autorizzato'}), 403
+        
+        category = category_repo.update_category(category_id, data)
+        return jsonify({
+            'id': category.id,
+            'name': category.name,
+            'type': category.type
+        }), 200
+    finally:
+        db.close()
+
+
+@app.route("/api/categories/<int:category_id>", methods=['DELETE'])
+def api_delete_category(category_id):
+    """API per eliminare una categoria"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    account_id = session.get('account_id')
+    
+    db = get_db_session()
+    try:
+        category_repo = CategoryRepository(db)
+        category = category_repo.get_category(category_id)
+        
+        if not category:
+            return jsonify({'error': 'Categoria non trovata'}), 404
+        
+        if category.account_id != account_id:
+            return jsonify({'error': 'Accesso non autorizzato'}), 403
+        
+        # Verifica se la categoria è usata in movimenti
+        movement_repo = MovementRepository(db)
+        movements = movement_repo.get_movements_for_account(account_id, category_id=category_id)
+        if movements:
+            return jsonify({'error': 'Impossibile eliminare: categoria utilizzata in movimenti'}), 400
+        
+        category_repo.delete_category(category_id)
+        return jsonify({'message': 'Categoria eliminata'}), 200
+    finally:
+        db.close()
+
+
+# ========== API WALLETS CRUD ==========
+
+@app.route("/api/accounts/<int:account_id>/wallets", methods=['GET'])
+def api_get_wallets(account_id):
+    """API per ottenere i wallet di un account con saldo"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    if session.get('account_id') != account_id:
+        return jsonify({'error': 'Accesso non autorizzato'}), 403
+    
+    db = get_db_session()
+    try:
+        wallet_repo = WalletRepository(db)
+        movement_repo = MovementRepository(db)
+        
+        wallets = wallet_repo.get_wallets_for_account(account_id)
+        
+        result = []
+        for wallet in wallets:
+            # Calcola saldo
+            movements = movement_repo.get_movements_for_account(account_id, wallet_id=wallet.id)
+            income = sum(float(m.income) if m.income else 0 for m in movements)
+            expense = sum(float(m.expense) if m.expense else 0 for m in movements)
+            balance = income - expense
+            
+            result.append({
+                'id': wallet.id,
+                'code': wallet.code,
+                'name': wallet.name,
+                'currency': wallet.currency,
+                'balance': balance
+            })
+        
+        return jsonify(result), 200
+    finally:
+        db.close()
+
+
+@app.route("/api/accounts/<int:account_id>/wallets", methods=['POST'])
+def api_create_wallet(account_id):
+    """API per creare un nuovo wallet"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    if session.get('account_id') != account_id:
+        return jsonify({'error': 'Accesso non autorizzato'}), 403
+    
+    data = request.get_json()
+    if not data or not data.get('name'):
+        return jsonify({'error': 'Nome è obbligatorio'}), 400
+    
+    import uuid
+    db = get_db_session()
+    try:
+        wallet_repo = WalletRepository(db)
+        wallet = wallet_repo.create_wallet(
+            code=str(uuid.uuid4())[:8],
+            name=data['name'],
+            account_id=account_id,
+            currency=data.get('currency', 'EUR')
+        )
+        return jsonify({
+            'id': wallet.id,
+            'code': wallet.code,
+            'name': wallet.name,
+            'currency': wallet.currency
+        }), 201
+    finally:
+        db.close()
+
+
+@app.route("/api/wallets/<int:wallet_id>", methods=['PUT'])
+def api_update_wallet(wallet_id):
+    """API per aggiornare un wallet"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    account_id = session.get('account_id')
+    data = request.get_json()
+    
+    db = get_db_session()
+    try:
+        wallet_repo = WalletRepository(db)
+        wallet = wallet_repo.get_wallet(wallet_id)
+        
+        if not wallet:
+            return jsonify({'error': 'Wallet non trovato'}), 404
+        
+        if wallet.account_id != account_id:
+            return jsonify({'error': 'Accesso non autorizzato'}), 403
+        
+        wallet = wallet_repo.update_wallet(wallet_id, data)
+        return jsonify({
+            'id': wallet.id,
+            'code': wallet.code,
+            'name': wallet.name,
+            'currency': wallet.currency
+        }), 200
+    finally:
+        db.close()
+
+
+@app.route("/api/wallets/<int:wallet_id>", methods=['DELETE'])
+def api_delete_wallet(wallet_id):
+    """API per eliminare un wallet"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    account_id = session.get('account_id')
+    
+    db = get_db_session()
+    try:
+        wallet_repo = WalletRepository(db)
+        wallet = wallet_repo.get_wallet(wallet_id)
+        
+        if not wallet:
+            return jsonify({'error': 'Wallet non trovato'}), 404
+        
+        if wallet.account_id != account_id:
+            return jsonify({'error': 'Accesso non autorizzato'}), 403
+        
+        # Verifica se il wallet è usato in movimenti
+        movement_repo = MovementRepository(db)
+        movements = movement_repo.get_movements_for_account(account_id, wallet_id=wallet_id)
+        if movements:
+            return jsonify({'error': 'Impossibile eliminare: wallet utilizzato in movimenti'}), 400
+        
+        wallet_repo.delete_wallet(wallet_id)
+        return jsonify({'message': 'Wallet eliminato'}), 200
+    finally:
+        db.close()
+
+
+# ========== API GROUPS ==========
+
+@app.route("/api/groups/<int:group_id>/members", methods=['GET'])
+def api_get_group_members(group_id):
+    """API per ottenere i membri di un gruppo"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    db = get_db_session()
+    try:
+        group_repo = GroupRepository(db)
+        group = group_repo.get_group(group_id)
+        
+        if not group or group.account_id != session.get('account_id'):
+            return jsonify({'error': 'Gruppo non trovato'}), 404
+        
+        members = group_repo.get_group_members(group_id)
+        
+        result = []
+        for member in members:
+            result.append({
+                'id': member.id,
+                'email': member.invite_email,
+                'status': member.status,
+                'user_name': member.user.name if member.user else None
+            })
+        
+        return jsonify(result), 200
+    finally:
+        db.close()
+
+
+@app.route("/api/groups/<int:group_id>/invite", methods=['POST'])
+def api_invite_to_group(group_id):
+    """API per invitare un utente a un gruppo"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    data = request.get_json()
+    if not data or not data.get('email'):
+        return jsonify({'error': 'Email è obbligatoria'}), 400
+    
+    user_id = session.get('user_id')
+    
+    db = get_db_session()
+    try:
+        group_repo = GroupRepository(db)
+        group = group_repo.get_group(group_id)
+        
+        if not group or group.account_id != session.get('account_id'):
+            return jsonify({'error': 'Gruppo non trovato'}), 404
+        
+        # Solo l'owner può invitare
+        if str(group.owner_user_id) != str(user_id):
+            return jsonify({'error': 'Solo il proprietario può invitare'}), 403
+        
+        membership = group_repo.create_invite(
+            group_id=group_id,
+            invite_email=data['email'],
+            invited_by_user_id=user_id
+        )
+        
+        return jsonify({
+            'id': membership.id,
+            'email': membership.invite_email,
+            'status': membership.status,
+            'token': membership.token
+        }), 201
+    finally:
+        db.close()
+
+
+# ========== API ACCOUNTS ==========
+
+@app.route("/api/accounts/<int:account_id>", methods=['GET'])
+def api_get_account(account_id):
+    """API per ottenere i dettagli di un account"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    if session.get('account_id') != account_id:
+        return jsonify({'error': 'Accesso non autorizzato'}), 403
+    
+    db = get_db_session()
+    try:
+        account_repo = AccountRepository(db)
+        account = account_repo.get_account(account_id)
+        
+        if not account:
+            return jsonify({'error': 'Account non trovato'}), 404
+        
+        return jsonify({
+            'id': account.id,
+            'name': account.name,
+            'created_at': account.created_at.isoformat() if account.created_at else None
+        }), 200
+    finally:
+        db.close()
+
+
+@app.route("/api/accounts/<int:account_id>", methods=['PUT'])
+def api_update_account(account_id):
+    """API per aggiornare il nome dell'account"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    if session.get('account_id') != account_id:
+        return jsonify({'error': 'Accesso non autorizzato'}), 403
+    
+    data = request.get_json()
+    if not data or not data.get('name'):
+        return jsonify({'error': 'Nome è obbligatorio'}), 400
+    
+    db = get_db_session()
+    try:
+        account_repo = AccountRepository(db)
+        account = account_repo.update_account(account_id, {'name': data['name']})
+        
+        if not account:
+            return jsonify({'error': 'Account non trovato'}), 404
+        
+        return jsonify({
+            'id': account.id,
+            'name': account.name
+        }), 200
+    finally:
+        db.close()
+
+
+# ========== API IMPORT/EXPORT ==========
+
+@app.route("/api/export/movements", methods=['POST'])
+def api_export_movements():
+    """API per esportare movimenti in CSV"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    account_id = session.get('account_id')
+    
+    db = get_db_session()
+    try:
+        movement_repo = MovementRepository(db)
+        movements = movement_repo.get_movements_for_account(account_id)
+        
+        # Crea CSV
+        import csv
+        from io import StringIO
+        
+        output = StringIO()
+        writer = csv.writer(output)
+        
+        # Header
+        writer.writerow(['Data', 'Categoria', 'Wallet', 'Entrata', 'Spesa', 'Note'])
+        
+        # Dati
+        for m in movements:
+            writer.writerow([
+                m.move_date.strftime('%Y-%m-%d'),
+                m.category,
+                m.wallet,
+                float(m.income) if m.income else '',
+                float(m.expense) if m.expense else '',
+                m.note or ''
+            ])
+        
+        output.seek(0)
+        
+        from flask import make_response
+        response = make_response(output.getvalue())
+        response.headers['Content-Type'] = 'text/csv'
+        response.headers['Content-Disposition'] = 'attachment; filename=movimenti.csv'
+        return response
+    finally:
+        db.close()
+
+
+@app.route("/api/import/movements", methods=['POST'])
+def api_import_movements():
+    """API per importare movimenti da CSV"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    account_id = session.get('account_id')
+    user_id = session.get('user_id')
+    
+    if 'file' not in request.files:
+        return jsonify({'error': 'Nessun file caricato'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'Nessun file selezionato'}), 400
+    
+    import csv
+    import hashlib
+    from datetime import datetime
+    
+    db = get_db_session()
+    try:
+        category_repo = CategoryRepository(db)
+        wallet_repo = WalletRepository(db)
+        user_repo = UserRepository(db)
+        movement_repo = MovementRepository(db)
+        
+        user = user_repo.get_user_by_id(user_id)
+        
+        # Leggi CSV
+        stream = file.stream.read().decode('utf-8')
+        csv_reader = csv.DictReader(stream.splitlines())
+        
+        imported = 0
+        errors = []
+        
+        for row in csv_reader:
+            try:
+                # Parse data
+                move_date_str = row.get('Data', '')
+                category_name = row.get('Categoria', '')
+                wallet_code = row.get('Wallet', '')
+                income_str = row.get('Entrata', '')
+                expense_str = row.get('Spesa', '')
+                note = row.get('Note', '')
+                
+                # Converti data
+                date_obj = datetime.strptime(move_date_str, '%Y-%m-%d').date()
+                
+                # Trova categoria
+                categories = category_repo.get_categories_for_account(account_id)
+                category = next((c for c in categories if c.name == category_name), None)
+                if not category:
+                    errors.append(f"Categoria '{category_name}' non trovata")
+                    continue
+                
+                # Trova wallet
+                wallets = wallet_repo.get_wallets_for_account(account_id)
+                wallet = next((w for w in wallets if w.code == wallet_code), None)
+                if not wallet:
+                    errors.append(f"Wallet '{wallet_code}' non trovato")
+                    continue
+                
+                # Converti importi
+                income = float(income_str) if income_str else None
+                expense = float(expense_str) if expense_str else None
+                
+                # Genera ID come hash per evitare duplicati
+                hash_string = f"{date_obj}|{income or 0}|{expense or 0}|{category_name}|{wallet_code}|{note}"
+                movement_id = hashlib.md5(hash_string.encode()).hexdigest()
+                
+                # Verifica se esiste già
+                existing = movement_repo.get_movement(movement_id)
+                if existing:
+                    continue  # Skip duplicati
+                
+                # Crea movimento
+                movement_data = {
+                    'id': movement_id,
+                    'move_date': date_obj,
+                    'move_year': date_obj.year,
+                    'move_month': date_obj.month,
+                    'category': category.name,
+                    'wallet': wallet.code,
+                    'income': income,
+                    'expense': expense,
+                    'note': note,
+                    'user': user.email,
+                    'account_id': account_id,
+                    'user_id': user_id,
+                    'category_id': category.id,
+                    'wallet_id': wallet.id
+                }
+                
+                movement_repo.create_movement(movement_data)
+                imported += 1
+                
+            except Exception as e:
+                errors.append(f"Errore riga: {str(e)}")
+        
+        return jsonify({
+            'imported': imported,
+            'errors': errors
+        }), 200
+    except Exception as e:
+        logger.error(f"Errore import: {str(e)}")
+        return jsonify({'error': f'Errore durante import: {str(e)}'}), 500
+    finally:
+        db.close()
+
 
 if __name__ == "__main__":
     app.run(debug=True)

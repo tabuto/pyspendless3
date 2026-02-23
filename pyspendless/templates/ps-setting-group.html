@@ -134,16 +134,33 @@
       <div class="modal-body">
         <form id="inviteForm">
           <div class="mb-3">
-            <label for="inviteEmail" class="form-label">Email dell'utente da invitare</label>
+            <label for="inviteEmail" class="form-label">Email Gmail dell'utente da invitare</label>
             <input type="email" class="form-control" id="inviteEmail" required 
-                   placeholder="utente@esempio.com">
-            <div class="form-text">L'utente riceverà un invito per unirsi al gruppo</div>
+                   placeholder="utente@gmail.com">
+            <div class="form-text">Solo email Gmail sono accettate. Il link sarà valido per 7 giorni.</div>
           </div>
         </form>
+        
+        <!-- Link generato (nascosto inizialmente) -->
+        <div id="generatedLinkContainer" style="display: none;" class="mt-3">
+          <div class="alert alert-success">
+            <h6 class="alert-heading">Link di invito generato!</h6>
+            <p class="mb-2">Condividi questo link con l'utente invitato:</p>
+            <div class="input-group">
+              <input type="text" class="form-control" id="generatedLink" readonly>
+              <button class="btn btn-outline-secondary" type="button" onclick="copyLink()">
+                <i class="bi bi-clipboard"></i> Copia
+              </button>
+              <button class="btn btn-outline-primary" type="button" onclick="shareLink()" id="shareButton">
+                <i class="bi bi-share"></i> Condividi
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
-        <button type="button" class="btn btn-primary" onclick="inviteUser()">Invia Invito</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+        <button type="button" class="btn btn-primary" onclick="inviteUser()" id="generateLinkBtn">Genera Link</button>
       </div>
     </div>
   </div>
@@ -168,6 +185,16 @@ document.addEventListener('DOMContentLoaded', function() {
     editAccountModal.addEventListener('hidden.bs.modal', function () {
       // Reset del form quando il modal si chiude
       document.getElementById('editAccountForm').reset();
+    });
+  }
+  
+  // Event listener per reset del modal inviti
+  const inviteModal = document.getElementById('inviteModal');
+  if (inviteModal) {
+    inviteModal.addEventListener('hidden.bs.modal', function () {
+      document.getElementById('inviteForm').reset();
+      document.getElementById('generatedLinkContainer').style.display = 'none';
+      document.getElementById('generateLinkBtn').style.display = 'block';
     });
   }
 });
@@ -273,7 +300,7 @@ function loadGroupMembers() {
 }
 
 function inviteUser() {
-  const email = document.getElementById('inviteEmail').value;
+  const email = document.getElementById('inviteEmail').value.trim();
   
   if (!email) {
     showAlert('Email è obbligatoria', 'warning');
@@ -287,42 +314,83 @@ function inviteUser() {
     return;
   }
   
-  // Per ora mostriamo solo un messaggio di funzionalità in sviluppo
-  showAlert('Funzionalità in sviluppo. Gli inviti saranno implementati nella prossima versione.', 'info');
-  
-  document.getElementById('inviteForm').reset();
-  bootstrap.Modal.getInstance(document.getElementById('inviteModal')).hide();
-  
-  /* Implementazione completa (quando i gruppi saranno attivi):
-  
-  if (!currentGroupId) {
-    showAlert('Nessun gruppo disponibile', 'danger');
+  // Verifica che sia Gmail
+  if (!email.toLowerCase().endsWith('@gmail.com')) {
+    showAlert('Solo email Gmail sono accettate', 'warning');
     return;
   }
   
-  fetch(`/api/groups/${currentGroupId}/invite`, {
+  const generateBtn = document.getElementById('generateLinkBtn');
+  const originalText = generateBtn.innerHTML;
+  generateBtn.disabled = true;
+  generateBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generando...';
+  
+  fetch('/api/generate-link', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ email })
+    body: JSON.stringify({ email: email })
   })
   .then(response => response.json())
   .then(data => {
+    generateBtn.disabled = false;
+    generateBtn.innerHTML = originalText;
+    
     if (data.error) {
       showAlert(data.error, 'danger');
     } else {
-      showAlert('Invito inviato con successo', 'success');
-      loadGroupMembers();
-      document.getElementById('inviteForm').reset();
-      bootstrap.Modal.getInstance(document.getElementById('inviteModal')).hide();
+      // Mostra il link generato
+      document.getElementById('generatedLink').value = data.link;
+      document.getElementById('generatedLinkContainer').style.display = 'block';
+      generateBtn.style.display = 'none';
+      showAlert('Link di invito generato con successo!', 'success');
     }
   })
   .catch(error => {
     console.error('Errore:', error);
-    showAlert('Errore durante l\'invio dell\'invito', 'danger');
+    showAlert('Errore durante la generazione del link', 'danger');
+    generateBtn.disabled = false;
+    generateBtn.innerHTML = originalText;
   });
-  */
+}
+
+function copyLink() {
+  const linkInput = document.getElementById('generatedLink');
+  linkInput.select();
+  linkInput.setSelectionRange(0, 99999); // Per mobile
+  
+  navigator.clipboard.writeText(linkInput.value).then(() => {
+    showAlert('Link copiato negli appunti!', 'success');
+  }).catch(err => {
+    console.error('Errore durante la copia:', err);
+    showAlert('Impossibile copiare il link', 'danger');
+  });
+}
+
+function shareLink() {
+  const link = document.getElementById('generatedLink').value;
+  const email = document.getElementById('inviteEmail').value;
+  
+  // Verifica se il browser supporta la Web Share API
+  if (navigator.share) {
+    navigator.share({
+      title: 'Invito a PySpendless',
+      text: `Sei stato invitato a collaborare su PySpendless! Clicca sul link per accettare l'invito.`,
+      url: link
+    })
+    .then(() => showAlert('Link condiviso!', 'success'))
+    .catch(err => {
+      if (err.name !== 'AbortError') {
+        console.error('Errore durante la condivisione:', err);
+        showAlert('Errore durante la condivisione', 'warning');
+      }
+    });
+  } else {
+    // Fallback: copia il link
+    copyLink();
+    showAlert('La condivisione non è supportata. Link copiato negli appunti!', 'info');
+  }
 }
 
 function removeMember(memberId) {

@@ -4,14 +4,15 @@ Funzioni CRUD e logica di accesso ai dati
 """
 
 import uuid
-from datetime import datetime
+import json
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from typing import Optional, List, Dict, Any
 
 from models import (
     Account, User, Wallet, Category, CategoryTemplate, 
-    EmailWhitelist, Movement, UserGroup, GroupMembership
+    EmailWhitelist, Movement, UserGroup, GroupMembership, Token
 )
 
 
@@ -467,3 +468,105 @@ class GroupRepository:
         membership.status = 'accepted'
         self.db.commit()
         return membership
+
+
+class TokenRepository:
+    """Repository per gestione token di invito"""
+    
+    def __init__(self, db_session: Session):
+        self.db = db_session
+    
+    def create_token(
+        self, 
+        token_type: str, 
+        payload: Dict[str, Any], 
+        expire_days: int = 7
+    ) -> Token:
+        """
+        Crea un nuovo token
+        
+        Args:
+            token_type: Tipo di token (es. "SHARE")
+            payload: Dizionario con i dati del token
+            expire_days: Giorni di validità del token
+        
+        Returns:
+            Token creato
+        """
+        token_uuid = str(uuid.uuid4())
+        create_date = datetime.utcnow()
+        expire_date = create_date + timedelta(days=expire_days)
+        
+        token = Token(
+            uuid=token_uuid,
+            type=token_type,
+            create_date=create_date,
+            expire_date=expire_date,
+            status='PENDING',
+            payload=json.dumps(payload)
+        )
+        
+        self.db.add(token)
+        self.db.commit()
+        return token
+    
+    def get_token(self, token_uuid: str) -> Optional[Token]:
+        """Recupera un token tramite UUID"""
+        return self.db.query(Token).filter_by(uuid=token_uuid).first()
+    
+    def validate_token(self, token_uuid: str) -> Optional[Token]:
+        """
+        Valida un token verificando che sia:
+        - Esistente
+        - Status = PENDING
+        - Non scaduto
+        
+        Returns:
+            Token se valido, None altrimenti
+        """
+        token = self.get_token(token_uuid)
+        
+        if not token:
+            return None
+        
+        if token.status != 'PENDING':
+            return None
+        
+        if datetime.utcnow() > token.expire_date:
+            # Token scaduto - aggiorna status
+            token.status = 'EXPIRED'
+            self.db.commit()
+            return None
+        
+        return token
+    
+    def get_payload(self, token_uuid: str) -> Optional[Dict[str, Any]]:
+        """Recupera il payload di un token come dizionario"""
+        token = self.get_token(token_uuid)
+        if not token:
+            return None
+        
+        try:
+            return json.loads(token.payload)
+        except json.JSONDecodeError:
+            return None
+    
+    def mark_as_used(self, token_uuid: str) -> bool:
+        """Marca un token come usato"""
+        token = self.get_token(token_uuid)
+        if not token:
+            return False
+        
+        token.status = 'USED'
+        self.db.commit()
+        return True
+    
+    def mark_as_expired(self, token_uuid: str) -> bool:
+        """Marca un token come scaduto"""
+        token = self.get_token(token_uuid)
+        if not token:
+            return False
+        
+        token.status = 'EXPIRED'
+        self.db.commit()
+        return True

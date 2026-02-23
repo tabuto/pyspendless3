@@ -17,7 +17,7 @@ Creare una nuova tabella `token` per gestire i token di invito.
 ## Flusso Funzionale
 
 ### 1. Generazione Invito (UI & API)
-- **UI**: L'utente inserisce l'email (GMAIL) della persona da invitare.
+- **UI**: Nella sezione di gestione del gruppo (`ps-setting-group.html`), l'utente inserisce l'email (GMAIL) della persona da invitare.
 - **API**: `POST /generate-link`
     - Input: email da invitare.
     - Logica:
@@ -26,7 +26,7 @@ Creare una nuova tabella `token` per gestire i token di invito.
         3. Imposta `expire_date` a 7 giorni da oggi.
         4. Imposta `payload` con `{email: "email@gmail.com", account_id: current_user_account_id}`.
         5. Salva il record in tabella `token`.
-    - Output: Restituisce l'URL di callback generation: `$$BASE_URL$$/generate-link/callback?token=$$UUID$$`
+    - Output: Restituisce l'URL di callback generation: `$$BASE_URL$$/generate-link/callback?token=$$UUID$$` (Nota: `$$BASE_URL$$` deve essere letto dalle variabili d'ambiente).
 - **UI**: Mostra il link generato all'utente con un pulsante "Condividi" che invoca le funzioni di condivisione native del dispositivo (Web Share API) o permette di copiare il link.
 
 ### 2. Gestione Callback Invito (API)

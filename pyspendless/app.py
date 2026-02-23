@@ -2,8 +2,8 @@
 # python -m pyspendless.app
 
 from flask import Flask, render_template, redirect, url_for, session, request, flash, jsonify
-from conf import load_env, SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI, get_db_session
-from repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, UnauthorizedError
+from conf import load_env, SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI, BASE_URL, get_db_session
+from repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, UnauthorizedError
 
 import os
 import logging
@@ -19,6 +19,17 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
+
+# Configurazioni sessione per compatibilità OAuth
+# Impostiamo SameSite a None (richiede Secure=False su HTTP localhost se il browser lo permette, altrimenti Lax)
+# Ma dato che i cookie non arrivano proprio, proviamo a rimuovere SameSite o usare Lax in modo esplicito
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax' 
+app.config['SESSION_COOKIE_SECURE'] = False
+app.config['SESSION_COOKIE_NAME'] = 'pyspendless_session'
+app.config['SESSION_PERMANENT'] = True
+app.config['PERMANENT_SESSION_LIFETIME'] = 3600
+# Importante: Assicurarsi che il path sia corretto
+app.config['SESSION_COOKIE_PATH'] = '/'
 
 # OAuth setup
 oauth = OAuth(app)
@@ -46,6 +57,11 @@ def login():
 @app.route("/auth/login")
 def auth_login():
     redirect_uri = os.getenv('OAUTH_REDIRECT_URI', url_for('auth_callback', _external=True))
+    
+    # IMPORTANTE: Authlib gestisce lo state internamente.
+    # Non dobbiamo interferire manualmente se non necessario.
+    
+    # Genera la redirect OAuth
     return google.authorize_redirect(redirect_uri)
 
 @app.route("/auth/callback")
@@ -56,7 +72,26 @@ def auth_callback():
     try:
         # Ottieni il token da Google
         logger.info("Inizio callback OAuth")
-        token = google.authorize_access_token()
+        
+        # Recupera l'invite_token dal cookie se presente
+        invite_token_from_cookie = request.cookies.get('pending_invite_token')
+        if invite_token_from_cookie:
+            logger.info(f"Invite token trovato nel cookie: {invite_token_from_cookie}")
+        
+        # Gestione errore CSRF/MismatchingStateError
+        # Se la sessione è persa, authlib lancerà MismatchingStateError
+        try:
+            token = google.authorize_access_token()
+        except Exception as e:
+            logger.warning(f"Errore token access (possibile sessione persa): {e}")
+            # Se siamo qui, probabilmente la sessione è persa.
+            # Ma Google ci ha risposto correttamente. Possiamo provare a recuperare le info utente manualmente?
+            # No, perché serve il 'code' validato con lo 'state'.
+            
+            # L'unica opzione è riprovare il login o fallire gentilmente
+            flash('Sessione scaduta durante il login. Per favore riprova.', 'warning')
+            return redirect(url_for('login'))
+            
         logger.debug(f"Token ricevuto: {token}")
         
         resp = google.get('https://openidconnect.googleapis.com/v1/userinfo')
@@ -66,6 +101,7 @@ def auth_callback():
         # Crea una sessione database
         db = get_db_session()
         user_repo = UserRepository(db)
+        token_repo = TokenRepository(db)
         
         try:
             # Crea o recupera l'utente (include controllo whitelist)
@@ -78,8 +114,56 @@ def auth_callback():
             session['user_name'] = user.name
             session['account_id'] = user.account_id
             
-            flash(f'Benvenuto, {user.name}!', 'success')
-            return redirect(url_for('home'))
+            # Controlla se c'è un invito pendente da processare
+            # Prima prova dalla sessione, poi dal cookie
+            logger.info(f"Sessione corrente: {dict(session)}")
+            pending_token = session.pop('pending_invite_token', None)
+            
+            # Se non c'è nella sessione, usa quello dal cookie
+            if not pending_token and invite_token_from_cookie:
+                pending_token = invite_token_from_cookie
+                logger.info(f"Usando token dal cookie: {pending_token}")
+            
+            if pending_token:
+                # Processa l'invito
+                logger.info(f"Processando invito pendente: {pending_token}")
+                
+                token_obj = token_repo.validate_token(pending_token)
+                
+                if token_obj:
+                    payload = token_repo.get_payload(pending_token)
+                    invite_email = payload.get('email')
+                    target_account_id = payload.get('account_id')
+                    
+                    # Verifica corrispondenza email
+                    if user.email.lower() == invite_email.lower():
+                        # Cambia account dell'utente se diverso
+                        if user.account_id != target_account_id:
+                            user.account_id = target_account_id
+                            user.role = 'member'
+                            db.commit()
+                            session['account_id'] = target_account_id
+                            
+                            token_repo.mark_as_used(pending_token)
+                            flash(f'Benvenuto, {user.name}! Hai accettato l\'invito con successo.', 'success')
+                        else:
+                            flash(f'Benvenuto, {user.name}! Sei già membro di questo account.', 'info')
+                            token_repo.mark_as_used(pending_token)
+                    else:
+                        flash(f'L\'invito era per {invite_email}, ma hai effettuato il login come {user.email}', 'warning')
+                else:
+                    flash('Il link di invito non è più valido', 'warning')
+            else:
+                flash(f'Benvenuto, {user.name}!', 'success')
+            
+            # Crea la response
+            response = redirect(url_for('home'))
+            
+            # Rimuovi il cookie del pending_invite_token se esiste
+            if invite_token_from_cookie:
+                response.set_cookie('pending_invite_token', '', expires=0)
+            
+            return response
             
         except UnauthorizedError as e:
             # Email non in whitelist
@@ -939,6 +1023,172 @@ def api_import_movements():
     except Exception as e:
         logger.error(f"Errore import: {str(e)}")
         return jsonify({'error': f'Errore durante import: {str(e)}'}), 500
+    finally:
+        db.close()
+
+
+# ===== INVITE & TOKEN ENDPOINTS =====
+
+@app.route("/api/generate-link", methods=['POST'])
+def generate_link():
+    """
+    Genera un link di invito per condividere l'account
+    
+    Input JSON:
+        {
+            "email": "invitato@gmail.com"
+        }
+    
+    Output JSON:
+        {
+            "link": "http://localhost:5000/generate-link/callback?token=UUID"
+        }
+    """
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    try:
+        data = request.get_json()
+        invite_email = data.get('email')
+        
+        if not invite_email:
+            return jsonify({'error': 'Email mancante'}), 400
+        
+        # Validazione email Gmail
+        if not invite_email.lower().endswith('@gmail.com'):
+            return jsonify({'error': 'Solo email Gmail sono accettate'}), 400
+        
+        account_id = session.get('account_id')
+        
+        db = get_db_session()
+        try:
+            token_repo = TokenRepository(db)
+            
+            # Crea payload
+            payload = {
+                'email': invite_email,
+                'account_id': account_id
+            }
+            
+            # Genera token (valido 7 giorni)
+            token = token_repo.create_token('SHARE', payload, expire_days=7)
+            
+            # Genera link di callback
+            link = f"{BASE_URL}/generate-link/callback?token={token.uuid}"
+            
+            logger.info(f"Link generato per {invite_email}: {link}")
+            
+            return jsonify({'link': link}), 200
+            
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"Errore generazione link: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route("/generate-link/callback")
+def generate_link_callback():
+    """
+    Callback per gestire l'invito tramite token
+    
+    Scenario A: Utente loggato
+        - Verifica token
+        - Aggiunge utente all'account
+        - Invalida token
+        - Redirect a home
+    
+    Scenario B: Utente NON loggato
+        - Verifica token (base)
+        - Salva token in sessione
+        - Redirect a login OAuth
+    """
+    token_uuid = request.args.get('token')
+    
+    if not token_uuid:
+        flash('Token di invito mancante', 'danger')
+        return redirect(url_for('login'))
+    
+    db = get_db_session()
+    try:
+        token_repo = TokenRepository(db)
+        user_repo = UserRepository(db)
+        
+        # Valida il token
+        token = token_repo.validate_token(token_uuid)
+        
+        if not token:
+            flash('Link di invito non valido o scaduto', 'danger')
+            return redirect(url_for('login'))
+        
+        # Recupera payload
+        payload = token_repo.get_payload(token_uuid)
+        invite_email = payload.get('email')
+        target_account_id = payload.get('account_id')
+        
+        # Scenario A: Utente già loggato
+        if session.get('user_id'):
+            user_id = session.get('user_id')
+            user_email = session.get('user_email')
+            
+            # Verifica corrispondenza email (opzionale ma consigliato)
+            if user_email.lower() != invite_email.lower():
+                flash(f'Questo invito è per {invite_email}, ma sei loggato come {user_email}', 'warning')
+                # Opzione: forzare logout o permettere comunque l'aggiunta
+                # Per ora permettiamo l'aggiunta
+            
+            # Aggiunge l'utente all'account target
+            user = user_repo.get_user_by_id(user_id)
+            
+            if user.account_id == target_account_id:
+                flash('Sei già membro di questo account', 'info')
+                token_repo.mark_as_used(token_uuid)
+                return redirect(url_for('home'))
+            
+            # Cambia account dell'utente
+            user.account_id = target_account_id
+            user.role = 'member'  # Non è owner
+            db.commit()
+            
+            # Aggiorna sessione
+            session['account_id'] = target_account_id
+            
+            # Invalida token
+            token_repo.mark_as_used(token_uuid)
+            
+            flash('Hai accettato l\'invito con successo!', 'success')
+            return redirect(url_for('home'))
+        
+        # Scenario B: Utente NON loggato
+        else:
+            # TENTATIVO 1: Salva il token in un cookie (best effort)
+            response = redirect(url_for('auth_login'))
+            
+            # Imposta cookie con il token (max_age = 1 ora)
+            # Nota: Su localhost HTTP questo cookie potrebbe essere perso al ritorno da Google
+            # Se succede, l'utente farà login normale e dovrà cliccare di nuovo sul link di invito
+            response.set_cookie(
+                'pending_invite_token', 
+                token_uuid, 
+                max_age=3600,
+                path='/',
+                httponly=True,
+                samesite='Lax'
+            )
+            
+            logger.info(f"Token salvato in cookie: {token_uuid}")
+            
+            # Messaggio più chiaro per l'utente
+            flash('Per accettare l\'invito, effettua prima il login.', 'info')
+            return response
+            
+    except Exception as e:
+        logger.error(f"Errore callback invito: {str(e)}")
+        logger.debug(traceback.format_exc())
+        flash(f'Errore durante l\'elaborazione dell\'invito: {str(e)}', 'danger')
+        return redirect(url_for('login'))
     finally:
         db.close()
 

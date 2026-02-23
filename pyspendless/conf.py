@@ -71,6 +71,7 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'changeme')
 FLASK_ENV = os.getenv('FLASK_ENV', 'development')
 DEFAULT_CURRENCY = os.getenv('DEFAULT_CURRENCY', 'EUR')
 PAGINATION_LIMIT = int(os.getenv('PAGINATION_LIMIT', '50'))
+BASE_URL = os.getenv('BASE_URL', 'http://localhost:5000')
 
 # ===== WHITELIST EMAILS (opzionale, preferibile usare DB) =====
 WHITELIST_EMAILS = os.getenv('WHITELIST_EMAILS', '').split(',')

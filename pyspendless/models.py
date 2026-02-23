@@ -175,3 +175,19 @@ class GroupMembership(Base):
     group = relationship('UserGroup', back_populates='memberships')
     user = relationship('User', foreign_keys=[user_id])
     invited_by = relationship('User', foreign_keys=[invited_by_user_id])
+
+
+class Token(Base):
+    """Token per inviti e link di condivisione"""
+    __tablename__ = 'Token'
+    
+    uuid = Column(Text, primary_key=True)
+    type = Column(Text, nullable=False)
+    create_date = Column(DateTime, nullable=False, default=datetime.utcnow)
+    expire_date = Column(DateTime, nullable=False)
+    status = Column(Text, nullable=False, default='PENDING')
+    payload = Column(Text, nullable=False)  # JSON string
+    
+    __table_args__ = (
+        CheckConstraint("status IN ('PENDING','USED','EXPIRED')", name='check_token_status'),
+    )

@@ -8,3 +8,4 @@
 .read sql/sqllite/create_movement.sql
 .read sql/sqllite/create_group.sql
 .read sql/sqllite/create_groupmembership.sql
+.read sql/sqllite/create_token.sql

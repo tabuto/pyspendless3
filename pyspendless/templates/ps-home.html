@@ -9,21 +9,43 @@
   <p>Gestisci le tue spese personali e condivise in modo semplice e sicuro.</p>
   
   <div class="row mt-4">
-    <div class="col-md-6">
+    <div class="col-md-4">
       <div class="card">
         <div class="card-body">
-          <h5 class="card-title">Nuovo Movimento</h5>
+          <h5 class="card-title"><i class="bi bi-plus-circle text-primary"></i> Nuovo Movimento</h5>
           <p class="card-text">Inserisci una nuova spesa o entrata</p>
           <a href="{{ url_for('create') }}" class="btn btn-primary">Crea Movimento</a>
         </div>
       </div>
     </div>
-    <div class="col-md-6">
+    <div class="col-md-4">
       <div class="card">
         <div class="card-body">
-          <h5 class="card-title">Visualizza Movimenti</h5>
+          <h5 class="card-title"><i class="bi bi-list-ul text-info"></i> Visualizza Movimenti</h5>
           <p class="card-text">Consulta e filtra i tuoi movimenti</p>
           <a href="{{ url_for('movements') }}" class="btn btn-info">Vedi Movimenti</a>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title"><i class="bi bi-gear text-secondary"></i> Impostazioni</h5>
+          <p class="card-text">Gestisci categorie, wallet e account</p>
+          <div class="btn-group-vertical w-100" role="group">
+            <a href="{{ url_for('settings_categories') }}" class="btn btn-outline-secondary btn-sm">
+              <i class="bi bi-tag"></i> Categorie
+            </a>
+            <a href="{{ url_for('settings_wallets') }}" class="btn btn-outline-secondary btn-sm">
+              <i class="bi bi-wallet"></i> Wallet
+            </a>
+            <a href="{{ url_for('settings_group') }}" class="btn btn-outline-secondary btn-sm">
+              <i class="bi bi-building"></i> Account
+            </a>
+            <a href="{{ url_for('settings_import_export') }}" class="btn btn-outline-secondary btn-sm">
+              <i class="bi bi-arrow-down-up"></i> Import/Export
+            </a>
+          </div>
         </div>
       </div>
     </div>

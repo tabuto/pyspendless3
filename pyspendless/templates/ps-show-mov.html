@@ -87,12 +87,20 @@
     </div>
   </div>
 
-  <!-- Grafico Spese per Categoria -->
+  <!-- Grafico Movimenti per Categoria -->
   <div class="row mb-4">
     <div class="col-12">
       <div class="card">
         <div class="card-header">
-          <h5 class="card-title mb-0">Spese per Categoria</h5>
+          <h5 class="card-title mb-0">
+            {% if filters.category_type == 'income' %}
+              Entrate per Categoria
+            {% elif filters.category_type == 'expense' %}
+              Spese per Categoria
+            {% else %}
+              Spese per Categoria
+            {% endif %}
+          </h5>
         </div>
         <div class="card-body">
           <canvas id="expensesChart" style="max-height: 400px;"></canvas>
@@ -183,15 +191,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Crea il grafico
   const ctx = document.getElementById('expensesChart').getContext('2d');
+  
+  // Distruggi istanza precedente se esiste
+  const existingChart = Chart.getChart('expensesChart');
+  if (existingChart) {
+    existingChart.destroy();
+  }
+  
+  // Determina colore e label in base al tipo di movimento
+  const categoryType = '{{ filters.category_type }}';
+  const isIncome = categoryType === 'income';
+  const chartLabel = isIncome ? 'Entrate (€)' : 'Spese (€)';
+  const chartColor = isIncome ? 'rgba(25, 135, 84, 0.7)' : 'rgba(220, 53, 69, 0.7)';
+  const chartBorderColor = isIncome ? 'rgba(25, 135, 84, 1)' : 'rgba(220, 53, 69, 1)';
+  
   new Chart(ctx, {
     type: 'bar',
     data: {
       labels: labels,
       datasets: [{
-        label: 'Spese (€)',
+        label: chartLabel,
         data: data,
-        backgroundColor: 'rgba(220, 53, 69, 0.7)',
-        borderColor: 'rgba(220, 53, 69, 1)',
+        backgroundColor: chartColor,
+        borderColor: chartBorderColor,
         borderWidth: 1
       }]
     },

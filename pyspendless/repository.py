@@ -585,16 +585,30 @@ class MovementRepository:
         total_expense = sum(float(m.expense) if m.expense else 0 for m in movements)
         balance = total_income - total_expense
         
-        # Raggruppa spese per categoria
-        query = self.db.query(
-            Category.name,
-            func.sum(Movement.expense).label('total')
-        ).join(
-            Movement, Movement.category_id == Category.id
-        ).filter(
-            Movement.account_id == account_id,
-            Movement.expense.isnot(None)
-        )
+        # Raggruppa movimenti per categoria in base al tipo
+        # Se filtrato per tipo 'income', raggruppa le entrate; altrimenti le spese
+        if category_type == 'income':
+            # Raggruppa entrate per categoria
+            query = self.db.query(
+                Category.name,
+                func.sum(Movement.income).label('total')
+            ).join(
+                Movement, Movement.category_id == Category.id
+            ).filter(
+                Movement.account_id == account_id,
+                Movement.income.isnot(None)
+            )
+        else:
+            # Raggruppa spese per categoria (default)
+            query = self.db.query(
+                Category.name,
+                func.sum(Movement.expense).label('total')
+            ).join(
+                Movement, Movement.category_id == Category.id
+            ).filter(
+                Movement.account_id == account_id,
+                Movement.expense.isnot(None)
+            )
         
         # Applica gli stessi filtri
         if wallet_id:

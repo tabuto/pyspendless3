@@ -782,6 +782,49 @@ class TokenRepository:
         token.status = 'EXPIRED'
         self.db.commit()
         return True
+    
+    def get_pending_invites_for_account(self, account_id: int) -> List[Dict[str, Any]]:
+        """
+        Recupera tutti gli inviti pendenti per un account
+        
+        Args:
+            account_id: ID dell'account
+            
+        Returns:
+            Lista di dizionari con i dati degli inviti pendenti
+        """
+        tokens = self.db.query(Token).filter(
+            Token.type == 'SHARE',
+            Token.status == 'PENDING',
+            Token.expire_date > datetime.utcnow()
+        ).all()
+        
+        # Filtra per account_id nel payload
+        invites = []
+        for token in tokens:
+            try:
+                payload = json.loads(token.payload)
+                if payload.get('account_id') == account_id:
+                    invites.append({
+                        'token_uuid': token.uuid,
+                        'email': payload.get('email'),
+                        'created_at': token.create_date.strftime('%d/%m/%Y %H:%M'),
+                        'expires_at': token.expire_date.strftime('%d/%m/%Y %H:%M')
+                    })
+            except json.JSONDecodeError:
+                continue
+        
+        return invites
+    
+    def delete_token(self, token_uuid: str) -> bool:
+        """Elimina un token"""
+        token = self.get_token(token_uuid)
+        if not token:
+            return False
+        
+        self.db.delete(token)
+        self.db.commit()
+        return True
 
 
 class StatsRepository:
@@ -821,7 +864,7 @@ class StatsRepository:
         Returns:
             Dizionario con le statistiche mensili
         """
-        from sqlalchemy import func
+        from sqlalchemy import func, case
         
         # Query base per il mese specifico
         base_query = self.db.query(Movement)\
@@ -833,31 +876,33 @@ class StatsRepository:
         income_total = base_query.with_entities(func.sum(Movement.income)).scalar() or 0
         expense_total = base_query.with_entities(func.sum(Movement.expense)).scalar() or 0
         
-        # Spese per wallet
+        # Spese per wallet - usa il nome del wallet dalla tabella Wallet
         expense_by_wallet_query = self.db.query(
-            Movement.wallet,
+            func.coalesce(Wallet.name, Movement.wallet).label('wallet_name'),
             func.sum(Movement.expense).label('total')
-        ).filter(Movement.account_id == account_id)\
+        ).outerjoin(Wallet, Movement.wallet_id == Wallet.id)\
+         .filter(Movement.account_id == account_id)\
          .filter(Movement.move_year == year)\
          .filter(Movement.move_month == month)\
          .filter(Movement.expense > 0)\
-         .group_by(Movement.wallet)\
+         .group_by(func.coalesce(Wallet.name, Movement.wallet))\
          .all()
         
-        expense_by_wallet = {row.wallet: float(row.total) for row in expense_by_wallet_query}
+        expense_by_wallet = {row.wallet_name: float(row.total) for row in expense_by_wallet_query}
         
-        # Entrate per wallet
+        # Entrate per wallet - usa il nome del wallet dalla tabella Wallet
         income_by_wallet_query = self.db.query(
-            Movement.wallet,
+            func.coalesce(Wallet.name, Movement.wallet).label('wallet_name'),
             func.sum(Movement.income).label('total')
-        ).filter(Movement.account_id == account_id)\
+        ).outerjoin(Wallet, Movement.wallet_id == Wallet.id)\
+         .filter(Movement.account_id == account_id)\
          .filter(Movement.move_year == year)\
          .filter(Movement.move_month == month)\
          .filter(Movement.income > 0)\
-         .group_by(Movement.wallet)\
+         .group_by(func.coalesce(Wallet.name, Movement.wallet))\
          .all()
         
-        income_by_wallet = {row.wallet: float(row.total) for row in income_by_wallet_query}
+        income_by_wallet = {row.wallet_name: float(row.total) for row in income_by_wallet_query}
         
         # Spese per categoria
         expense_by_category_query = self.db.query(
@@ -893,7 +938,7 @@ class StatsRepository:
         Returns:
             Dizionario con le statistiche annuali
         """
-        from sqlalchemy import func
+        from sqlalchemy import func, case
         
         # Query base per l'anno specifico
         base_query = self.db.query(Movement)\
@@ -904,29 +949,31 @@ class StatsRepository:
         income_total = base_query.with_entities(func.sum(Movement.income)).scalar() or 0
         expense_total = base_query.with_entities(func.sum(Movement.expense)).scalar() or 0
         
-        # Spese per wallet
+        # Spese per wallet - usa il nome del wallet dalla tabella Wallet
         expense_by_wallet_query = self.db.query(
-            Movement.wallet,
+            func.coalesce(Wallet.name, Movement.wallet).label('wallet_name'),
             func.sum(Movement.expense).label('total')
-        ).filter(Movement.account_id == account_id)\
+        ).outerjoin(Wallet, Movement.wallet_id == Wallet.id)\
+         .filter(Movement.account_id == account_id)\
          .filter(Movement.move_year == year)\
          .filter(Movement.expense > 0)\
-         .group_by(Movement.wallet)\
+         .group_by(func.coalesce(Wallet.name, Movement.wallet))\
          .all()
         
-        expense_by_wallet = {row.wallet: float(row.total) for row in expense_by_wallet_query}
+        expense_by_wallet = {row.wallet_name: float(row.total) for row in expense_by_wallet_query}
         
-        # Entrate per wallet
+        # Entrate per wallet - usa il nome del wallet dalla tabella Wallet
         income_by_wallet_query = self.db.query(
-            Movement.wallet,
+            func.coalesce(Wallet.name, Movement.wallet).label('wallet_name'),
             func.sum(Movement.income).label('total')
-        ).filter(Movement.account_id == account_id)\
+        ).outerjoin(Wallet, Movement.wallet_id == Wallet.id)\
+         .filter(Movement.account_id == account_id)\
          .filter(Movement.move_year == year)\
          .filter(Movement.income > 0)\
-         .group_by(Movement.wallet)\
+         .group_by(func.coalesce(Wallet.name, Movement.wallet))\
          .all()
         
-        income_by_wallet = {row.wallet: float(row.total) for row in income_by_wallet_query}
+        income_by_wallet = {row.wallet_name: float(row.total) for row in income_by_wallet_query}
         
         # Spese per categoria
         expense_by_category_query = self.db.query(

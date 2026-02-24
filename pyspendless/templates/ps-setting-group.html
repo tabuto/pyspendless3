@@ -71,6 +71,7 @@
               <tr>
                 <th>Email</th>
                 <th>Data Invito</th>
+                <th>Azioni</th>
               </tr>
             </thead>
             <tbody id="pendingInvitesBody">
@@ -240,6 +241,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // Per ora creiamo un gruppo fittizio se non esiste
   // In produzione, dovremmo gestire la creazione del gruppo
   loadGroupMembers();
+  loadPendingInvites();
   
   // Event listener per reset modal quando viene chiuso
   const editAccountModal = document.getElementById('editAccountModal');
@@ -378,10 +380,66 @@ function loadGroupMembers() {
       </td>
     </tr>
   `;
+}
+
+function loadPendingInvites() {
+  fetch('/api/pending-invites')
+  .then(response => response.json())
+  .then(data => {
+    const tbody = document.getElementById('pendingInvitesBody');
+    const noPendingMsg = document.getElementById('noPendingMessage');
+    const table = document.getElementById('pendingInvitesTable');
+    
+    if (data.invites && data.invites.length > 0) {
+      tbody.innerHTML = '';
+      data.invites.forEach(invite => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${invite.email}</td>
+          <td>${invite.created_at}</td>
+          <td>
+            <button class="btn btn-sm btn-danger" onclick="deletePendingInvite('${invite.token_uuid}')">
+              <i class="bi bi-trash"></i> Elimina
+            </button>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+      table.style.display = 'table';
+      noPendingMsg.style.display = 'none';
+    } else {
+      tbody.innerHTML = '';
+      table.style.display = 'none';
+      noPendingMsg.style.display = 'block';
+    }
+  })
+  .catch(error => {
+    console.error('Errore caricamento inviti pendenti:', error);
+    showAlert('Errore durante il caricamento degli inviti pendenti', 'danger');
+  });
+}
+
+function deletePendingInvite(tokenUuid) {
+  if (!confirm('Sei sicuro di voler eliminare questo invito?')) {
+    return;
+  }
   
-  // Nascondi inviti pendenti
-  document.getElementById('noPendingMessage').style.display = 'block';
-  document.getElementById('pendingInvitesTable').style.display = 'none';
+  fetch(`/api/pending-invites/${tokenUuid}`, {
+    method: 'DELETE'
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.error) {
+      showAlert(data.error, 'danger');
+    } else {
+      showAlert('Invito eliminato con successo', 'success');
+      loadPendingInvites(); // Ricarica la lista
+    }
+  })
+  .catch(error => {
+    console.error('Errore eliminazione invito:', error);
+    showAlert('Errore durante l\'eliminazione dell\'invito', 'danger');
+  });
 }
 
 function inviteUser() {
@@ -430,6 +488,9 @@ function inviteUser() {
       document.getElementById('generatedLinkContainer').style.display = 'block';
       generateBtn.style.display = 'none';
       showAlert('Link di invito generato con successo!', 'success');
+      
+      // Ricarica la lista degli inviti pendenti
+      loadPendingInvites();
     }
   })
   .catch(error => {

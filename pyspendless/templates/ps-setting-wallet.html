@@ -135,7 +135,6 @@ function loadWallets() {
             <div class="card-body">
               <div class="d-flex justify-content-between align-items-start mb-3">
                 <h5 class="card-title">${wallet.name}</h5>
-                <span class="badge bg-secondary">${wallet.code}</span>
               </div>
               <p class="card-text">
                 <strong>Saldo:</strong> 
@@ -185,7 +184,19 @@ function addWallet() {
       showAlert('Wallet creato con successo', 'success');
       loadWallets();
       document.getElementById('addWalletForm').reset();
-      bootstrap.Modal.getInstance(document.getElementById('addWalletModal')).hide();
+      const modalElement = document.getElementById('addWalletModal');
+      const modalInstance = bootstrap.Modal.getInstance(modalElement);
+      if (modalInstance) {
+        modalInstance.hide();
+      }
+      // Forza la rimozione del backdrop
+      setTimeout(() => {
+        const backdrops = document.querySelectorAll('.modal-backdrop');
+        backdrops.forEach(backdrop => backdrop.remove());
+        document.body.classList.remove('modal-open');
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
+      }, 300);
     }
   })
   .catch(error => {

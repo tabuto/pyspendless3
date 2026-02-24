@@ -439,7 +439,6 @@ def logout():
     Logout - pulisce la sessione
     """
     session.clear()
-    flash('Logout effettuato con successo', 'info')
     return redirect(url_for('login'))
 
 @app.route("/api/categories", methods=['GET'])
@@ -1286,6 +1285,91 @@ def generate_link():
             
     except Exception as e:
         logger.error(f"Errore generazione link: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route("/api/pending-invites", methods=['GET'])
+def get_pending_invites():
+    """
+    API per recuperare gli inviti pendenti dell'account corrente
+    
+    Output JSON:
+        {
+            "invites": [
+                {
+                    "token_uuid": "...",
+                    "email": "...",
+                    "created_at": "...",
+                    "expires_at": "..."
+                }
+            ]
+        }
+    """
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    try:
+        account_id = session.get('account_id')
+        
+        db = get_db_session()
+        try:
+            token_repo = TokenRepository(db)
+            invites = token_repo.get_pending_invites_for_account(account_id)
+            return jsonify({'invites': invites}), 200
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"Errore recupero inviti pendenti: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route("/api/pending-invites/<token_uuid>", methods=['DELETE'])
+def delete_pending_invite(token_uuid):
+    """
+    API per eliminare un invito pendente
+    
+    Input: token_uuid (UUID del token da eliminare)
+    
+    Output JSON:
+        {
+            "success": true
+        }
+    """
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    try:
+        account_id = session.get('account_id')
+        
+        db = get_db_session()
+        try:
+            token_repo = TokenRepository(db)
+            
+            # Verifica che il token appartenga all'account corrente
+            token = token_repo.get_token(token_uuid)
+            if not token:
+                return jsonify({'error': 'Invito non trovato'}), 404
+            
+            # Verifica che il token sia dell'account corrente
+            payload = token_repo.get_payload(token_uuid)
+            if not payload or payload.get('account_id') != account_id:
+                return jsonify({'error': 'Non autorizzato'}), 403
+            
+            # Elimina il token
+            success = token_repo.delete_token(token_uuid)
+            if success:
+                return jsonify({'success': True}), 200
+            else:
+                return jsonify({'error': 'Errore durante l\'eliminazione'}), 500
+                
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"Errore eliminazione invito: {str(e)}")
         logger.debug(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 

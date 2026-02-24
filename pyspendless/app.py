@@ -3,7 +3,7 @@
 
 from flask import Flask, render_template, redirect, url_for, session, request, flash, jsonify
 from conf import load_env, SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI, BASE_URL, get_db_session
-from repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, UnauthorizedError
+from repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, StatsRepository, UnauthorizedError
 
 import os
 import logging
@@ -1398,6 +1398,177 @@ def delete_user_account():
         logger.error(f"Errore eliminazione account: {str(e)}")
         logger.debug(traceback.format_exc())
         return jsonify({'error': f'Errore durante l\'eliminazione: {str(e)}'}), 500
+
+
+# =============================================
+# Dashboard Routes
+# =============================================
+
+@app.route("/dashboard/monthly")
+def dashboard_monthly():
+    """
+    Pagina Dashboard Mensile - richiede autenticazione
+    """
+    user_id = session.get('user_id')
+    account_id = session.get('account_id')
+    
+    if not user_id or not account_id:
+        flash('Devi effettuare il login per accedere a questa pagina', 'warning')
+        return redirect(url_for('login'))
+    
+    return render_template("ps-dashboard-monthly.html")
+
+
+@app.route("/dashboard/yearly")
+def dashboard_yearly():
+    """
+    Pagina Dashboard Annuale - richiede autenticazione
+    """
+    user_id = session.get('user_id')
+    account_id = session.get('account_id')
+    
+    if not user_id or not account_id:
+        flash('Devi effettuare il login per accedere a questa pagina', 'warning')
+        return redirect(url_for('login'))
+    
+    return render_template("ps-dashboard-yearly.html")
+
+
+# =============================================
+# Stats API Routes
+# =============================================
+
+@app.route("/api/stats/monthly", methods=['GET'])
+def api_stats_monthly():
+    """
+    API per statistiche mensili
+    Query params: year (int), month (int)
+    """
+    try:
+        user_id = session.get('user_id')
+        account_id = session.get('account_id')
+        
+        if not user_id or not account_id:
+            return jsonify({'error': 'Non autorizzato'}), 401
+        
+        # Recupera parametri
+        year = request.args.get('year', type=int)
+        month = request.args.get('month', type=int)
+        
+        if not year or not month:
+            return jsonify({'error': 'Parametri year e month richiesti'}), 400
+        
+        if month < 1 or month > 12:
+            return jsonify({'error': 'Mese non valido (1-12)'}), 400
+        
+        db = get_db_session()
+        try:
+            stats_repo = StatsRepository(db)
+            stats = stats_repo.get_monthly_stats(account_id, year, month)
+            return jsonify(stats), 200
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"Errore recupero stats mensili: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return jsonify({'error': f'Errore: {str(e)}'}), 500
+
+
+@app.route("/api/stats/yearly", methods=['GET'])
+def api_stats_yearly():
+    """
+    API per statistiche annuali
+    Query params: year (int)
+    """
+    try:
+        user_id = session.get('user_id')
+        account_id = session.get('account_id')
+        
+        if not user_id or not account_id:
+            return jsonify({'error': 'Non autorizzato'}), 401
+        
+        # Recupera parametri
+        year = request.args.get('year', type=int)
+        
+        if not year:
+            return jsonify({'error': 'Parametro year richiesto'}), 400
+        
+        db = get_db_session()
+        try:
+            stats_repo = StatsRepository(db)
+            stats = stats_repo.get_yearly_stats(account_id, year)
+            return jsonify(stats), 200
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"Errore recupero stats annuali: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return jsonify({'error': f'Errore: {str(e)}'}), 500
+
+
+@app.route("/api/stats/category-trend", methods=['GET'])
+def api_stats_category_trend():
+    """
+    API per andamento mensile di una categoria
+    Query params: year (int), category_name (string)
+    """
+    try:
+        user_id = session.get('user_id')
+        account_id = session.get('account_id')
+        
+        if not user_id or not account_id:
+            return jsonify({'error': 'Non autorizzato'}), 401
+        
+        # Recupera parametri
+        year = request.args.get('year', type=int)
+        category_name = request.args.get('category_name', type=str)
+        
+        if not year:
+            return jsonify({'error': 'Parametro year richiesto'}), 400
+        
+        if not category_name:
+            return jsonify({'error': 'Parametro category_name richiesto'}), 400
+        
+        db = get_db_session()
+        try:
+            stats_repo = StatsRepository(db)
+            trend = stats_repo.get_category_monthly_trend(account_id, year, category_name)
+            return jsonify(trend), 200
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"Errore recupero trend categoria: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return jsonify({'error': f'Errore: {str(e)}'}), 500
+
+
+@app.route("/api/filters/years", methods=['GET'])
+def api_filters_years():
+    """
+    API per recuperare la lista degli anni disponibili
+    """
+    try:
+        user_id = session.get('user_id')
+        account_id = session.get('account_id')
+        
+        if not user_id or not account_id:
+            return jsonify({'error': 'Non autorizzato'}), 401
+        
+        db = get_db_session()
+        try:
+            stats_repo = StatsRepository(db)
+            years = stats_repo.get_available_years(account_id)
+            return jsonify(years), 200
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"Errore recupero anni disponibili: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return jsonify({'error': f'Errore: {str(e)}'}), 500
 
 
 if __name__ == "__main__":

@@ -1,0 +1,390 @@
+{% extends 'ps-nav.html' %}
+
+{% block nav_content %}
+<div class="app-content-header">
+  <div class="container-fluid">
+    <div class="row">
+      <div class="col-sm-6">
+        <h3 class="mb-0">Analisi Annuale</h3>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="app-content">
+  <div class="container-fluid">
+    <!-- Filtri -->
+    <div class="row mb-3">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title mb-0">
+              <i class="bi bi-funnel"></i> Filtri
+            </h5>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-3">
+                <label for="filterYear" class="form-label">Anno</label>
+                <select class="form-select" id="filterYear">
+                  <option value="">Caricamento...</option>
+                </select>
+              </div>
+              <div class="col-md-3 d-flex align-items-end">
+                <button class="btn btn-primary" id="btnUpdate">
+                  <i class="bi bi-arrow-clockwise"></i> Aggiorna
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grafici - Riga 1: Riepilogo -->
+    <div class="row">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Totale Entrate vs Uscite</h5>
+          </div>
+          <div class="card-body">
+            <canvas id="chartIncomeExpense" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Totale Spese per Categoria</h5>
+          </div>
+          <div class="card-body">
+            <canvas id="chartExpenseByCategory" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grafici - Riga 2: Breakdown Wallet -->
+    <div class="row mt-3">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Totale Spese per Wallet</h5>
+          </div>
+          <div class="card-body">
+            <canvas id="chartExpenseByWallet" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Totale Entrate per Wallet</h5>
+          </div>
+          <div class="card-body">
+            <canvas id="chartIncomeByWallet" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grafici - Riga 3: Trend Categoria -->
+    <div class="row mt-3">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <div class="row">
+              <div class="col-md-6">
+                <h5 class="card-title mb-0">Andamento Mensile Spese per Categoria</h5>
+              </div>
+              <div class="col-md-6">
+                <select class="form-select" id="filterCategory">
+                  <option value="">Seleziona una categoria...</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="card-body">
+            <canvas id="chartCategoryTrend" height="100"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// Palette di colori standard
+const COLORS = [
+  '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+  '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF9F40'
+];
+
+// Variabili globali per i grafici
+let chartIncomeExpense, chartExpenseByCategory, chartExpenseByWallet, chartIncomeByWallet, chartCategoryTrend;
+let currentCategories = [];
+
+// Funzione per inizializzare i filtri
+async function initFilters() {
+  try {
+    const response = await fetch('/api/filters/years');
+    const years = await response.json();
+    
+    const yearSelect = document.getElementById('filterYear');
+    yearSelect.innerHTML = '';
+    
+    if (years.length === 0) {
+      yearSelect.innerHTML = '<option value="">Nessun dato disponibile</option>';
+      return;
+    }
+    
+    years.forEach(year => {
+      const option = document.createElement('option');
+      option.value = year;
+      option.textContent = year;
+      yearSelect.appendChild(option);
+    });
+    
+    // Seleziona l'anno corrente se presente
+    const currentYear = new Date().getFullYear();
+    if (years.includes(currentYear)) {
+      yearSelect.value = currentYear;
+    } else {
+      yearSelect.value = years[0];
+    }
+    
+  } catch (error) {
+    console.error('Errore caricamento anni:', error);
+  }
+}
+
+// Funzione per popolare il dropdown delle categorie
+function populateCategoryFilter(categories) {
+  const categorySelect = document.getElementById('filterCategory');
+  categorySelect.innerHTML = '<option value="">Seleziona una categoria...</option>';
+  
+  categories.forEach(category => {
+    const option = document.createElement('option');
+    option.value = category;
+    option.textContent = category;
+    categorySelect.appendChild(option);
+  });
+  
+  // Seleziona la prima categoria se disponibile
+  if (categories.length > 0) {
+    categorySelect.value = categories[0];
+  }
+}
+
+// Funzione per creare grafico a torta
+function createPieChart(ctx, labels, data, colors) {
+  return new Chart(ctx, {
+    type: 'pie',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: data,
+        backgroundColor: colors
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom'
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              let label = context.label || '';
+              if (label) {
+                label += ': ';
+              }
+              label += '€' + context.parsed.toFixed(2);
+              return label;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+// Funzione per creare grafico a linea
+function createLineChart(ctx, labels, data) {
+  return new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Spese',
+        data: data,
+        borderColor: '#FF6384',
+        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+        tension: 0.3,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return '€' + context.parsed.y.toFixed(2);
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: function(value) {
+              return '€' + value;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+// Funzione per aggiornare i grafici di riepilogo
+async function updateSummaryCharts() {
+  const year = document.getElementById('filterYear').value;
+  
+  if (!year) {
+    alert('Seleziona un anno');
+    return;
+  }
+  
+  try {
+    const response = await fetch(`/api/stats/yearly?year=${year}`);
+    const data = await response.json();
+    
+    // Grafico Entrate vs Uscite
+    const incomeExpenseLabels = ['Entrate', 'Uscite'];
+    const incomeExpenseData = [
+      data.income_vs_expense.income || 0,
+      data.income_vs_expense.expense || 0
+    ];
+    const incomeExpenseColors = ['#36A2EB', '#FF6384'];
+    
+    if (chartIncomeExpense) {
+      chartIncomeExpense.data.labels = incomeExpenseLabels;
+      chartIncomeExpense.data.datasets[0].data = incomeExpenseData;
+      chartIncomeExpense.data.datasets[0].backgroundColor = incomeExpenseColors;
+      chartIncomeExpense.update();
+    } else {
+      const ctx = document.getElementById('chartIncomeExpense').getContext('2d');
+      chartIncomeExpense = createPieChart(ctx, incomeExpenseLabels, incomeExpenseData, incomeExpenseColors);
+    }
+    
+    // Grafico Spese per Categoria
+    const categoryLabels = Object.keys(data.expense_by_category);
+    const categoryData = Object.values(data.expense_by_category);
+    const categoryColors = categoryLabels.map((_, i) => COLORS[i % COLORS.length]);
+    
+    // Aggiorna la lista delle categorie disponibili
+    currentCategories = categoryLabels;
+    populateCategoryFilter(currentCategories);
+    
+    if (chartExpenseByCategory) {
+      chartExpenseByCategory.data.labels = categoryLabels;
+      chartExpenseByCategory.data.datasets[0].data = categoryData;
+      chartExpenseByCategory.data.datasets[0].backgroundColor = categoryColors;
+      chartExpenseByCategory.update();
+    } else {
+      const ctx = document.getElementById('chartExpenseByCategory').getContext('2d');
+      chartExpenseByCategory = createPieChart(ctx, categoryLabels, categoryData, categoryColors);
+    }
+    
+    // Grafico Spese per Wallet
+    const walletExpenseLabels = Object.keys(data.expense_by_wallet);
+    const walletExpenseData = Object.values(data.expense_by_wallet);
+    const walletExpenseColors = walletExpenseLabels.map((_, i) => COLORS[i % COLORS.length]);
+    
+    if (chartExpenseByWallet) {
+      chartExpenseByWallet.data.labels = walletExpenseLabels;
+      chartExpenseByWallet.data.datasets[0].data = walletExpenseData;
+      chartExpenseByWallet.data.datasets[0].backgroundColor = walletExpenseColors;
+      chartExpenseByWallet.update();
+    } else {
+      const ctx = document.getElementById('chartExpenseByWallet').getContext('2d');
+      chartExpenseByWallet = createPieChart(ctx, walletExpenseLabels, walletExpenseData, walletExpenseColors);
+    }
+    
+    // Grafico Entrate per Wallet
+    const walletIncomeLabels = Object.keys(data.income_by_wallet);
+    const walletIncomeData = Object.values(data.income_by_wallet);
+    const walletIncomeColors = walletIncomeLabels.map((_, i) => COLORS[i % COLORS.length]);
+    
+    if (chartIncomeByWallet) {
+      chartIncomeByWallet.data.labels = walletIncomeLabels;
+      chartIncomeByWallet.data.datasets[0].data = walletIncomeData;
+      chartIncomeByWallet.data.datasets[0].backgroundColor = walletIncomeColors;
+      chartIncomeByWallet.update();
+    } else {
+      const ctx = document.getElementById('chartIncomeByWallet').getContext('2d');
+      chartIncomeByWallet = createPieChart(ctx, walletIncomeLabels, walletIncomeData, walletIncomeColors);
+    }
+    
+    // Aggiorna anche il grafico trend se c'è una categoria selezionata
+    const selectedCategory = document.getElementById('filterCategory').value;
+    if (selectedCategory) {
+      await updateCategoryTrend();
+    }
+    
+  } catch (error) {
+    console.error('Errore aggiornamento grafici:', error);
+    alert('Errore durante il caricamento dei dati');
+  }
+}
+
+// Funzione per aggiornare il grafico trend categoria
+async function updateCategoryTrend() {
+  const year = document.getElementById('filterYear').value;
+  const category = document.getElementById('filterCategory').value;
+  
+  if (!year || !category) {
+    return;
+  }
+  
+  try {
+    const response = await fetch(`/api/stats/category-trend?year=${year}&category_name=${encodeURIComponent(category)}`);
+    const data = await response.json();
+    
+    if (chartCategoryTrend) {
+      chartCategoryTrend.data.labels = data.labels;
+      chartCategoryTrend.data.datasets[0].data = data.data;
+      chartCategoryTrend.data.datasets[0].label = data.category_name;
+      chartCategoryTrend.update();
+    } else {
+      const ctx = document.getElementById('chartCategoryTrend').getContext('2d');
+      chartCategoryTrend = createLineChart(ctx, data.labels, data.data);
+    }
+    
+  } catch (error) {
+    console.error('Errore aggiornamento trend categoria:', error);
+  }
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', async function() {
+  await initFilters();
+  await updateSummaryCharts();
+  
+  document.getElementById('btnUpdate').addEventListener('click', updateSummaryCharts);
+  document.getElementById('filterYear').addEventListener('change', updateSummaryCharts);
+  document.getElementById('filterCategory').addEventListener('change', updateCategoryTrend);
+});
+</script>
+{% endblock %}

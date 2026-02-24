@@ -1,0 +1,288 @@
+{% extends 'ps-nav.html' %}
+
+{% block nav_content %}
+<div class="app-content-header">
+  <div class="container-fluid">
+    <div class="row">
+      <div class="col-sm-6">
+        <h3 class="mb-0">Analisi Mensile</h3>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="app-content">
+  <div class="container-fluid">
+    <!-- Filtri -->
+    <div class="row mb-3">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title mb-0">
+              <i class="bi bi-funnel"></i> Filtri
+            </h5>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-3">
+                <label for="filterYear" class="form-label">Anno</label>
+                <select class="form-select" id="filterYear">
+                  <option value="">Caricamento...</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label for="filterMonth" class="form-label">Mese</label>
+                <select class="form-select" id="filterMonth">
+                  <option value="1">Gennaio</option>
+                  <option value="2">Febbraio</option>
+                  <option value="3">Marzo</option>
+                  <option value="4">Aprile</option>
+                  <option value="5">Maggio</option>
+                  <option value="6">Giugno</option>
+                  <option value="7">Luglio</option>
+                  <option value="8">Agosto</option>
+                  <option value="9">Settembre</option>
+                  <option value="10">Ottobre</option>
+                  <option value="11">Novembre</option>
+                  <option value="12">Dicembre</option>
+                </select>
+              </div>
+              <div class="col-md-3 d-flex align-items-end">
+                <button class="btn btn-primary" id="btnUpdate">
+                  <i class="bi bi-arrow-clockwise"></i> Aggiorna
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grafici - Riga 1 -->
+    <div class="row">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Entrate vs Uscite</h5>
+          </div>
+          <div class="card-body">
+            <canvas id="chartIncomeExpense" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Spese per Categoria</h5>
+          </div>
+          <div class="card-body">
+            <canvas id="chartExpenseByCategory" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grafici - Riga 2 -->
+    <div class="row mt-3">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Spese per Wallet</h5>
+          </div>
+          <div class="card-body">
+            <canvas id="chartExpenseByWallet" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Entrate per Wallet</h5>
+          </div>
+          <div class="card-body">
+            <canvas id="chartIncomeByWallet" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// Palette di colori standard
+const COLORS = [
+  '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+  '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF9F40'
+];
+
+// Variabili globali per i grafici
+let chartIncomeExpense, chartExpenseByCategory, chartExpenseByWallet, chartIncomeByWallet;
+
+// Funzione per inizializzare i filtri
+async function initFilters() {
+  try {
+    const response = await fetch('/api/filters/years');
+    const years = await response.json();
+    
+    const yearSelect = document.getElementById('filterYear');
+    yearSelect.innerHTML = '';
+    
+    if (years.length === 0) {
+      yearSelect.innerHTML = '<option value="">Nessun dato disponibile</option>';
+      return;
+    }
+    
+    years.forEach(year => {
+      const option = document.createElement('option');
+      option.value = year;
+      option.textContent = year;
+      yearSelect.appendChild(option);
+    });
+    
+    // Seleziona l'anno corrente se presente
+    const currentYear = new Date().getFullYear();
+    if (years.includes(currentYear)) {
+      yearSelect.value = currentYear;
+    } else {
+      yearSelect.value = years[0];
+    }
+    
+    // Seleziona il mese corrente
+    const currentMonth = new Date().getMonth() + 1;
+    document.getElementById('filterMonth').value = currentMonth;
+    
+  } catch (error) {
+    console.error('Errore caricamento anni:', error);
+  }
+}
+
+// Funzione per creare grafico a torta
+function createPieChart(ctx, labels, data, colors) {
+  return new Chart(ctx, {
+    type: 'pie',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: data,
+        backgroundColor: colors
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom'
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              let label = context.label || '';
+              if (label) {
+                label += ': ';
+              }
+              label += '€' + context.parsed.toFixed(2);
+              return label;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+// Funzione per aggiornare i grafici
+async function updateCharts() {
+  const year = document.getElementById('filterYear').value;
+  const month = document.getElementById('filterMonth').value;
+  
+  if (!year || !month) {
+    alert('Seleziona anno e mese');
+    return;
+  }
+  
+  try {
+    const response = await fetch(`/api/stats/monthly?year=${year}&month=${month}`);
+    const data = await response.json();
+    
+    // Grafico Entrate vs Uscite
+    const incomeExpenseLabels = ['Entrate', 'Uscite'];
+    const incomeExpenseData = [
+      data.income_vs_expense.income || 0,
+      data.income_vs_expense.expense || 0
+    ];
+    const incomeExpenseColors = ['#36A2EB', '#FF6384'];
+    
+    if (chartIncomeExpense) {
+      chartIncomeExpense.data.labels = incomeExpenseLabels;
+      chartIncomeExpense.data.datasets[0].data = incomeExpenseData;
+      chartIncomeExpense.data.datasets[0].backgroundColor = incomeExpenseColors;
+      chartIncomeExpense.update();
+    } else {
+      const ctx = document.getElementById('chartIncomeExpense').getContext('2d');
+      chartIncomeExpense = createPieChart(ctx, incomeExpenseLabels, incomeExpenseData, incomeExpenseColors);
+    }
+    
+    // Grafico Spese per Categoria
+    const categoryLabels = Object.keys(data.expense_by_category);
+    const categoryData = Object.values(data.expense_by_category);
+    const categoryColors = categoryLabels.map((_, i) => COLORS[i % COLORS.length]);
+    
+    if (chartExpenseByCategory) {
+      chartExpenseByCategory.data.labels = categoryLabels;
+      chartExpenseByCategory.data.datasets[0].data = categoryData;
+      chartExpenseByCategory.data.datasets[0].backgroundColor = categoryColors;
+      chartExpenseByCategory.update();
+    } else {
+      const ctx = document.getElementById('chartExpenseByCategory').getContext('2d');
+      chartExpenseByCategory = createPieChart(ctx, categoryLabels, categoryData, categoryColors);
+    }
+    
+    // Grafico Spese per Wallet
+    const walletExpenseLabels = Object.keys(data.expense_by_wallet);
+    const walletExpenseData = Object.values(data.expense_by_wallet);
+    const walletExpenseColors = walletExpenseLabels.map((_, i) => COLORS[i % COLORS.length]);
+    
+    if (chartExpenseByWallet) {
+      chartExpenseByWallet.data.labels = walletExpenseLabels;
+      chartExpenseByWallet.data.datasets[0].data = walletExpenseData;
+      chartExpenseByWallet.data.datasets[0].backgroundColor = walletExpenseColors;
+      chartExpenseByWallet.update();
+    } else {
+      const ctx = document.getElementById('chartExpenseByWallet').getContext('2d');
+      chartExpenseByWallet = createPieChart(ctx, walletExpenseLabels, walletExpenseData, walletExpenseColors);
+    }
+    
+    // Grafico Entrate per Wallet
+    const walletIncomeLabels = Object.keys(data.income_by_wallet);
+    const walletIncomeData = Object.values(data.income_by_wallet);
+    const walletIncomeColors = walletIncomeLabels.map((_, i) => COLORS[i % COLORS.length]);
+    
+    if (chartIncomeByWallet) {
+      chartIncomeByWallet.data.labels = walletIncomeLabels;
+      chartIncomeByWallet.data.datasets[0].data = walletIncomeData;
+      chartIncomeByWallet.data.datasets[0].backgroundColor = walletIncomeColors;
+      chartIncomeByWallet.update();
+    } else {
+      const ctx = document.getElementById('chartIncomeByWallet').getContext('2d');
+      chartIncomeByWallet = createPieChart(ctx, walletIncomeLabels, walletIncomeData, walletIncomeColors);
+    }
+    
+  } catch (error) {
+    console.error('Errore aggiornamento grafici:', error);
+    alert('Errore durante il caricamento dei dati');
+  }
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', async function() {
+  await initFilters();
+  await updateCharts();
+  
+  document.getElementById('btnUpdate').addEventListener('click', updateCharts);
+  document.getElementById('filterYear').addEventListener('change', updateCharts);
+  document.getElementById('filterMonth').addEventListener('change', updateCharts);
+});
+</script>
+{% endblock %}

@@ -71,6 +71,29 @@
             </a>
           </li>
           <li class="nav-item">
+            <button type="button" class="nav-link w-100 text-start border-0 bg-transparent" onclick="toggleDashboardMenu(event)">
+              <i class="nav-icon bi bi-graph-up"></i>
+              <p>
+                Dashboard
+                <i class="nav-arrow bi bi-chevron-right"></i>
+              </p>
+            </button>
+            <ul class="nav nav-treeview" id="dashboardSubmenu" style="display: none;">
+              <li class="nav-item">
+                <a href="{{ url_for('dashboard_monthly') }}" class="nav-link">
+                  <i class="nav-icon bi bi-calendar-month"></i>
+                  <p>Analisi Mensile</p>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a href="{{ url_for('dashboard_yearly') }}" class="nav-link">
+                  <i class="nav-icon bi bi-calendar-range"></i>
+                  <p>Analisi Annuale</p>
+                </a>
+              </li>
+            </ul>
+          </li>
+          <li class="nav-item">
             <button type="button" class="nav-link w-100 text-start border-0 bg-transparent" onclick="toggleSettingsMenu(event)">
               <i class="nav-icon bi bi-gear"></i>
               <p>
@@ -127,6 +150,29 @@ function toggleSettingsMenu(event) {
   event.stopPropagation();
   
   const submenu = document.getElementById('settingsSubmenu');
+  const arrow = event.currentTarget.querySelector('.nav-arrow');
+  const parentLi = event.currentTarget.parentElement;
+  
+  if (submenu.style.display === 'none' || submenu.style.display === '') {
+    submenu.style.display = 'block';
+    arrow.classList.remove('bi-chevron-right');
+    arrow.classList.add('bi-chevron-down');
+    parentLi.classList.add('menu-open');
+  } else {
+    submenu.style.display = 'none';
+    arrow.classList.remove('bi-chevron-down');
+    arrow.classList.add('bi-chevron-right');
+    parentLi.classList.remove('menu-open');
+  }
+  
+  return false;
+}
+
+function toggleDashboardMenu(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  
+  const submenu = document.getElementById('dashboardSubmenu');
   const arrow = event.currentTarget.querySelector('.nav-arrow');
   const parentLi = event.currentTarget.parentElement;
   

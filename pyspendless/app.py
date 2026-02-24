@@ -104,18 +104,7 @@ def auth_callback():
         token_repo = TokenRepository(db)
         
         try:
-            # Crea o recupera l'utente (include controllo whitelist)
-            user = user_repo.create_user_from_oauth(user_info)
-            logger.info(f"Utente creato/recuperato: {user.email}")
-            
-            # Salva informazioni in sessione
-            session['user_id'] = user.id
-            session['user_email'] = user.email
-            session['user_name'] = user.name
-            session['account_id'] = user.account_id
-            
-            # Controlla se c'è un invito pendente da processare
-            # Prima prova dalla sessione, poi dal cookie
+            # Prima controlla se c'è un invito pendente
             logger.info(f"Sessione corrente: {dict(session)}")
             pending_token = session.pop('pending_invite_token', None)
             
@@ -124,35 +113,47 @@ def auth_callback():
                 pending_token = invite_token_from_cookie
                 logger.info(f"Usando token dal cookie: {pending_token}")
             
+            # Valida il token e recupera account_id se presente
+            target_account_id = None
+            invite_email = None
+            token_obj = None
+            
             if pending_token:
-                # Processa l'invito
-                logger.info(f"Processando invito pendente: {pending_token}")
-                
+                logger.info(f"Validando token di invito: {pending_token}")
                 token_obj = token_repo.validate_token(pending_token)
                 
                 if token_obj:
                     payload = token_repo.get_payload(pending_token)
                     invite_email = payload.get('email')
                     target_account_id = payload.get('account_id')
+                    logger.info(f"Token valido - email: {invite_email}, account_id: {target_account_id}")
                     
-                    # Verifica corrispondenza email
-                    if user.email.lower() == invite_email.lower():
-                        # Cambia account dell'utente se diverso
-                        if user.account_id != target_account_id:
-                            user.account_id = target_account_id
-                            user.role = 'member'
-                            db.commit()
-                            session['account_id'] = target_account_id
-                            
-                            token_repo.mark_as_used(pending_token)
-                            flash(f'Benvenuto, {user.name}! Hai accettato l\'invito con successo.', 'success')
-                        else:
-                            flash(f'Benvenuto, {user.name}! Sei già membro di questo account.', 'info')
-                            token_repo.mark_as_used(pending_token)
-                    else:
-                        flash(f'L\'invito era per {invite_email}, ma hai effettuato il login come {user.email}', 'warning')
+                    # Verifica che l'email dell'utente corrisponda all'invito
+                    if user_info.get('email', '').lower() != invite_email.lower():
+                        logger.warning(f"Email mismatch: invito per {invite_email}, login come {user_info.get('email')}")
+                        target_account_id = None  # Non usare account_id se email non corrisponde
                 else:
-                    flash('Il link di invito non è più valido', 'warning')
+                    logger.warning(f"Token di invito non valido: {pending_token}")
+            
+            # Crea o recupera l'utente, passando account_id se presente
+            user = user_repo.create_user_from_oauth(user_info, account_id=target_account_id)
+            logger.info(f"Utente creato/recuperato: {user.email}, account_id: {user.account_id}")
+            
+            # Salva informazioni in sessione
+            session['user_id'] = user.id
+            session['user_email'] = user.email
+            session['user_name'] = user.name
+            session['account_id'] = user.account_id
+            
+            # Marca il token come usato e mostra messaggio appropriato
+            if token_obj and target_account_id:
+                token_repo.mark_as_used(pending_token)
+                if user_info.get('email', '').lower() == invite_email.lower():
+                    flash(f'Benvenuto, {user.name}! Hai accettato l\'invito con successo.', 'success')
+                else:
+                    flash(f'L\'invito era per {invite_email}, ma hai effettuato il login come {user.email}', 'warning')
+            elif pending_token and not token_obj:
+                flash('Il link di invito non è più valido', 'warning')
             else:
                 flash(f'Benvenuto, {user.name}!', 'success')
             
@@ -1191,6 +1192,105 @@ def generate_link_callback():
         return redirect(url_for('login'))
     finally:
         db.close()
+
+
+@app.route("/api/accounts/<int:account_id>/users", methods=['GET'])
+def get_account_users(account_id):
+    """
+    Recupera tutti gli utenti associati a un account
+    
+    Output JSON:
+        {
+            "users": [
+                {
+                    "id": 1,
+                    "email": "user@gmail.com",
+                    "name": "User Name",
+                    "role": "owner"
+                }
+            ]
+        }
+    """
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    # Verifica che l'utente appartenga all'account richiesto
+    if session.get('account_id') != account_id:
+        return jsonify({'error': 'Accesso non autorizzato'}), 403
+    
+    try:
+        db = get_db_session()
+        try:
+            user_repo = UserRepository(db)
+            users = user_repo.get_users_by_account(account_id)
+            
+            users_data = [
+                {
+                    'id': user.id,
+                    'email': user.email,
+                    'name': user.name,
+                    'role': user.role
+                }
+                for user in users
+            ]
+            
+            return jsonify({'users': users_data}), 200
+            
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"Errore recupero utenti: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route("/api/user/delete-account", methods=['DELETE'])
+def delete_user_account():
+    """
+    Elimina l'account dell'utente corrente
+    
+    Comportamento:
+    - Se l'utente è l'unico nell'account: elimina tutto (user, account, categories, wallets, movements)
+    - Se ci sono altri utenti: elimina solo l'utente e i suoi movimenti
+    
+    Output JSON:
+        {
+            "success": true,
+            "message": "Account eliminato con successo"
+        }
+    """
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    user_id = session.get('user_id')
+    
+    try:
+        db = get_db_session()
+        try:
+            user_repo = UserRepository(db)
+            
+            # Elimina l'utente e i dati associati
+            success = user_repo.delete_user(user_id)
+            
+            if success:
+                # Pulisci la sessione
+                session.clear()
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'Account eliminato con successo'
+                }), 200
+            else:
+                return jsonify({'error': 'Utente non trovato'}), 404
+                
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"Errore eliminazione account: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return jsonify({'error': f'Errore durante l\'eliminazione: {str(e)}'}), 500
 
 
 if __name__ == "__main__":

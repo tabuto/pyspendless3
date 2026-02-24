@@ -40,7 +40,7 @@ class UserRepository:
         """Recupera un utente tramite email"""
         return self.db.query(User).filter_by(email=email).first()
     
-    def create_user_from_oauth(self, user_info: Dict[str, Any]) -> User:
+    def create_user_from_oauth(self, user_info: Dict[str, Any], account_id: Optional[int] = None) -> User:
         """
         Crea un nuovo utente e account dopo autenticazione OAuth Google.
         Se l'utente esiste già, lo ritorna.
@@ -48,6 +48,8 @@ class UserRepository:
         Args:
             user_info: Dizionario con i dati dell'utente da Google OAuth
                        Deve contenere: 'sub' (google_id), 'email', 'name'
+            account_id: ID dell'account a cui associare l'utente (opzionale).
+                       Se fornito, l'utente viene creato in quell'account invece di crearne uno nuovo.
         
         Returns:
             User: L'oggetto User creato o esistente
@@ -80,13 +82,21 @@ class UserRepository:
             return existing_user
         
         try:
-            # 3. Create Account
-            new_account = Account(
-                name=f"Account di {name}",
-                created_at=datetime.utcnow()
-            )
-            self.db.add(new_account)
-            self.db.flush()  # Per ottenere l'ID dell'account
+            # 3. Create Account (solo se account_id non è fornito)
+            if account_id is None:
+                new_account = Account(
+                    name=f"Account di {name}",
+                    created_at=datetime.utcnow()
+                )
+                self.db.add(new_account)
+                self.db.flush()  # Per ottenere l'ID dell'account
+                account_id = new_account.id
+                role = 'owner'
+                create_categories = True
+            else:
+                # Se account_id è fornito, l'utente è un membro invitato
+                role = 'member'
+                create_categories = False
             
             # 4. Create User
             new_user = User(
@@ -94,14 +104,15 @@ class UserRepository:
                 google_id=google_id,
                 email=email,
                 name=name,
-                account_id=new_account.id,
-                role='owner',
+                account_id=account_id,
+                role=role,
                 created_at=datetime.utcnow()
             )
             self.db.add(new_user)
             
-            # 5. Copy Categories from Templates
-            self._create_default_categories(new_account.id)
+            # 5. Copy Categories from Templates (solo se nuovo account)
+            if create_categories:
+                self._create_default_categories(account_id)
             
             # Commit della transazione
             self.db.commit()
@@ -131,6 +142,68 @@ class UserRepository:
     def get_user_by_id(self, user_id: int) -> Optional[User]:
         """Recupera un utente tramite ID"""
         return self.db.query(User).filter_by(id=user_id).first()
+    
+    def get_users_by_account(self, account_id: int) -> List[User]:
+        """Recupera tutti gli utenti associati a un account"""
+        return self.db.query(User).filter_by(account_id=account_id).all()
+    
+    def delete_user(self, user_id: int) -> bool:
+        """
+        Elimina un utente e i suoi dati associati.
+        Se l'utente è l'unico nell'account, elimina anche l'account e tutti i dati.
+        Altrimenti elimina solo l'utente e i suoi movimenti.
+        """
+        user = self.get_user_by_id(user_id)
+        if not user:
+            return False
+        
+        account_id = user.account_id
+        
+        # Conta quanti utenti ci sono nell'account
+        users_in_account = self.get_users_by_account(account_id)
+        
+        try:
+            if len(users_in_account) <= 1:
+                # Unico utente: elimina tutto l'account
+                # Prima elimina tutti i movimenti
+                self.db.query(Movement).filter_by(account_id=account_id).delete()
+                
+                # Elimina tutte le categorie
+                self.db.query(Category).filter_by(account_id=account_id).delete()
+                
+                # Elimina tutti i wallet
+                self.db.query(Wallet).filter_by(account_id=account_id).delete()
+                
+                # Elimina tutti i gruppi e membership
+                groups = self.db.query(UserGroup).filter_by(account_id=account_id).all()
+                for group in groups:
+                    self.db.query(GroupMembership).filter_by(group_id=group.id).delete()
+                    self.db.delete(group)
+                
+                # Elimina l'utente
+                self.db.delete(user)
+                
+                # Elimina l'account
+                account = self.db.query(Account).filter_by(id=account_id).first()
+                if account:
+                    self.db.delete(account)
+            else:
+                # Più utenti: elimina solo l'utente e i suoi movimenti
+                # Elimina i movimenti dell'utente
+                self.db.query(Movement).filter_by(user_id=user_id).delete()
+                
+                # Elimina le membership dell'utente nei gruppi
+                self.db.query(GroupMembership).filter_by(user_id=user_id).delete()
+                
+                # Elimina l'utente
+                self.db.delete(user)
+            
+            self.db.commit()
+            return True
+            
+        except SQLAlchemyError as e:
+            self.db.rollback()
+            raise e
 
 
 class AccountRepository:

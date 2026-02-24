@@ -95,6 +95,30 @@
       </div>
     </div>
   </div>
+  
+  <!-- Sezione Eliminazione Account -->
+  <div class="row mt-4">
+    <div class="col-md-12">
+      <div class="card border-danger">
+        <div class="card-header bg-danger text-white">
+          <h3 class="card-title"><i class="bi bi-exclamation-triangle"></i> Zona Pericolosa</h3>
+        </div>
+        <div class="card-body">
+          <h5>Elimina Account</h5>
+          <p class="text-muted">
+            L'eliminazione dell'account è un'azione permanente e irreversibile.
+          </p>
+          <ul class="text-muted">
+            <li>Se l'account è condiviso con altri utenti, verranno eliminati solo il tuo profilo e i tuoi movimenti personali.</li>
+            <li>Se sei l'unico utente dell'account, verranno eliminati tutti i dati: profilo, categorie, wallet e movimenti.</li>
+          </ul>
+          <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteAccountModal">
+            <i class="bi bi-trash"></i> Elimina Account
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Modal Modifica Account -->
@@ -165,6 +189,44 @@
     </div>
   </div>
 </div>
+
+<!-- Modal Elimina Account -->
+<div class="modal fade" id="deleteAccountModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content border-danger">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title"><i class="bi bi-exclamation-triangle"></i> Conferma Eliminazione Account</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-danger">
+          <strong>Attenzione!</strong> Questa azione è irreversibile.
+        </div>
+        <p>Sei sicuro di voler eliminare il tuo account?</p>
+        <p class="text-muted mb-2">Cosa verrà eliminato:</p>
+        <ul id="deletionDetails" class="text-muted">
+          <li>Il tuo profilo utente</li>
+          <li>I tuoi movimenti personali</li>
+          <li id="sharedAccountNote" style="display: none;">L'account resterà attivo per gli altri membri</li>
+          <li id="fullDeletionNote" style="display: none;">Tutti i dati dell'account (wallet, categorie, movimenti)</li>
+        </ul>
+        
+        <div class="form-group mt-3">
+          <label for="confirmDeleteText" class="form-label">
+            Digita <strong>ELIMINA</strong> per confermare:
+          </label>
+          <input type="text" class="form-control" id="confirmDeleteText" placeholder="ELIMINA">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-danger" id="confirmDeleteBtn" onclick="deleteAccount()" disabled>
+          <i class="bi bi-trash"></i> Elimina Definitivamente
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -195,6 +257,29 @@ document.addEventListener('DOMContentLoaded', function() {
       document.getElementById('inviteForm').reset();
       document.getElementById('generatedLinkContainer').style.display = 'none';
       document.getElementById('generateLinkBtn').style.display = 'block';
+    });
+  }
+  
+  // Event listener per il campo di conferma eliminazione
+  const confirmDeleteText = document.getElementById('confirmDeleteText');
+  if (confirmDeleteText) {
+    confirmDeleteText.addEventListener('input', function() {
+      const confirmBtn = document.getElementById('confirmDeleteBtn');
+      confirmBtn.disabled = this.value !== 'ELIMINA';
+    });
+  }
+  
+  // Event listener per reset del modal eliminazione
+  const deleteAccountModal = document.getElementById('deleteAccountModal');
+  if (deleteAccountModal) {
+    deleteAccountModal.addEventListener('hidden.bs.modal', function () {
+      document.getElementById('confirmDeleteText').value = '';
+      document.getElementById('confirmDeleteBtn').disabled = true;
+    });
+    
+    // Quando si apre il modal, controlla se l'account è condiviso
+    deleteAccountModal.addEventListener('show.bs.modal', function () {
+      checkAccountSharing();
     });
   }
 });
@@ -418,6 +503,70 @@ function removeMember(memberId) {
     showAlert('Errore durante la rimozione del membro', 'danger');
   });
   */
+}
+
+function checkAccountSharing() {
+  // Controlla quanti utenti sono associati all'account
+  fetch(`/api/accounts/${accountId}/users`)
+  .then(response => response.json())
+  .then(data => {
+    const sharedNote = document.getElementById('sharedAccountNote');
+    const fullNote = document.getElementById('fullDeletionNote');
+    
+    if (data.users && data.users.length > 1) {
+      // Account condiviso
+      sharedNote.style.display = 'list-item';
+      fullNote.style.display = 'none';
+    } else {
+      // Unico utente
+      sharedNote.style.display = 'none';
+      fullNote.style.display = 'list-item';
+    }
+  })
+  .catch(error => {
+    console.error('Errore durante il controllo utenti:', error);
+    // In caso di errore, mostra entrambe le opzioni
+    document.getElementById('sharedAccountNote').style.display = 'list-item';
+    document.getElementById('fullDeletionNote').style.display = 'list-item';
+  });
+}
+
+function deleteAccount() {
+  const confirmBtn = document.getElementById('confirmDeleteBtn');
+  const originalText = confirmBtn.innerHTML;
+  confirmBtn.disabled = true;
+  confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Eliminando...';
+  
+  fetch('/api/user/delete-account', {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.error) {
+      showAlert(data.error, 'danger');
+      confirmBtn.disabled = false;
+      confirmBtn.innerHTML = originalText;
+    } else {
+      showAlert('Account eliminato con successo. Verrai reindirizzato...', 'success');
+      
+      // Chiudi il modal
+      closeModal('deleteAccountModal');
+      
+      // Reindirizza al logout dopo 2 secondi
+      setTimeout(() => {
+        window.location.href = '/auth/logout';
+      }, 2000);
+    }
+  })
+  .catch(error => {
+    console.error('Errore:', error);
+    showAlert('Errore durante l\'eliminazione dell\'account', 'danger');
+    confirmBtn.disabled = false;
+    confirmBtn.innerHTML = originalText;
+  });
 }
 </script>
 {% endblock %}

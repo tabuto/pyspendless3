@@ -175,10 +175,11 @@ class UserRepository:
                 self.db.query(Wallet).filter_by(account_id=account_id).delete()
                 
                 # Elimina tutti i gruppi e membership
-                groups = self.db.query(UserGroup).filter_by(account_id=account_id).all()
-                for group in groups:
-                    self.db.query(GroupMembership).filter_by(group_id=group.id).delete()
-                    self.db.delete(group)
+                # Usa una subquery per evitare problemi con colonne mancanti
+                group_ids = [g[0] for g in self.db.query(UserGroup.id).filter_by(account_id=account_id).all()]
+                for group_id in group_ids:
+                    self.db.query(GroupMembership).filter_by(group_id=group_id).delete()
+                self.db.query(UserGroup).filter_by(account_id=account_id).delete()
                 
                 # Elimina l'utente
                 self.db.delete(user)

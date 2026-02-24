@@ -104,7 +104,28 @@ def auth_callback():
         token_repo = TokenRepository(db)
         
         try:
+            # Verifica se l'utente esiste già
+            existing_user = user_repo.get_user_by_email(user_info.get('email'))
+            
+            if existing_user:
+                # Utente esistente - procedi con login normale
+                logger.info(f"Utente esistente: {existing_user.email}")
+                
+                # Salva informazioni in sessione
+                session['user_id'] = existing_user.id
+                session['user_email'] = existing_user.email
+                session['user_name'] = existing_user.name
+                session['account_id'] = existing_user.account_id
+                
+                flash(f'Benvenuto, {existing_user.name}!', 'success')
+                return redirect(url_for('home'))
+            
+            # Utente nuovo - verifica whitelist prima
+            if not user_repo.is_email_whitelisted(user_info.get('email')):
+                raise UnauthorizedError(f"Email {user_info.get('email')} non in whitelist")
+            
             # Prima controlla se c'è un invito pendente
+            logger.info(f"Nuovo utente: {user_info.get('email')}")
             logger.info(f"Sessione corrente: {dict(session)}")
             pending_token = session.pop('pending_invite_token', None)
             
@@ -135,32 +156,36 @@ def auth_callback():
                 else:
                     logger.warning(f"Token di invito non valido: {pending_token}")
             
-            # Crea o recupera l'utente, passando account_id se presente
-            user = user_repo.create_user_from_oauth(user_info, account_id=target_account_id)
-            logger.info(f"Utente creato/recuperato: {user.email}, account_id: {user.account_id}")
-            
-            # Salva informazioni in sessione
-            session['user_id'] = user.id
-            session['user_email'] = user.email
-            session['user_name'] = user.name
-            session['account_id'] = user.account_id
-            
-            # Marca il token come usato e mostra messaggio appropriato
+            # Se c'è un invito valido, crea l'utente e aggiungilo all'account
             if token_obj and target_account_id:
+                user = user_repo.create_user_from_oauth(user_info, account_id=target_account_id)
+                logger.info(f"Utente creato da invito: {user.email}, account_id: {user.account_id}")
+                
+                # Salva informazioni in sessione
+                session['user_id'] = user.id
+                session['user_email'] = user.email
+                session['user_name'] = user.name
+                session['account_id'] = user.account_id
+                
+                # Marca il token come usato
                 token_repo.mark_as_used(pending_token)
-                if user_info.get('email', '').lower() == invite_email.lower():
-                    flash(f'Benvenuto, {user.name}! Hai accettato l\'invito con successo.', 'success')
-                else:
-                    flash(f'L\'invito era per {invite_email}, ma hai effettuato il login come {user.email}', 'warning')
-            elif pending_token and not token_obj:
-                flash('Il link di invito non è più valido', 'warning')
-            else:
-                flash(f'Benvenuto, {user.name}!', 'success')
+                flash(f'Benvenuto, {user.name}! Hai accettato l\'invito con successo.', 'success')
+                
+                # Crea la response
+                response = redirect(url_for('home'))
+                
+                # Rimuovi il cookie del pending_invite_token se esiste
+                if invite_token_from_cookie:
+                    response.set_cookie('pending_invite_token', '', expires=0)
+                
+                return response
             
-            # Crea la response
-            response = redirect(url_for('home'))
+            # Nessun invito - avvia onboarding
+            # Salva le informazioni dell'utente nella sessione (parziali - non ancora nel DB)
+            session['oauth_user_info'] = user_info
             
             # Rimuovi il cookie del pending_invite_token se esiste
+            response = redirect(url_for('onboarding'))
             if invite_token_from_cookie:
                 response.set_cookie('pending_invite_token', '', expires=0)
             
@@ -188,6 +213,74 @@ def auth_callback():
         logger.debug(traceback.format_exc())
         flash(f'Errore durante l\'autenticazione: {str(e)}', 'danger')
         return redirect(url_for('login'))
+
+@app.route("/onboarding", methods=['GET'])
+def onboarding():
+    """
+    Pagina di onboarding per nuovi utenti
+    """
+    # Verifica che l'utente abbia informazioni OAuth nella sessione
+    oauth_user_info = session.get('oauth_user_info')
+    if not oauth_user_info:
+        flash('Sessione non valida. Effettua nuovamente il login.', 'warning')
+        return redirect(url_for('login'))
+    
+    user_name = oauth_user_info.get('name', 'Utente')
+    return render_template("ps-onboarding.html", user_name=user_name)
+
+@app.route("/onboarding", methods=['POST'])
+def onboarding_submit():
+    """
+    Gestisce il submit del form di onboarding
+    """
+    # Verifica che l'utente abbia informazioni OAuth nella sessione
+    oauth_user_info = session.get('oauth_user_info')
+    if not oauth_user_info:
+        flash('Sessione non valida. Effettua nuovamente il login.', 'warning')
+        return redirect(url_for('login'))
+    
+    # Recupera i dati dal form
+    account_name = request.form.get('account_name', '').strip()
+    wallet_name = request.form.get('wallet_name', '').strip()
+    
+    # Validazione
+    if not account_name:
+        flash('Il nome dell\'account è obbligatorio', 'danger')
+        return redirect(url_for('onboarding'))
+    
+    if not wallet_name:
+        flash('Il nome del wallet è obbligatorio', 'danger')
+        return redirect(url_for('onboarding'))
+    
+    # Crea una sessione database
+    db = get_db_session()
+    user_repo = UserRepository(db)
+    
+    try:
+        # Completa l'onboarding
+        user = user_repo.complete_onboarding(oauth_user_info, account_name, wallet_name)
+        logger.info(f"Onboarding completato per utente: {user.email}, account_id: {user.account_id}")
+        
+        # Salva informazioni in sessione
+        session['user_id'] = user.id
+        session['user_email'] = user.email
+        session['user_name'] = user.name
+        session['account_id'] = user.account_id
+        
+        # Rimuovi oauth_user_info dalla sessione
+        session.pop('oauth_user_info', None)
+        
+        flash(f'Benvenuto, {user.name}! Il tuo account è stato configurato con successo.', 'success')
+        return redirect(url_for('home'))
+        
+    except Exception as e:
+        logger.error(f"Errore durante l'onboarding: {str(e)}")
+        logger.debug(traceback.format_exc())
+        flash(f'Errore durante la configurazione: {str(e)}', 'danger')
+        return redirect(url_for('onboarding'))
+        
+    finally:
+        db.close()
 
 @app.route("/home")
 def home():

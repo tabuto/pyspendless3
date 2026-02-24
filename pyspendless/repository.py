@@ -139,6 +139,79 @@ class UserRepository:
             )
             self.db.add(new_category)
     
+    def complete_onboarding(self, user_info: Dict[str, Any], account_name: str, wallet_name: str) -> User:
+        """
+        Completa il processo di onboarding per un nuovo utente.
+        Crea Account, User, Wallet e le categorie di default in una singola transazione.
+        
+        Args:
+            user_info: Dizionario con i dati dell'utente da Google OAuth
+                       Deve contenere: 'sub' (google_id), 'email', 'name'
+            account_name: Nome dell'account da creare
+            wallet_name: Nome del wallet da creare
+        
+        Returns:
+            User: L'oggetto User creato
+        
+        Raises:
+            ValueError: Se i parametri sono mancanti o non validi
+            SQLAlchemyError: Per errori di database
+        """
+        if not account_name or not wallet_name:
+            raise ValueError("account_name e wallet_name sono obbligatori")
+        
+        email = user_info.get('email')
+        google_id = user_info.get('sub')
+        name = user_info.get('name', 'Utente')
+        
+        if not email or not google_id:
+            raise ValueError("user_info deve contenere 'email' e 'sub'")
+        
+        try:
+            # 1. Crea Account
+            new_account = Account(
+                name=account_name,
+                created_at=datetime.utcnow()
+            )
+            self.db.add(new_account)
+            self.db.flush()  # Per ottenere l'ID dell'account
+            account_id = new_account.id
+            
+            # 2. Crea User
+            new_user = User(
+                public_uid=str(uuid.uuid4()),
+                google_id=google_id,
+                email=email,
+                name=name,
+                account_id=account_id,
+                role='owner',
+                created_at=datetime.utcnow()
+            )
+            self.db.add(new_user)
+            
+            # 3. Crea Wallet
+            wallet_code = str(uuid.uuid4())
+            new_wallet = Wallet(
+                code=wallet_code,
+                name=wallet_name,
+                currency='EUR',  # Default, potrebbe essere parametrizzato in futuro
+                account_id=account_id,
+                created_at=datetime.utcnow()
+            )
+            self.db.add(new_wallet)
+            
+            # 4. Setup Categorie da template
+            self._create_default_categories(account_id)
+            
+            # Commit della transazione
+            self.db.commit()
+            
+            return new_user
+            
+        except Exception as e:
+            self.db.rollback()
+            raise
+    
     def get_user_by_id(self, user_id: int) -> Optional[User]:
         """Recupera un utente tramite ID"""
         return self.db.query(User).filter_by(id=user_id).first()

@@ -1,0 +1,64 @@
+{% extends 'ps-auth.html' %}
+
+{% block title %}Onboarding - PySpendless{% endblock %}
+
+{% block auth_content %}
+<div class="d-flex justify-content-center align-items-center" style="min-height: 60vh;">
+    <div class="col-md-8 col-lg-6">
+        <div class="text-center mb-4">
+            <h2>Benvenuto{% if user_name %}, {{ user_name }}{% endif %}!</h2>
+            <p class="text-muted">Configura il tuo spazio in pochi secondi</p>
+        </div>
+
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="/onboarding">
+            <div class="mb-3">
+                <label for="account_name" class="form-label">Nome Account</label>
+                <input 
+                    type="text" 
+                    class="form-control" 
+                    id="account_name" 
+                    name="account_name" 
+                    placeholder="es. Famiglia Rossi, Spese Personali" 
+                    required
+                    maxlength="100">
+                <div class="form-text">
+                    Scegli un nome per il tuo account (puoi condividerlo con altri utenti)
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label for="wallet_name" class="form-label">Nome Wallet</label>
+                <input 
+                    type="text" 
+                    class="form-control" 
+                    id="wallet_name" 
+                    name="wallet_name" 
+                    placeholder="es. Portafoglio Principale, Banca X" 
+                    required
+                    maxlength="100">
+                <div class="form-text">
+                    Crea il tuo primo portafoglio per tracciare le spese
+                </div>
+            </div>
+
+            <div class="d-grid">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    <i class="bi bi-check-circle"></i> Inizia
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

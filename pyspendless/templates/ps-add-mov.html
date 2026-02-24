@@ -9,19 +9,21 @@
 
       <div class="card card-primary">
         <div class="card-header">
-          <h3 class="card-title">Nuovo Movimento</h3>
+          <h3 class="card-title">{% if movement %}Modifica Movimento{% else %}Nuovo Movimento{% endif %}</h3>
         </div>
         <form id="movement-form">
+          <input type="hidden" id="movement_id" name="movement_id" value="{% if movement %}{{ movement.id }}{% endif %}">
           <div class="card-body">
             <div class="mb-3">
               <label for="move_date" class="form-label">Data</label>
-              <input type="date" class="form-control" id="move_date" name="move_date" required>
+              <input type="date" class="form-control" id="move_date" name="move_date" 
+                     value="{% if movement %}{{ movement.move_date.strftime('%Y-%m-%d') }}{% endif %}" required>
             </div>
             <div class="mb-3">
               <label for="movement_type" class="form-label">Tipo Movimento</label>
               <select class="form-select" id="movement_type" name="movement_type" required>
-                <option value="expense" selected>Uscita</option>
-                <option value="income">Entrata</option>
+                <option value="expense" {% if movement and movement.expense %}selected{% endif %}>Uscita</option>
+                <option value="income" {% if movement and movement.income %}selected{% endif %}>Entrata</option>
               </select>
             </div>
             <div class="mb-3">
@@ -29,7 +31,10 @@
               <select class="form-select" id="category" name="category" required>
                 <option value="">Seleziona una categoria</option>
                 {% for cat in categories %}
-                  <option value="{{ cat.id }}" data-type="{{ cat.type }}">{{ cat.name }}</option>
+                  <option value="{{ cat.id }}" data-type="{{ cat.type }}" 
+                          {% if movement and movement.category_id == cat.id %}selected{% endif %}>
+                    {{ cat.name }}
+                  </option>
                 {% endfor %}
               </select>
             </div>
@@ -37,17 +42,21 @@
               <label for="wallet" class="form-label">Wallet</label>
               <select class="form-select" id="wallet" name="wallet" required>
                 {% for wal in wallets %}
-                  <option value="{{ wal.id }}">{{ wal.name }}</option>
+                  <option value="{{ wal.id }}" {% if movement and movement.wallet_id == wal.id %}selected{% endif %}>
+                    {{ wal.name }}
+                  </option>
                 {% endfor %}
               </select>
             </div>
             <div class="mb-3">
               <label for="amount" class="form-label">Importo (€)</label>
-              <input type="number" step="0.01" class="form-control" id="amount" name="amount" required min="0.01">
+              <input type="number" step="0.01" class="form-control" id="amount" name="amount" 
+                     value="{% if movement %}{{ movement.income or movement.expense }}{% endif %}" 
+                     required min="0.01">
             </div>
             <div class="mb-3">
               <label for="note" class="form-label">Nota</label>
-              <textarea class="form-control" id="note" name="note" rows="2"></textarea>
+              <textarea class="form-control" id="note" name="note" rows="2">{% if movement %}{{ movement.note or '' }}{% endif %}</textarea>
             </div>
           </div>
           <div class="card-footer text-end">
@@ -61,9 +70,12 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  // Imposta la data odierna come default
-  const today = new Date().toISOString().split('T')[0];
-  document.getElementById('move_date').value = today;
+  // Imposta la data odierna come default solo se non stiamo modificando
+  const movementId = document.getElementById('movement_id').value;
+  if (!movementId) {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('move_date').value = today;
+  }
 
   // Elementi del form
   const form = document.getElementById('movement-form');
@@ -78,6 +90,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // Funzione per filtrare le categorie in base al tipo di movimento
   function filterCategories() {
     const selectedType = movementTypeSelect.value;
+    const currentCategoryId = categorySelect.value;
     
     // Pulisci le opzioni correnti
     categorySelect.innerHTML = '<option value="">Seleziona una categoria</option>';
@@ -91,7 +104,12 @@ document.addEventListener('DOMContentLoaded', function() {
       
       const categoryType = option.getAttribute('data-type');
       if (categoryType === selectedType) {
-        categorySelect.appendChild(option.cloneNode(true));
+        const newOption = option.cloneNode(true);
+        categorySelect.appendChild(newOption);
+        // Mantieni la selezione se possibile
+        if (option.value === currentCategoryId) {
+          categorySelect.value = currentCategoryId;
+        }
       }
     });
   }
@@ -113,6 +131,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Raccogli i dati dal form
     const movementType = document.getElementById('movement_type').value;
     const amount = document.getElementById('amount').value;
+    const movId = document.getElementById('movement_id').value;
     
     // Prepara i dati: salva l'importo nella colonna corretta
     const formData = {
@@ -123,6 +142,11 @@ document.addEventListener('DOMContentLoaded', function() {
       expense: movementType === 'expense' ? parseFloat(amount) : null,
       note: document.getElementById('note').value
     };
+
+    // Se stiamo modificando, aggiungi l'ID
+    if (movId) {
+      formData.movement_id = movId;
+    }
 
     try {
       // Invia richiesta POST all'API
@@ -137,14 +161,19 @@ document.addEventListener('DOMContentLoaded', function() {
       const result = await response.json();
 
       if (response.ok) {
-        // Successo - mostra messaggio e resetta il form
-        showAlert('Salvataggio avvenuto con successo!', 'success');
-        form.reset();
-        // Reimposta la data odierna e tipo movimento di default
-        document.getElementById('move_date').value = today;
-        document.getElementById('movement_type').value = 'expense';
-        // Rifiltra le categorie dopo il reset
-        filterCategories();
+        // Successo - mostra messaggio
+        showAlert(result.message || 'Salvataggio avvenuto con successo!', 'success');
+        
+        if (!movId) {
+          // Solo in creazione: resetta il form
+          form.reset();
+          // Reimposta la data odierna e tipo movimento di default
+          const today = new Date().toISOString().split('T')[0];
+          document.getElementById('move_date').value = today;
+          document.getElementById('movement_type').value = 'expense';
+          // Rifiltra le categorie dopo il reset
+          filterCategories();
+        }
       } else {
         // Errore - mostra messaggio di errore
         showAlert(result.error || 'Errore durante il salvataggio', 'danger');

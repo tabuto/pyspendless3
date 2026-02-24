@@ -119,6 +119,7 @@
                 <th>Utente</th>
                 <th class="text-end">Entrata</th>
                 <th class="text-end">Uscita</th>
+                <th class="text-center">Azioni</th>
               </tr>
             </thead>
             <tbody>
@@ -134,6 +135,14 @@
                 </td>
                 <td class="text-end text-danger">
                   {% if mov.expense %}€ {{ "%.2f"|format(mov.expense) }}{% else %}-{% endif %}
+                </td>
+                <td class="text-center">
+                  <a href="/create?movement_id={{ mov.id }}" class="btn btn-sm btn-primary" title="Modifica">
+                    <i class="bi bi-pencil"></i>
+                  </a>
+                  <button class="btn btn-sm btn-danger" onclick="deleteMovement('{{ mov.id }}')" title="Elimina">
+                    <i class="bi bi-trash"></i>
+                  </button>
                 </td>
               </tr>
               {% endfor %}
@@ -213,6 +222,34 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }
   });
+
+  // Funzione per eliminare un movimento
+  window.deleteMovement = async function(movementId) {
+    if (!confirm('Sei sicuro di voler eliminare questo movimento?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/movements/${movementId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        alert(result.message || 'Movimento eliminato con successo');
+        // Ricarica la pagina
+        window.location.reload();
+      } else {
+        alert(result.error || 'Errore durante l\'eliminazione');
+      }
+    } catch (error) {
+      alert('Errore di comunicazione con il server: ' + error.message);
+    }
+  };
 });
 </script>
 {% endblock %}

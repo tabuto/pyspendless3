@@ -67,9 +67,78 @@ Assicurarsi che le librerie siano incluse nel template (o in `base.html`):
 - **Layout**: Usare AdminLTE/Bootstrap come definito nel progetto.
 - **Sicurezza**: Assicurarsi che l'utente veda solo i movimenti del proprio `account_id`.
 
+### 5. Modifica Movimento (ps-add-mov.html)
+
+La maschera di dettaglio movimento `ps-add-mov.html` deve supportare sia l'inserimento che la modifica di un movimento.
+
+#### Backend (`app.py` & `repository.py`)
+- Modificare la rotta `GET /ps-add-mov` per accettare un parametro opzionale `movement_id` nella query string.
+- Se `movement_id` è presente:
+  - Recuperare il movimento dal database tramite `repository.get_movement_by_id(movement_id, account_id)`.
+  - Verificare che il movimento appartenga all'account dell'utente loggato.
+  - Passare i dati del movimento al template per pre-compilare il form.
+- Il form di salvataggio deve distinguere tra INSERT e UPDATE in base alla presenza dell'ID.
+
+#### Frontend
+- Modificare `ps-add-mov.html` per:
+  - Pre-compilare i campi del form quando è presente un movimento da modificare.
+  - Includere un campo hidden con l'ID del movimento (se in modifica).
+  - Cambiare il titolo della pagina da "Aggiungi Movimento" a "Modifica Movimento" quando applicabile.
+  - Il pulsante di submit deve riflettere l'azione (es. "Salva Movimento" sia per creazione che modifica).
+
+### 6. Ricerca Movimenti (ps-search-mov.html)
+
+Implementare una nuova pagina dedicata alla ricerca e visualizzazione di tutti i movimenti dell'account.
+
+#### Backend (`app.py` & `repository.py`)
+
+##### `repository.py`
+- Implementare la funzione `search_movements(account_id, search_text=None, page=1, per_page=20)`:
+  - Supporto per ricerca full-text su campi: `notes` (descrizione), nome categoria, nome wallet.
+  - Paginazione server-side con parametri `page` e `per_page`.
+  - Ritornare: lista movimenti, totale risultati, numero pagine.
+  - Ordinamento default: data movimento (discendente).
+
+##### `app.py`
+- Creare la rotta `GET /ps-search-mov`:
+  - Recuperare parametri: `search` (testo ricerca), `page` (default: 1).
+  - Chiamare `repository.search_movements()`.
+  - Renderizzare il template `ps-search-mov.html` passando: movimenti, info paginazione, testo ricerca corrente.
+
+#### Frontend (`ps-search-mov.html`)
+
+Creare il file `templates/ps-search-mov.html` estendendo `ps-base.html`.
+
+##### Struttura Pagina
+1. **Barra di Ricerca**:
+   - Form `GET` con campo di input testo per la ricerca full-text.
+   - Pulsante "Cerca".
+   - Pulsante "Reset" per pulire i filtri e mostrare tutti i movimenti.
+
+2. **Tabella Movimenti**:
+   - Tabella HTML con Bootstrap styling.
+   - Colonne: Data, Categoria, Descrizione (Notes), Wallet, Entrata, Uscita, Azioni.
+   - Colonna "Azioni" con pulsanti:
+     - **Modifica**: Link a `/ps-add-mov?movement_id=XXX`.
+     - **Elimina**: Pulsante con conferma JavaScript.
+   - Paginazione server-side con link alla stessa pagina con parametro `page`.
+
+3. **Gestione Stato Vuoto**:
+   - Se nessun risultato, mostrare messaggio "Nessun movimento trovato".
+
+##### Integrazione
+- La tabella deve essere responsive (Bootstrap).
+- Evidenziare il testo cercato nei risultati (opzionale, tramite highlight JavaScript).
+
 ## Definition of Done
 - [ ] La pagina `ps-show-mov.html` è accessibile agli utenti loggati.
 - [ ] I filtri funzionano correttamente ricaricando i dati.
 - [ ] Il grafico a barre mostra le spese per categoria in base ai filtri attivi.
 - [ ] La tabella è paginata e ordinabile tramite DataTables.
 - [ ] I totali (Entrate/Uscite) corrispondono alla somma dei dati visualizzati.
+- [ ] La maschera `ps-add-mov.html` permette di modificare un movimento esistente quando viene passato `movement_id`.
+- [ ] I dati del movimento vengono pre-caricati correttamente nel form di modifica.
+- [ ] La pagina `ps-search-mov.html` mostra tutti i movimenti con paginazione server-side.
+- [ ] La ricerca full-text funziona su descrizione, categoria e wallet.
+- [ ] Il pulsante "Modifica" nella tabella apre il movimento in modalità modifica.
+- [ ] Il pulsante "Elimina" rimuove il movimento dopo conferma.

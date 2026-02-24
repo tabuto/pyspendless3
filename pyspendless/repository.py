@@ -384,6 +384,10 @@ class MovementRepository:
         """Recupera un movimento tramite ID"""
         return self.db.query(Movement).filter_by(id=movement_id).first()
     
+    def get_movement_by_id(self, movement_id: str, account_id: int) -> Optional[Movement]:
+        """Recupera un movimento tramite ID verificando l'appartenenza all'account"""
+        return self.db.query(Movement).filter_by(id=movement_id, account_id=account_id).first()
+    
     def create_movement(self, data: Dict[str, Any]) -> Movement:
         """Crea un nuovo movimento"""
         movement = Movement(**data)
@@ -413,6 +417,67 @@ class MovementRepository:
         self.db.delete(movement)
         self.db.commit()
         return True
+    
+    def search_movements(
+        self,
+        account_id: int,
+        search_text: Optional[str] = None,
+        page: int = 1,
+        per_page: int = 20
+    ) -> Dict[str, Any]:
+        """
+        Cerca movimenti con ricerca full-text e paginazione
+        
+        Args:
+            account_id: ID dell'account
+            search_text: Testo da cercare (opzionale)
+            page: Numero pagina (default: 1)
+            per_page: Risultati per pagina (default: 20)
+        
+        Returns:
+            Dict con: movements (lista), total (int), pages (int), current_page (int)
+        """
+        from sqlalchemy import or_, func
+        from math import ceil
+        
+        # Query base con join per category e wallet
+        query = self.db.query(Movement).join(
+            Category, Movement.category_id == Category.id
+        ).join(
+            Wallet, Movement.wallet_id == Wallet.id
+        ).filter(
+            Movement.account_id == account_id
+        )
+        
+        # Ricerca full-text su notes, nome categoria, nome wallet
+        if search_text and search_text.strip():
+            search_pattern = f"%{search_text.strip()}%"
+            query = query.filter(
+                or_(
+                    Movement.note.ilike(search_pattern),
+                    Category.name.ilike(search_pattern),
+                    Wallet.name.ilike(search_pattern)
+                )
+            )
+        
+        # Conta totale risultati
+        total = query.count()
+        
+        # Calcola numero pagine
+        pages = ceil(total / per_page) if total > 0 else 1
+        
+        # Applica paginazione e ordinamento
+        movements = query.order_by(
+            Movement.move_date.desc()
+        ).limit(per_page).offset((page - 1) * per_page).all()
+        
+        return {
+            'movements': movements,
+            'total': total,
+            'pages': pages,
+            'current_page': page,
+            'per_page': per_page
+        }
     
     def get_movements_stats(
         self,

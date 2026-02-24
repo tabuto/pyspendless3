@@ -206,7 +206,8 @@ def home():
 @app.route("/create")
 def create():
     """
-    Form per creare un nuovo movimento
+    Form per creare o modificare un movimento
+    Se movement_id è presente nella query string, carica il movimento per la modifica
     """
     # Verifica autenticazione
     if not session.get('user_id'):
@@ -214,20 +215,31 @@ def create():
         return redirect(url_for('login'))
     
     account_id = session.get('account_id')
+    movement_id = request.args.get('movement_id')
     
     # Recupera dati dal database
     db = get_db_session()
     try:
         category_repo = CategoryRepository(db)
         wallet_repo = WalletRepository(db)
+        movement_repo = MovementRepository(db)
         
         categories = category_repo.get_categories_for_account(account_id)
         wallets = wallet_repo.get_wallets_for_account(account_id)
         
+        # Se movement_id è presente, recupera il movimento per la modifica
+        movement = None
+        if movement_id:
+            movement = movement_repo.get_movement_by_id(movement_id, account_id)
+            if not movement:
+                flash('Movimento non trovato', 'error')
+                return redirect(url_for('movements'))
+        
         return render_template(
             "ps-add-mov.html", 
             categories=categories, 
-            wallets=wallets, 
+            wallets=wallets,
+            movement=movement,
             users=[]  # TODO: implementare quando ci saranno i gruppi
         )
     finally:
@@ -369,8 +381,8 @@ def api_get_categories():
 @app.route("/api/movements", methods=['POST'])
 def api_create_movement():
     """
-    API per creare un nuovo movimento
-    Riceve JSON e salva il movimento nel database
+    API per creare o aggiornare un movimento
+    Riceve JSON e salva/aggiorna il movimento nel database
     """
     if not session.get('user_id'):
         return jsonify({'error': 'Non autenticato'}), 401
@@ -385,6 +397,7 @@ def api_create_movement():
         if not data:
             return jsonify({'error': 'Dati non forniti'}), 400
         
+        movement_id = data.get('movement_id')  # Se presente, è un UPDATE
         move_date = data.get('move_date')
         category_id = data.get('category_id')
         wallet_id = data.get('wallet_id')
@@ -429,7 +442,6 @@ def api_create_movement():
             
             # Prepara i dati del movimento
             movement_data = {
-                'id': str(uuid.uuid4()),
                 'move_date': date_obj,
                 'move_year': move_year,
                 'move_month': move_month,
@@ -437,22 +449,37 @@ def api_create_movement():
                 'wallet': wallet.code,      # Legacy field
                 'income': float(income) if income else None,
                 'expense': float(expense) if expense else None,
-                'note': note,
+                'note': note,  # Colonna nel DB è 'note'
                 'user': user.email,         # Legacy field
-                'account_id': account_id,
-                'user_id': user_id,
                 'category_id': category_id,
                 'wallet_id': wallet_id
             }
             
-            # Crea il movimento
-            movement = movement_repo.create_movement(movement_data)
+            # UPDATE o CREATE
+            if movement_id:
+                # Verifica che il movimento appartenga all'account
+                existing = movement_repo.get_movement_by_id(movement_id, account_id)
+                if not existing:
+                    return jsonify({'error': 'Movimento non trovato'}), 404
+                
+                # Aggiorna il movimento
+                movement = movement_repo.update_movement(movement_id, movement_data)
+                message = 'Movimento aggiornato con successo'
+                status_code = 200
+            else:
+                # Crea nuovo movimento
+                movement_data['id'] = str(uuid.uuid4())
+                movement_data['account_id'] = account_id
+                movement_data['user_id'] = user_id
+                movement = movement_repo.create_movement(movement_data)
+                message = 'Movimento salvato con successo'
+                status_code = 201
             
             return jsonify({
                 'success': True,
-                'message': 'Movimento salvato con successo',
+                'message': message,
                 'movement_id': movement.id
-            }), 201
+            }), status_code
             
         finally:
             db.close()
@@ -464,6 +491,86 @@ def api_create_movement():
         logger.error(f"Errore durante la creazione del movimento: {str(e)}")
         logger.debug(traceback.format_exc())
         return jsonify({'error': f'Errore interno: {str(e)}'}), 500
+
+@app.route("/api/movements/<movement_id>", methods=['DELETE'])
+def api_delete_movement(movement_id):
+    """
+    API per eliminare un movimento
+    """
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    account_id = session.get('account_id')
+    
+    try:
+        db = get_db_session()
+        try:
+            movement_repo = MovementRepository(db)
+            
+            # Verifica che il movimento appartenga all'account
+            movement = movement_repo.get_movement_by_id(movement_id, account_id)
+            if not movement:
+                return jsonify({'error': 'Movimento non trovato'}), 404
+            
+            # Elimina il movimento
+            success = movement_repo.delete_movement(movement_id)
+            
+            if success:
+                return jsonify({
+                    'success': True,
+                    'message': 'Movimento eliminato con successo'
+                }), 200
+            else:
+                return jsonify({'error': 'Errore durante l\'eliminazione'}), 500
+            
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"Errore durante l'eliminazione del movimento: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return jsonify({'error': f'Errore interno: {str(e)}'}), 500
+
+@app.route("/ps-search-mov")
+def search_movements():
+    """
+    Pagina ricerca movimenti con paginazione server-side
+    """
+    # Verifica autenticazione
+    if not session.get('user_id'):
+        flash('Devi effettuare il login', 'warning')
+        return redirect(url_for('login'))
+    
+    account_id = session.get('account_id')
+    
+    # Recupera parametri dalla query string
+    search_text = request.args.get('search', '').strip()
+    page = request.args.get('page', type=int, default=1)
+    per_page = 20
+    
+    db = get_db_session()
+    try:
+        movement_repo = MovementRepository(db)
+        
+        # Ricerca movimenti
+        result = movement_repo.search_movements(
+            account_id=account_id,
+            search_text=search_text if search_text else None,
+            page=page,
+            per_page=per_page
+        )
+        
+        return render_template(
+            "ps-search-mov.html",
+            movements=result['movements'],
+            total=result['total'],
+            pages=result['pages'],
+            current_page=result['current_page'],
+            per_page=result['per_page'],
+            search_text=search_text
+        )
+    finally:
+        db.close()
 
 
 # ========== SETTINGS ROUTES ==========

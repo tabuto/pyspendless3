@@ -1,0 +1,192 @@
+{% extends 'ps-nav.html' %}
+
+{% block nav_content %}
+<div class="container mt-4">
+  <div class="row">
+    <div class="col-12">
+      <!-- Alert container per messaggi -->
+      <div id="alert-container"></div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">Ricerca Movimenti</h3>
+        </div>
+        <div class="card-body">
+          <!-- Form di ricerca -->
+          <form method="GET" action="/ps-search-mov" class="mb-4">
+            <div class="row g-3">
+              <div class="col-md-8">
+                <input type="text" class="form-control" name="search" 
+                       placeholder="Cerca per descrizione, categoria o wallet..." 
+                       value="{{ search_text }}">
+              </div>
+              <div class="col-md-4">
+                <button type="submit" class="btn btn-primary me-2">
+                  <i class="fas fa-search"></i> Cerca
+                </button>
+                <a href="/ps-search-mov" class="btn btn-secondary">
+                  <i class="fas fa-undo"></i> Reset
+                </a>
+              </div>
+            </div>
+          </form>
+
+          <!-- Risultati -->
+          {% if total > 0 %}
+          <div class="mb-3">
+            <p class="text-muted">Trovati {{ total }} movimenti</p>
+          </div>
+
+          <!-- Tabella movimenti -->
+          <div class="table-responsive">
+            <table class="table table-striped table-hover">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Categoria</th>
+                  <th>Descrizione</th>
+                  <th>Wallet</th>
+                  <th class="text-end">Entrata</th>
+                  <th class="text-end">Uscita</th>
+                  <th class="text-center">Azioni</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for mov in movements %}
+                <tr>
+                  <td>{{ mov.move_date.strftime('%d/%m/%Y') }}</td>
+                  <td>{{ mov.category_obj.name if mov.category_obj else mov.category }}</td>
+                  <td>{{ mov.note or '-' }}</td>
+                  <td>{{ mov.wallet_obj.name if mov.wallet_obj else mov.wallet }}</td>
+                  <td class="text-end">
+                    {% if mov.income %}
+                      <span class="text-success">€ {{ "%.2f"|format(mov.income) }}</span>
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
+                  <td class="text-end">
+                    {% if mov.expense %}
+                      <span class="text-danger">€ {{ "%.2f"|format(mov.expense) }}</span>
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
+                  <td class="text-center">
+                    <a href="/create?movement_id={{ mov.id }}" class="btn btn-sm btn-primary" title="Modifica">
+                      <i class="fas fa-edit"></i>
+                    </a>
+                    <button class="btn btn-sm btn-danger" onclick="deleteMovement('{{ mov.id }}')" title="Elimina">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Paginazione -->
+          {% if pages > 1 %}
+          <nav aria-label="Paginazione movimenti">
+            <ul class="pagination justify-content-center">
+              <!-- Prev -->
+              <li class="page-item {% if current_page <= 1 %}disabled{% endif %}">
+                <a class="page-link" href="?search={{ search_text }}&page={{ current_page - 1 }}" 
+                   {% if current_page <= 1 %}tabindex="-1" aria-disabled="true"{% endif %}>
+                  Precedente
+                </a>
+              </li>
+
+              <!-- Pagine -->
+              {% for p in range(1, pages + 1) %}
+                {% if p == current_page %}
+                  <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                {% elif p == 1 or p == pages or (p >= current_page - 2 and p <= current_page + 2) %}
+                  <li class="page-item">
+                    <a class="page-link" href="?search={{ search_text }}&page={{ p }}">{{ p }}</a>
+                  </li>
+                {% elif p == current_page - 3 or p == current_page + 3 %}
+                  <li class="page-item disabled"><span class="page-link">...</span></li>
+                {% endif %}
+              {% endfor %}
+
+              <!-- Next -->
+              <li class="page-item {% if current_page >= pages %}disabled{% endif %}">
+                <a class="page-link" href="?search={{ search_text }}&page={{ current_page + 1 }}"
+                   {% if current_page >= pages %}tabindex="-1" aria-disabled="true"{% endif %}>
+                  Successivo
+                </a>
+              </li>
+            </ul>
+          </nav>
+          {% endif %}
+
+          {% else %}
+          <!-- Nessun risultato -->
+          <div class="alert alert-info" role="alert">
+            <i class="fas fa-info-circle"></i>
+            {% if search_text %}
+              Nessun movimento trovato per la ricerca "{{ search_text }}".
+            {% else %}
+              Nessun movimento presente.
+            {% endif %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+async function deleteMovement(movementId) {
+  if (!confirm('Sei sicuro di voler eliminare questo movimento?')) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/movements/${movementId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const result = await response.json();
+
+    if (response.ok) {
+      showAlert(result.message || 'Movimento eliminato con successo', 'success');
+      // Ricarica la pagina dopo 1 secondo
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } else {
+      showAlert(result.error || 'Errore durante l\'eliminazione', 'danger');
+    }
+  } catch (error) {
+    showAlert('Errore di comunicazione con il server: ' + error.message, 'danger');
+  }
+}
+
+function showAlert(message, type) {
+  const alertContainer = document.getElementById('alert-container');
+  const alert = document.createElement('div');
+  alert.className = `alert alert-${type} alert-dismissible fade show`;
+  alert.role = 'alert';
+  alert.innerHTML = `
+    ${message}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+  `;
+  
+  alertContainer.innerHTML = '';
+  alertContainer.appendChild(alert);
+
+  // Auto-nascondi dopo 5 secondi
+  setTimeout(() => {
+    alert.classList.remove('show');
+    setTimeout(() => alert.remove(), 150);
+  }, 5000);
+}
+</script>
+{% endblock %}

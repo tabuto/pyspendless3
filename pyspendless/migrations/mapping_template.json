@@ -1,0 +1,17 @@
+{
+  "account_id": null,
+  "user_mapping": {
+    "Beatrice Santucci": {
+      "user_id": null,
+      "email": "beatrice@example.com"
+    },
+    "Francesco di Dio": {
+      "user_id": null,
+      "email": "francesco@example.com"
+    },
+    "Personale": {
+      "user_id": null,
+      "email": "beatrice@example.com"
+    }
+  }
+}

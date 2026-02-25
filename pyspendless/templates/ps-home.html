@@ -12,8 +12,7 @@
     <div class="col-md-4">
       <div class="card">
         <div class="card-body">
-          <h5 class="card-title"><i class="bi bi-plus-circle text-primary"></i> Nuovo Movimento</h5>
-          <p class="card-text">Inserisci una nuova spesa o entrata</p>
+          <h5 class="card-title mb-3"><i class="bi bi-plus-circle text-primary me-2"></i>Nuovo Movimento</h5>
           <a href="{{ url_for('create') }}" class="btn btn-primary">Crea Movimento</a>
         </div>
       </div>
@@ -21,8 +20,7 @@
     <div class="col-md-4">
       <div class="card">
         <div class="card-body">
-          <h5 class="card-title"><i class="bi bi-list-ul text-info"></i> Visualizza Movimenti</h5>
-          <p class="card-text">Consulta e filtra i tuoi movimenti</p>
+          <h5 class="card-title mb-3"><i class="bi bi-list-ul text-info me-2"></i>Visualizza Movimenti</h5>
           <a href="{{ url_for('movements') }}" class="btn btn-info">Vedi Movimenti</a>
         </div>
       </div>
@@ -30,8 +28,7 @@
     <div class="col-md-4">
       <div class="card">
         <div class="card-body">
-          <h5 class="card-title"><i class="bi bi-gear text-secondary"></i> Impostazioni</h5>
-          <p class="card-text">Gestisci categorie, wallet e account</p>
+          <h5 class="card-title mb-3"><i class="bi bi-gear text-secondary me-2"></i>Impostazioni</h5>
           <div class="btn-group-vertical w-100" role="group">
             <a href="{{ url_for('settings_categories') }}" class="btn btn-outline-secondary btn-sm">
               <i class="bi bi-tag"></i> Categorie

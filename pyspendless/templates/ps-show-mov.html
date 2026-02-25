@@ -135,7 +135,7 @@
               <tr>
                 <td>{{ mov.move_date.strftime('%d/%m/%Y') }}</td>
                 <td>{{ mov.category }}</td>
-                <td>{{ mov.wallet }}</td>
+                <td>{{ mov.wallet_obj.name if mov.wallet_obj else mov.wallet }}</td>
                 <td>{{ mov.note if mov.note else '-' }}</td>
                 <td>{{ mov.user }}</td>
                 <td class="text-end text-success">

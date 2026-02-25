@@ -21,7 +21,7 @@ import logging
 import sqlite3
 import sys
 import shutil
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Any
 from decimal import Decimal
@@ -65,6 +65,24 @@ def normalize_category_name(name: str) -> str:
     normalized = normalize_string(name)
     # Mantieni la capitalizzazione originale ma rimuovi spazi extra
     return ' '.join(normalized.split())
+
+
+def parse_legacy_date(date_str: str) -> date:
+    """
+    Converte una stringa data dal DB legacy in un oggetto date Python.
+    
+    Il DB legacy salva le date come stringhe nel formato: "YYYY-MM-DD HH:MM:SS"
+    SQLAlchemy richiede oggetti date Python.
+    """
+    if not date_str:
+        raise ValueError("Date string is empty")
+    
+    # Parse datetime string e converti a date
+    try:
+        dt = datetime.strptime(date_str.split()[0], "%Y-%m-%d")
+        return dt.date()
+    except (ValueError, IndexError) as e:
+        raise ValueError(f"Invalid date format: {date_str}") from e
 
 
 # ===== MIGRATION STATS =====
@@ -280,7 +298,7 @@ class LegacyMigrator:
         duplicates = []
         
         for row in legacy_categories:
-            original_name = row['category']
+            original_name = row['category'].strip() if row['category'] else ''
             normalized_name = normalize_category_name(original_name)
             income_count = row['income_count']
             expense_count = row['expense_count']
@@ -306,8 +324,36 @@ class LegacyMigrator:
         self.stats.categories_duplicates = duplicates
         self.logger.info(f"🔄 Consolidati {len(duplicates)} duplicati")
         
+        # 2.5. Carica categorie già esistenti nel DB
+        if not self.dry_run:
+            existing_categories = self.new_session.query(Category).filter_by(
+                account_id=account_id,
+                template_id=None
+            ).all()
+            
+            for cat in existing_categories:
+                # Mappa le categorie esistenti
+                if cat.name not in self.category_name_to_id:
+                    self.category_name_to_id[cat.name] = cat.id
+                    self.logger.debug(f"⏭️  Categoria esistente caricata: {cat.name} (ID: {cat.id})")
+        
         # 3. Crea categorie nel nuovo DB
         for normalized_name, (original_name, cat_type, inc_cnt, exp_cnt) in category_data.items():
+            # Verifica se la categoria esiste già
+            if not self.dry_run:
+                existing_cat = self.new_session.query(Category).filter_by(
+                    name=normalized_name,
+                    account_id=account_id
+                ).first()
+                
+                if existing_cat:
+                    category_id = existing_cat.id
+                    self.logger.debug(f"⏭️  Categoria '{normalized_name}' già esistente (ID: {category_id})")
+                    # Mappa comunque per i movimenti
+                    self.category_name_to_id[normalized_name] = category_id
+                    self.category_name_to_id[original_name] = category_id
+                    continue
+            
             # Usa il nome normalizzato per la nuova categoria
             new_category = Category(
                 name=normalized_name,
@@ -355,14 +401,39 @@ class LegacyMigrator:
             ORDER BY wallet
         """)
         
-        legacy_wallets = [row['wallet'] for row in cursor.fetchall()]
+        legacy_wallets = [row['wallet'].strip() if row['wallet'] else '' for row in cursor.fetchall()]
         self.logger.info(f"📊 Trovati {len(legacy_wallets)} wallet unici")
+        
+        # 1.5. Carica wallet già esistenti nel DB
+        if not self.dry_run:
+            existing_wallets = self.new_session.query(Wallet).filter_by(
+                account_id=account_id
+            ).all()
+            
+            for wallet in existing_wallets:
+                # Mappa i wallet esistenti per nome
+                if wallet.name not in self.wallet_name_to_id:
+                    self.wallet_name_to_id[wallet.name] = wallet.id
+                    self.logger.debug(f"⏭️  Wallet esistente caricato: {wallet.name} (ID: {wallet.id})")
         
         # 2. Crea wallet nel nuovo DB
         for wallet_name in legacy_wallets:
-            # Genera code (uppercase, no spaces)
+            # Verifica se il wallet esiste già
             wallet_code = wallet_name.replace(' ', '').upper()
             
+            if not self.dry_run:
+                existing_wallet = self.new_session.query(Wallet).filter_by(
+                    code=wallet_code,
+                    account_id=account_id
+                ).first()
+                
+                if existing_wallet:
+                    wallet_id = existing_wallet.id
+                    self.logger.debug(f"⏭️  Wallet '{wallet_name}' già esistente (ID: {wallet_id})")
+                    self.wallet_name_to_id[wallet_name] = wallet_id
+                    continue
+            
+            # Genera code (uppercase, no spaces)
             new_wallet = Wallet(
                 code=wallet_code,
                 name=wallet_name,
@@ -455,10 +526,18 @@ class LegacyMigrator:
         """Migra un singolo movimento"""
         movement_id = row['id']
         
-        # Mapping dati
-        legacy_user = row['user']
-        legacy_category = row['category']
-        legacy_wallet = row['wallet']
+        # Verifica se il movimento esiste già (per evitare duplicati)
+        if not self.dry_run:
+            existing = self.new_session.query(Movement).filter_by(id=movement_id).first()
+            if existing:
+                self.logger.debug(f"⏭️  Movimento {movement_id} già esistente, skip")
+                self.stats.movements_skipped += 1
+                return
+        
+        # Mapping dati (con trim)
+        legacy_user = row['user'].strip() if row['user'] else ''
+        legacy_category = row['category'].strip() if row['category'] else ''
+        legacy_wallet = row['wallet'].strip() if row['wallet'] else ''
         
         # Ottieni FK
         user_id = self.user_name_to_id.get(legacy_user)
@@ -476,10 +555,13 @@ class LegacyMigrator:
         # Normalizza categoria per campo legacy
         normalized_category = normalize_category_name(legacy_category)
         
+        # Parse date from string to date object
+        move_date_obj = parse_legacy_date(row['move_date'])
+        
         # Crea movimento
         movement = Movement(
             id=movement_id,
-            move_date=row['move_date'],
+            move_date=move_date_obj,
             move_year=row['move_year'],
             move_month=row['move_month'],
             
@@ -557,16 +639,62 @@ class LegacyMigrator:
         self.stats.validation_results['total_expense_legacy'] = legacy_expense
         self.stats.validation_results['total_expense_new'] = new_expense
         
-        # 4. Check integrità
+        # 4. Verifica duplicati income
+        self.logger.info("🔍 Verifica duplicati movimenti income...")
+        duplicate_income_query = text("""
+            SELECT move_date, move_year, move_month, category, wallet, income, note, COUNT(*) as count
+            FROM Movement 
+            WHERE income > 0 AND account_id = :account_id
+            GROUP BY move_date, move_year, move_month, category, wallet, income, note
+            HAVING COUNT(*) > 1
+            ORDER BY move_date DESC
+        """)
+        duplicate_income = self.new_session.execute(duplicate_income_query, {"account_id": account_id}).fetchall()
+        
+        if duplicate_income:
+            self.logger.warning(f"⚠️  Trovati {len(duplicate_income)} gruppi di movimenti income duplicati:")
+            for dup in duplicate_income[:10]:  # Mostra max 10
+                self.logger.warning(f"  - Date: {dup[0]}, Category: {dup[3]}, Wallet: {dup[4]}, Income: {dup[5]}, Count: {dup[7]}")
+            self.stats.validation_results['duplicate_income_count'] = len(duplicate_income)
+        else:
+            self.logger.info("✅ Nessun duplicato income trovato")
+            self.stats.validation_results['duplicate_income_count'] = 0
+        
+        # 5. Verifica duplicati expense
+        self.logger.info("🔍 Verifica duplicati movimenti expense...")
+        duplicate_expense_query = text("""
+            SELECT move_date, move_year, move_month, category, wallet, expense, note, COUNT(*) as count
+            FROM Movement 
+            WHERE expense > 0 AND account_id = :account_id
+            GROUP BY move_date, move_year, move_month, category, wallet, expense, note
+            HAVING COUNT(*) > 1
+            ORDER BY move_date DESC
+        """)
+        duplicate_expense = self.new_session.execute(duplicate_expense_query, {"account_id": account_id}).fetchall()
+        
+        if duplicate_expense:
+            self.logger.warning(f"⚠️  Trovati {len(duplicate_expense)} gruppi di movimenti expense duplicati:")
+            for dup in duplicate_expense[:10]:  # Mostra max 10
+                self.logger.warning(f"  - Date: {dup[0]}, Category: {dup[3]}, Wallet: {dup[4]}, Expense: {dup[5]}, Count: {dup[7]}")
+            self.stats.validation_results['duplicate_expense_count'] = len(duplicate_expense)
+        else:
+            self.logger.info("✅ Nessun duplicato expense trovato")
+            self.stats.validation_results['duplicate_expense_count'] = 0
+        
+        # 6. Check integrità
         income_match = abs(legacy_income - new_income) < 0.01
         expense_match = abs(legacy_expense - new_expense) < 0.01
+        has_duplicates = len(duplicate_income) > 0 or len(duplicate_expense) > 0
         
-        if income_match and expense_match and null_user_id == 0 and null_category_id == 0 and null_wallet_id == 0:
+        if income_match and expense_match and null_user_id == 0 and null_category_id == 0 and null_wallet_id == 0 and not has_duplicates:
             self.logger.info("✅ Validazione PASSED")
             self.stats.validation_results['integrity_check'] = 'PASSED'
             return True
         else:
-            self.logger.warning("⚠️  Validazione FAILED - Verificare i dati")
+            if has_duplicates:
+                self.logger.warning("⚠️  Validazione FAILED - Rilevati duplicati")
+            else:
+                self.logger.warning("⚠️  Validazione FAILED - Verificare i dati")
             self.stats.validation_results['integrity_check'] = 'FAILED'
             return False
     

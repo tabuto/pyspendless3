@@ -88,9 +88,15 @@ def get_db_engine():
     """Ritorna l'engine del database (singleton)"""
     global _engine
     if _engine is None:
+        connect_args = {}
+        if DATABASE_URL.startswith('sqlite'):
+            connect_args = {
+                'check_same_thread': False,
+                'timeout': 30  # Timeout di 30 secondi per SQLite
+            }
         _engine = create_engine(
             DATABASE_URL,
-            connect_args={'check_same_thread': False} if DATABASE_URL.startswith('sqlite') else {},
+            connect_args=connect_args,
             echo=FLASK_ENV == 'development'  # Log SQL queries in development
         )
     return _engine

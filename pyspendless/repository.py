@@ -10,10 +10,17 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from typing import Optional, List, Dict, Any
 
-from models import (
-    Account, User, Wallet, Category, CategoryTemplate, 
-    EmailWhitelist, Movement, UserGroup, GroupMembership, Token
-)
+# Support both relative and absolute imports
+try:
+    from .models import (
+        Account, User, Wallet, Category, CategoryTemplate, 
+        EmailWhitelist, Movement, UserGroup, GroupMembership, Token
+    )
+except ImportError:
+    from models import (
+        Account, User, Wallet, Category, CategoryTemplate, 
+        EmailWhitelist, Movement, UserGroup, GroupMembership, Token
+    )
 
 
 class UnauthorizedError(Exception):

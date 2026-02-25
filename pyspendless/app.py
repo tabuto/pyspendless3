@@ -1,9 +1,17 @@
 # Per avviare correttamente:
 # python -m pyspendless.app
+# oppure
+# python pyspendless/app.py
 
 from flask import Flask, render_template, redirect, url_for, session, request, flash, jsonify, abort
-from conf import load_env, SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI, BASE_URL, ADMIN_USER_ID, get_db_session
-from repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, StatsRepository, AdminRepository, UnauthorizedError
+
+# Support both relative and absolute imports
+try:
+    from .conf import load_env, SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI, BASE_URL, ADMIN_USER_ID, get_db_session
+    from .repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, StatsRepository, AdminRepository, UnauthorizedError
+except ImportError:
+    from conf import load_env, SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI, BASE_URL, ADMIN_USER_ID, get_db_session
+    from repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, StatsRepository, AdminRepository, UnauthorizedError
 
 import os
 import logging
@@ -28,7 +36,7 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = False
 app.config['SESSION_COOKIE_NAME'] = 'pyspendless_session'
 app.config['SESSION_PERMANENT'] = True
-app.config['PERMANENT_SESSION_LIFETIME'] = 3600
+app.config['PERMANENT_SESSION_LIFETIME'] = 604800  # 7 giorni (7 * 24 * 60 * 60)
 # Importante: Assicurarsi che il path sia corretto
 app.config['SESSION_COOKIE_PATH'] = '/'
 

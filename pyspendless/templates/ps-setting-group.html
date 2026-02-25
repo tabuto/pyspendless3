@@ -12,9 +12,9 @@
     <div class="col-md-12 mb-4">
       <div class="card">
         <div class="card-header bg-primary text-white">
-          <div class="d-flex justify-content-between align-items-center">
+          <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
             <h3 class="card-title mb-0"><i class="bi bi-building"></i> Informazioni Account</h3>
-            <button type="button" class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#editAccountModal">
+            <button type="button" class="btn btn-sm btn-light text-nowrap" data-bs-toggle="modal" data-bs-target="#editAccountModal">
               <i class="bi bi-pencil"></i> Rinomina Account
             </button>
           </div>
@@ -35,9 +35,9 @@
     <div class="col-md-6">
       <div class="card">
         <div class="card-header">
-          <div class="d-flex justify-content-between align-items-center">
-            <h3 class="card-title">Membri del Gruppo</h3>
-            <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#inviteModal">
+          <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
+            <h3 class="card-title mb-0">Membri del Gruppo</h3>
+            <button type="button" class="btn btn-sm btn-primary text-nowrap" data-bs-toggle="modal" data-bs-target="#inviteModal">
               <i class="bi bi-person-plus"></i> Invita Utente
             </button>
           </div>
@@ -63,7 +63,7 @@
     <div class="col-md-6">
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">Inviti Pendenti</h3>
+          <h3 class="card-title mb-0">Inviti Pendenti</h3>
         </div>
         <div class="card-body">
           <table class="table" id="pendingInvitesTable">
@@ -367,19 +367,62 @@ function closeModal(modalId) {
 }
 
 function loadGroupMembers() {
-  // Nota: Questa è una implementazione semplificata
-  // In produzione dovremmo prima ottenere l'ID del gruppo associato all'account
-  
-  // Per ora mostriamo un messaggio informativo se non ci sono gruppi
-  const tbody = document.getElementById('membersTableBody');
-  tbody.innerHTML = `
-    <tr>
-      <td colspan="4" class="text-center text-muted">
-        <p class="mb-0">La gestione gruppi è in fase di sviluppo.</p>
-        <p class="mb-0">Al momento l'account è utilizzato solo dal proprietario.</p>
-      </td>
-    </tr>
-  `;
+  fetch(`/api/accounts/${accountId}/users`)
+  .then(response => response.json())
+  .then(data => {
+    const tbody = document.getElementById('membersTableBody');
+    
+    if (data.error) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="4" class="text-center text-danger">
+            Errore: ${data.error}
+          </td>
+        </tr>
+      `;
+      return;
+    }
+    
+    if (data.users && data.users.length > 0) {
+      tbody.innerHTML = '';
+      data.users.forEach(user => {
+        const row = document.createElement('tr');
+        const roleText = user.role === 'owner' ? 'Proprietario' : 'Membro';
+        row.innerHTML = `
+          <td>${user.email}</td>
+          <td>${user.name || 'N/A'}</td>
+          <td><span class="badge bg-${user.role === 'owner' ? 'primary' : 'info'}">${roleText}</span></td>
+          <td>
+            ${user.role !== 'owner' ? 
+              `<button class="btn btn-sm btn-danger" onclick="removeMember('${user.id}')">
+                <i class="bi bi-trash"></i> Rimuovi
+              </button>` : 
+              '-'}
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+    } else {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="4" class="text-center text-muted">
+            Nessun utente trovato
+          </td>
+        </tr>
+      `;
+    }
+  })
+  .catch(error => {
+    console.error('Errore caricamento membri:', error);
+    const tbody = document.getElementById('membersTableBody');
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="4" class="text-center text-danger">
+          Errore durante il caricamento dei membri
+        </td>
+      </tr>
+    `;
+  });
 }
 
 function loadPendingInvites() {

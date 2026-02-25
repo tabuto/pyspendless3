@@ -109,7 +109,12 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <script>
+// Registra il plugin datalabels ma disabilitalo di default
+Chart.register(ChartDataLabels);
+Chart.defaults.plugins.datalabels.display = false;
+
 // Palette di colori standard
 const COLORS = [
   '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
@@ -158,7 +163,7 @@ async function initFilters() {
 }
 
 // Funzione per creare grafico a torta
-function createPieChart(ctx, labels, data, colors) {
+function createPieChart(ctx, labels, data, colors, showLabels = true) {
   return new Chart(ctx, {
     type: 'pie',
     data: {
@@ -185,6 +190,17 @@ function createPieChart(ctx, labels, data, colors) {
               label += '€' + context.parsed.toFixed(2);
               return label;
             }
+          }
+        },
+        datalabels: {
+          display: showLabels,
+          color: '#fff',
+          font: {
+            weight: 'bold',
+            size: 14
+          },
+          formatter: function(value, context) {
+            return '€' + value.toFixed(2);
           }
         }
       }
@@ -236,7 +252,7 @@ async function updateCharts() {
       chartExpenseByCategory.update();
     } else {
       const ctx = document.getElementById('chartExpenseByCategory').getContext('2d');
-      chartExpenseByCategory = createPieChart(ctx, categoryLabels, categoryData, categoryColors);
+      chartExpenseByCategory = createPieChart(ctx, categoryLabels, categoryData, categoryColors, false);
     }
     
     // Grafico Spese per Wallet

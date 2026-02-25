@@ -1,14 +1,15 @@
 # Per avviare correttamente:
 # python -m pyspendless.app
 
-from flask import Flask, render_template, redirect, url_for, session, request, flash, jsonify
-from conf import load_env, SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI, BASE_URL, get_db_session
-from repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, StatsRepository, UnauthorizedError
+from flask import Flask, render_template, redirect, url_for, session, request, flash, jsonify, abort
+from conf import load_env, SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI, BASE_URL, ADMIN_USER_ID, get_db_session
+from repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, StatsRepository, AdminRepository, UnauthorizedError
 
 import os
 import logging
 import traceback
 from authlib.integrations.flask_client import OAuth
+from functools import wraps
 
 # Configura logging
 logging.basicConfig(
@@ -40,6 +41,28 @@ google = oauth.register(
     server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
     client_kwargs={'scope': 'openid email profile'}
 )
+
+# ===== ADMIN DECORATOR =====
+def admin_required(f):
+    """Decoratore per proteggere le rotte amministrative"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if str(session.get('user_id')) != str(ADMIN_USER_ID):
+            if request.is_json:
+                return jsonify({'error': 'Accesso negato'}), 403
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated_function
+
+def is_admin():
+    """Helper per verificare se l'utente corrente è admin"""
+    return str(session.get('user_id')) == str(ADMIN_USER_ID)
+
+# ===== CONTEXT PROCESSOR =====
+@app.context_processor
+def inject_admin_status():
+    """Rende disponibile is_admin in tutti i template"""
+    return {'is_admin': is_admin()}
 
 @app.route("/")
 def index():
@@ -219,10 +242,15 @@ def onboarding():
     """
     Pagina di onboarding per nuovi utenti
     """
+    # Se l'utente proviene da un link di invito, non mostrare l'onboarding
+    pending_token = session.get('pending_invite_token') or request.cookies.get('pending_invite_token')
+    if pending_token:
+        # Redirect al login per gestire l'invito
+        return redirect(url_for('auth_login'))
+    
     # Verifica che l'utente abbia informazioni OAuth nella sessione
     oauth_user_info = session.get('oauth_user_info')
     if not oauth_user_info:
-        flash('Sessione non valida. Effettua nuovamente il login.', 'warning')
         return redirect(url_for('login'))
     
     user_name = oauth_user_info.get('name', 'Utente')
@@ -233,10 +261,15 @@ def onboarding_submit():
     """
     Gestisce il submit del form di onboarding
     """
+    # Se l'utente proviene da un link di invito, non permettere l'onboarding
+    pending_token = session.get('pending_invite_token') or request.cookies.get('pending_invite_token')
+    if pending_token:
+        # Redirect al login per gestire l'invito
+        return redirect(url_for('auth_login'))
+    
     # Verifica che l'utente abbia informazioni OAuth nella sessione
     oauth_user_info = session.get('oauth_user_info')
     if not oauth_user_info:
-        flash('Sessione non valida. Effettua nuovamente il login.', 'warning')
         return redirect(url_for('login'))
     
     # Recupera i dati dal form
@@ -711,6 +744,110 @@ def settings_import_export():
         flash('Devi effettuare il login', 'warning')
         return redirect(url_for('login'))
     return render_template("ps-setting-import-export.html")
+
+
+@app.route("/settings/admin")
+@admin_required
+def settings_admin():
+    """Pagina amministratore - solo per admin"""
+    if not session.get('user_id'):
+        flash('Devi effettuare il login', 'warning')
+        return redirect(url_for('login'))
+    
+    db = get_db_session()
+    try:
+        admin_repo = AdminRepository(db)
+        users = admin_repo.get_all_users()
+        whitelist = admin_repo.get_all_whitelist()
+        return render_template("ps-setting-admin.html", users=users, whitelist=whitelist)
+    finally:
+        db.close()
+
+
+# ========== API ADMIN CRUD ==========
+
+@app.route("/admin/whitelist", methods=["POST"])
+@admin_required
+def admin_add_whitelist():
+    """API per aggiungere un'email alla whitelist"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    data = request.get_json()
+    if not data or not data.get('email'):
+        return jsonify({'error': 'Email obbligatoria'}), 400
+    
+    email = data['email']
+    note = data.get('note', '')
+    
+    db = get_db_session()
+    try:
+        admin_repo = AdminRepository(db)
+        success = admin_repo.add_to_whitelist(email, note)
+        if success:
+            return jsonify({'message': 'Email aggiunta alla whitelist', 'email': email}), 201
+        else:
+            return jsonify({'error': 'Email già presente in whitelist'}), 400
+    finally:
+        db.close()
+
+
+@app.route("/admin/whitelist/<email>", methods=["DELETE"])
+@admin_required
+def admin_remove_whitelist(email):
+    """API per rimuovere un'email dalla whitelist"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    db = get_db_session()
+    try:
+        admin_repo = AdminRepository(db)
+        success = admin_repo.remove_from_whitelist(email)
+        if success:
+            return jsonify({'message': 'Email rimossa dalla whitelist'}), 200
+        else:
+            return jsonify({'error': 'Email non trovata in whitelist'}), 404
+    finally:
+        db.close()
+
+
+@app.route("/admin/users", methods=["GET"])
+@admin_required
+def admin_get_users():
+    """API per recuperare la lista utenti"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    db = get_db_session()
+    try:
+        admin_repo = AdminRepository(db)
+        users = admin_repo.get_all_users()
+        return jsonify({'users': users}), 200
+    finally:
+        db.close()
+
+
+@app.route("/admin/users/<int:user_id>", methods=["DELETE"])
+@admin_required
+def admin_delete_user(user_id):
+    """API per eliminare un utente"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+    
+    # Previeni l'eliminazione dell'admin stesso
+    if str(user_id) == str(ADMIN_USER_ID):
+        return jsonify({'error': 'Non puoi eliminare l\'utente admin'}), 400
+    
+    db = get_db_session()
+    try:
+        admin_repo = AdminRepository(db)
+        success = admin_repo.delete_user(user_id)
+        if success:
+            return jsonify({'message': 'Utente eliminato con successo'}), 200
+        else:
+            return jsonify({'error': 'Utente non trovato'}), 404
+    finally:
+        db.close()
 
 
 # ========== API CATEGORIES CRUD ==========

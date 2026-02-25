@@ -1046,3 +1046,71 @@ class StatsRepository:
             'labels': labels,
             'data': monthly_data
         }
+
+
+class AdminRepository:
+    """Repository per operazioni amministrative"""
+    
+    def __init__(self, db_session: Session):
+        self.db = db_session
+    
+    def get_all_users(self) -> List[Dict[str, Any]]:
+        """Recupera tutti gli utenti del sistema"""
+        users = self.db.query(User).all()
+        return [{
+            'id': u.id,
+            'name': u.name,
+            'email': u.email,
+            'role': u.role,
+            'account_id': u.account_id,
+            'created_at': u.created_at.isoformat() if u.created_at else None
+        } for u in users]
+    
+    def delete_user(self, user_id: int) -> bool:
+        """Elimina un utente (delega al UserRepository)"""
+        user_repo = UserRepository(self.db)
+        return user_repo.delete_user(user_id)
+    
+    def get_all_whitelist(self) -> List[Dict[str, Any]]:
+        """Recupera tutte le email in whitelist"""
+        entries = self.db.query(EmailWhitelist).all()
+        return [{
+            'id': e.id,
+            'email': e.email,
+            'added_at': e.added_at.isoformat() if e.added_at else None,
+            'note': e.note
+        } for e in entries]
+    
+    def add_to_whitelist(self, email: str, note: str = None) -> bool:
+        """Aggiunge un'email alla whitelist"""
+        try:
+            # Verifica se esiste già
+            existing = self.db.query(EmailWhitelist).filter_by(email=email).first()
+            if existing:
+                return False
+            
+            new_entry = EmailWhitelist(
+                email=email,
+                added_at=datetime.utcnow(),
+                note=note
+            )
+            self.db.add(new_entry)
+            self.db.commit()
+            return True
+        except SQLAlchemyError:
+            self.db.rollback()
+            return False
+    
+    def remove_from_whitelist(self, email: str) -> bool:
+        """Rimuove un'email dalla whitelist"""
+        try:
+            entry = self.db.query(EmailWhitelist).filter_by(email=email).first()
+            if not entry:
+                return False
+            
+            self.db.delete(entry)
+            self.db.commit()
+            return True
+        except SQLAlchemyError:
+            self.db.rollback()
+            return False

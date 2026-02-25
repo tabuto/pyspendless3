@@ -76,6 +76,9 @@ BASE_URL = os.getenv('BASE_URL', 'http://localhost:5000')
 # ===== WHITELIST EMAILS (opzionale, preferibile usare DB) =====
 WHITELIST_EMAILS = os.getenv('WHITELIST_EMAILS', '').split(',')
 
+# ===== ADMIN USER ID =====
+ADMIN_USER_ID = os.getenv('ADMIN_USER_ID')
+
 # ===== DATABASE ENGINE E SESSION =====
 # Engine globale per l'applicazione
 _engine = None

@@ -1,0 +1,244 @@
+{% extends 'ps-nav.html' %}
+
+{% block nav_content %}
+<div class="container-fluid mt-4">
+  <h1 class="mb-4"><i class="bi bi-shield-lock"></i> Pannello Amministratore</h1>
+  
+  <!-- Alert per messaggi -->
+  <div id="alertContainer"></div>
+  
+  <!-- Sezione Gestione Whitelist -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <div class="d-flex justify-content-between align-items-center">
+        <h3 class="card-title"><i class="bi bi-envelope-check"></i> Gestione Whitelist Email</h3>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addWhitelistModal">
+          <i class="bi bi-plus-circle"></i> Aggiungi Email
+        </button>
+      </div>
+    </div>
+    <div class="card-body">
+      <table class="table table-striped" id="whitelistTable">
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Data Aggiunta</th>
+            <th>Note</th>
+            <th>Azioni</th>
+          </tr>
+        </thead>
+        <tbody id="whitelistTableBody">
+          {% for entry in whitelist %}
+          <tr data-email="{{ entry.email }}">
+            <td>{{ entry.email }}</td>
+            <td>{{ entry.added_at[:10] if entry.added_at else 'N/A' }}</td>
+            <td>{{ entry.note or '-' }}</td>
+            <td>
+              <button class="btn btn-sm btn-danger" onclick="removeWhitelist('{{ entry.email }}')">
+                <i class="bi bi-trash"></i> Rimuovi
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  
+  <!-- Sezione Gestione Utenti -->
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title"><i class="bi bi-people"></i> Gestione Utenti</h3>
+    </div>
+    <div class="card-body">
+      <table class="table table-striped" id="usersTable">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Nome</th>
+            <th>Email</th>
+            <th>Ruolo</th>
+            <th>Account ID</th>
+            <th>Data Creazione</th>
+            <th>Azioni</th>
+          </tr>
+        </thead>
+        <tbody id="usersTableBody">
+          {% for user in users %}
+          <tr data-user-id="{{ user.id }}">
+            <td>{{ user.id }}</td>
+            <td>{{ user.name }}</td>
+            <td>{{ user.email }}</td>
+            <td><span class="badge bg-{{ 'primary' if user.role == 'owner' else 'secondary' }}">{{ user.role }}</span></td>
+            <td>{{ user.account_id }}</td>
+            <td>{{ user.created_at[:10] if user.created_at else 'N/A' }}</td>
+            <td>
+              {% if user.id|string != session.user_id|string %}
+              <button class="btn btn-sm btn-danger" onclick="deleteUser({{ user.id }})">
+                <i class="bi bi-trash"></i> Elimina
+              </button>
+              {% else %}
+              <span class="badge bg-info">Admin</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Aggiungi Whitelist -->
+<div class="modal fade" id="addWhitelistModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Aggiungi Email alla Whitelist</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="addWhitelistForm">
+          <div class="mb-3">
+            <label for="whitelistEmail" class="form-label">Email</label>
+            <input type="email" class="form-control" id="whitelistEmail" required>
+          </div>
+          <div class="mb-3">
+            <label for="whitelistNote" class="form-label">Note (opzionale)</label>
+            <textarea class="form-control" id="whitelistNote" rows="2"></textarea>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-primary" onclick="addWhitelist()">Salva</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function showAlert(message, type = 'success') {
+  const alertDiv = document.createElement('div');
+  alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+  alertDiv.innerHTML = `
+    ${message}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  `;
+  document.getElementById('alertContainer').appendChild(alertDiv);
+  
+  setTimeout(() => {
+    alertDiv.remove();
+  }, 5000);
+}
+
+function addWhitelist() {
+  const email = document.getElementById('whitelistEmail').value;
+  const note = document.getElementById('whitelistNote').value;
+  
+  if (!email) {
+    showAlert('L\'email è obbligatoria', 'warning');
+    return;
+  }
+  
+  fetch('/admin/whitelist', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ email, note })
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.error) {
+      showAlert(data.error, 'danger');
+    } else {
+      showAlert('Email aggiunta alla whitelist con successo', 'success');
+      
+      // Aggiungi la riga alla tabella
+      const tbody = document.getElementById('whitelistTableBody');
+      const row = document.createElement('tr');
+      row.setAttribute('data-email', email);
+      row.innerHTML = `
+        <td>${email}</td>
+        <td>${new Date().toISOString().split('T')[0]}</td>
+        <td>${note || '-'}</td>
+        <td>
+          <button class="btn btn-sm btn-danger" onclick="removeWhitelist('${email}')">
+            <i class="bi bi-trash"></i> Rimuovi
+          </button>
+        </td>
+      `;
+      tbody.appendChild(row);
+      
+      // Reset form e chiudi modal
+      document.getElementById('addWhitelistForm').reset();
+      bootstrap.Modal.getInstance(document.getElementById('addWhitelistModal')).hide();
+    }
+  })
+  .catch(error => {
+    console.error('Errore:', error);
+    showAlert('Errore durante l\'aggiunta dell\'email', 'danger');
+  });
+}
+
+function removeWhitelist(email) {
+  if (!confirm(`Sei sicuro di voler rimuovere ${email} dalla whitelist?`)) {
+    return;
+  }
+  
+  fetch(`/admin/whitelist/${encodeURIComponent(email)}`, {
+    method: 'DELETE'
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.error) {
+      showAlert(data.error, 'danger');
+    } else {
+      showAlert('Email rimossa dalla whitelist con successo', 'success');
+      
+      // Rimuovi la riga dalla tabella
+      const row = document.querySelector(`#whitelistTable tr[data-email="${email}"]`);
+      if (row) {
+        row.remove();
+      }
+    }
+  })
+  .catch(error => {
+    console.error('Errore:', error);
+    showAlert('Errore durante la rimozione dell\'email', 'danger');
+  });
+}
+
+function deleteUser(userId) {
+  if (!confirm('Sei sicuro di voler eliminare questo utente? Questa azione eliminerà anche tutti i suoi dati associati.')) {
+    return;
+  }
+  
+  fetch(`/admin/users/${userId}`, {
+    method: 'DELETE'
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.error) {
+      showAlert(data.error, 'danger');
+    } else {
+      showAlert('Utente eliminato con successo', 'success');
+      
+      // Rimuovi la riga dalla tabella
+      const row = document.querySelector(`#usersTable tr[data-user-id="${userId}"]`);
+      if (row) {
+        row.remove();
+      }
+    }
+  })
+  .catch(error => {
+    console.error('Errore:', error);
+    showAlert('Errore durante l\'eliminazione dell\'utente', 'danger');
+  });
+}
+</script>
+{% endblock %}

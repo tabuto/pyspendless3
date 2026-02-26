@@ -55,6 +55,7 @@ class Wallet(Base):
     currency = Column(Text, nullable=False, default='EUR')
     account_id = Column(Integer, ForeignKey('Account.id'), nullable=False)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    order_index = Column(Integer, nullable=False, default=0)
     
     # Relationships
     account = relationship('Account', back_populates='wallets')
@@ -87,6 +88,7 @@ class Category(Base):
     account_id = Column(Integer, ForeignKey('Account.id'), nullable=False)
     type = Column(Text, nullable=False)
     template_id = Column(Integer, ForeignKey('CategoryTemplate.id'), nullable=True)
+    order_index = Column(Integer, nullable=False, default=0)
     
     __table_args__ = (
         CheckConstraint("type IN ('expense','income','transfer')", name='check_category_type'),

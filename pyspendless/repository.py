@@ -8,6 +8,7 @@ import json
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import func
 from typing import Optional, List, Dict, Any
 
 # Support both relative and absolute imports
@@ -328,21 +329,27 @@ class WalletRepository:
         self.db = db_session
     
     def get_wallets_for_account(self, account_id: int) -> List[Wallet]:
-        """Recupera tutti i wallet di un account"""
-        return self.db.query(Wallet).filter_by(account_id=account_id).all()
+        """Recupera tutti i wallet di un account ordinati per order_index e nome"""
+        return self.db.query(Wallet).filter_by(account_id=account_id).order_by(Wallet.order_index.asc(), Wallet.name.asc()).all()
     
     def get_wallet(self, wallet_id: int) -> Optional[Wallet]:
         """Recupera un wallet tramite ID"""
         return self.db.query(Wallet).filter_by(id=wallet_id).first()
     
-    def create_wallet(self, code: str, name: str, account_id: int, currency: str = 'EUR') -> Wallet:
+    def create_wallet(self, code: str, name: str, account_id: int, currency: str = 'EUR', order_index: Optional[int] = None) -> Wallet:
         """Crea un nuovo wallet"""
+        # Se order_index non è specificato, assegna automaticamente MAX+1
+        if order_index is None:
+            max_order = self.db.query(func.max(Wallet.order_index)).filter_by(account_id=account_id).scalar()
+            order_index = (max_order + 1) if max_order is not None else 0
+        
         wallet = Wallet(
             code=code,
             name=name,
             currency=currency,
             account_id=account_id,
-            created_at=datetime.utcnow()
+            created_at=datetime.utcnow(),
+            order_index=order_index
         )
         self.db.add(wallet)
         self.db.commit()
@@ -378,48 +385,173 @@ class CategoryRepository:
     def __init__(self, db_session: Session):
         self.db = db_session
     
-    def get_categories_for_account(self, account_id: int) -> List[Category]:
-        """Recupera tutte le categorie di un account"""
-        return self.db.query(Category).filter_by(account_id=account_id).all()
+    def get_categories_for_account(self, account_id: int, order_by_index: bool = True) -> List[Category]:
+        """
+        Recupera tutte le categorie di un account
+        
+        Args:
+            account_id: ID dell'account
+            order_by_index: Se True, ordina per order_index, altrimenti per nome
+        
+        Returns:
+            Lista di categorie
+        """
+        query = self.db.query(Category).filter_by(account_id=account_id)
+        
+        if order_by_index:
+            return query.order_by(Category.order_index, Category.name).all()
+        else:
+            return query.order_by(Category.name).all()
     
     def get_category(self, category_id: int) -> Optional[Category]:
         """Recupera una categoria tramite ID"""
         return self.db.query(Category).filter_by(id=category_id).first()
     
-    def create_category(self, name: str, account_id: int, type: str, template_id: Optional[int] = None) -> Category:
+    def create_category(self, name: str, account_id: int, type: str, template_id: Optional[int] = None, order_index: int = 0) -> Category:
         """Crea una nuova categoria"""
         category = Category(
             name=name,
             type=type,
             account_id=account_id,
-            template_id=template_id
+            template_id=template_id,
+            order_index=order_index
         )
         self.db.add(category)
         self.db.commit()
         return category
     
     def update_category(self, category_id: int, data: Dict[str, Any]) -> Optional[Category]:
-        """Aggiorna una categoria"""
+        """
+        Aggiorna una categoria con gestione automatica di rinomina e merge.
+        
+        Logica:
+        - Se il nuovo nome NON esiste: rinomina semplice + update movements
+        - Se il nuovo nome ESISTE già: merge movements + elimina categoria vecchia
+        
+        Args:
+            category_id: ID della categoria da aggiornare
+            data: Dizionario con i campi da aggiornare (name, type, order_index)
+        
+        Returns:
+            Categoria aggiornata o None se non trovata
+        
+        Raises:
+            SQLAlchemyError: In caso di errore durante la transazione
+        """
         category = self.get_category(category_id)
         if not category:
             return None
         
-        for key, value in data.items():
-            if hasattr(category, key):
-                setattr(category, key, value)
+        account_id = category.account_id
+        old_name = category.name
+        new_name = data.get('name', old_name)
         
-        self.db.commit()
-        return category
+        try:
+            # Caso speciale: se il nome viene modificato
+            if new_name != old_name:
+                # Verifica se esiste già una categoria con il nuovo nome (stesso account e tipo)
+                existing_category = self.db.query(Category).filter_by(
+                    account_id=account_id,
+                    name=new_name,
+                    type=category.type
+                ).filter(Category.id != category_id).first()
+                
+                if existing_category:
+                    # CASO B: Merge - Il nuovo nome esiste già
+                    # 1. Aggiorna tutti i movimenti che puntano alla vecchia categoria
+                    self.db.query(Movement).filter_by(
+                        account_id=account_id,
+                        category=old_name
+                    ).update({
+                        'category': new_name,
+                        'category_id': existing_category.id
+                    }, synchronize_session=False)
+                    
+                    # 2. Aggiorna order_index se specificato
+                    if 'order_index' in data:
+                        existing_category.order_index = data['order_index']
+                    
+                    # 3. Elimina la vecchia categoria (ora ridondante)
+                    self.db.delete(category)
+                    self.db.commit()
+                    
+                    return existing_category
+                else:
+                    # CASO A: Rinomina semplice - Il nuovo nome NON esiste
+                    # 1. Aggiorna il nome nella tabella category
+                    category.name = new_name
+                    
+                    # 2. Aggiorna retrocompatibilità: campo category in movements
+                    self.db.query(Movement).filter_by(
+                        account_id=account_id,
+                        category=old_name
+                    ).update({
+                        'category': new_name
+                    }, synchronize_session=False)
+            
+            # Aggiorna altri campi (type, order_index, ecc.)
+            for key, value in data.items():
+                if key != 'name' and hasattr(category, key):
+                    setattr(category, key, value)
+            
+            self.db.commit()
+            return category
+            
+        except SQLAlchemyError as e:
+            self.db.rollback()
+            raise e
     
-    def delete_category(self, category_id: int) -> bool:
-        """Elimina una categoria"""
+    def delete_category(self, category_id: int, target_category_id: Optional[int] = None) -> bool:
+        """
+        Elimina una categoria.
+        Se ha movimenti associati e viene fornita una categoria target, sposta i movimenti.
+        
+        Args:
+            category_id: ID della categoria da eliminare
+            target_category_id: ID della categoria a cui spostare i movimenti (opzionale)
+        
+        Returns:
+            True se eliminata con successo
+        
+        Raises:
+            ValueError: Se la categoria ha movimenti ma non viene fornita una categoria target
+            SQLAlchemyError: In caso di errore durante la transazione
+        """
         category = self.get_category(category_id)
         if not category:
             return False
         
-        self.db.delete(category)
-        self.db.commit()
-        return True
+        try:
+            # Se è fornita una categoria target, sposta i movimenti
+            if target_category_id:
+                target_category = self.get_category(target_category_id)
+                if not target_category:
+                    raise ValueError("Categoria target non trovata")
+                
+                # Verifica che siano dello stesso account e tipo
+                if target_category.account_id != category.account_id:
+                    raise ValueError("La categoria target deve appartenere allo stesso account")
+                
+                if target_category.type != category.type:
+                    raise ValueError("La categoria target deve essere dello stesso tipo")
+                
+                # Aggiorna i movimenti per puntare alla categoria target
+                self.db.query(Movement).filter_by(
+                    account_id=category.account_id,
+                    category=category.name
+                ).update({
+                    'category': target_category.name,
+                    'category_id': target_category_id
+                }, synchronize_session=False)
+            
+            # Elimina la categoria
+            self.db.delete(category)
+            self.db.commit()
+            return True
+            
+        except SQLAlchemyError as e:
+            self.db.rollback()
+            raise e
 
 
 class MovementRepository:

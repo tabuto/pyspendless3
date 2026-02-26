@@ -7,28 +7,104 @@
   <!-- Alert per messaggi -->
   <div id="alertContainer"></div>
   
+  <!-- Tabs per separare Entrate/Uscite -->
   <div class="card">
     <div class="card-header">
       <div class="d-flex justify-content-between align-items-center">
-        <h3 class="card-title">Le tue Categorie</h3>
-        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addCategoryModal">
-          <i class="bi bi-plus-circle"></i> Aggiungi Categoria
-        </button>
+        <ul class="nav nav-tabs card-header-tabs" id="categoryTabs" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="expense-tab" data-bs-toggle="tab" data-bs-target="#expense" type="button" role="tab">
+              <i class="bi bi-arrow-down-circle text-danger"></i> Uscite
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="income-tab" data-bs-toggle="tab" data-bs-target="#income" type="button" role="tab">
+              <i class="bi bi-arrow-up-circle text-success"></i> Entrate
+            </button>
+          </li>
+        </ul>
+        <div>
+          <button type="button" class="btn btn-sm btn-outline-secondary me-2" id="btnToggleSort">
+            <i class="bi bi-sort-alpha-down"></i> Ordine Alfabetico
+          </button>
+          <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addCategoryModal">
+            <i class="bi bi-plus-circle"></i> Aggiungi Categoria
+          </button>
+        </div>
       </div>
     </div>
     <div class="card-body">
-      <table class="table table-striped" id="categoriesTable">
-        <thead>
-          <tr>
-            <th>Nome</th>
-            <th>Tipo</th>
-            <th>Azioni</th>
-          </tr>
-        </thead>
-        <tbody id="categoriesTableBody">
-          <!-- Popolato dinamicamente -->
-        </tbody>
-      </table>
+      <div class="tab-content" id="categoryTabContent">
+        <!-- Tab Uscite -->
+        <div class="tab-pane fade show active" id="expense" role="tabpanel">
+          <table class="table table-striped">
+            <thead>
+              <tr>
+                <th style="width: 80px;">Ordine</th>
+                <th>Nome</th>
+                <th style="width: 150px;">Azioni</th>
+              </tr>
+            </thead>
+            <tbody id="expenseCategoriesTableBody">
+              <!-- Popolato dinamicamente -->
+            </tbody>
+          </table>
+        </div>
+        
+        <!-- Tab Entrate -->
+        <div class="tab-pane fade" id="income" role="tabpanel">
+          <table class="table table-striped">
+            <thead>
+              <tr>
+                <th style="width: 80px;">Ordine</th>
+                <th>Nome</th>
+                <th style="width: 150px;">Azioni</th>
+              </tr>
+            </thead>
+            <tbody id="incomeCategoriesTableBody">
+              <!-- Popolato dinamicamente -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Selezione Categoria Target per Eliminazione -->
+<div class="modal fade" id="deleteCategoryModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title">
+          <i class="bi bi-exclamation-triangle"></i> Elimina Categoria
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-warning">
+          <i class="bi bi-info-circle"></i>
+          <strong>La categoria "<span id="deleteCategoryName"></span>" ha <span id="deleteMovementsCount"></span> movimenti associati.</strong>
+        </div>
+        <p>Seleziona una categoria a cui spostare i movimenti prima di eliminare:</p>
+        <input type="hidden" id="deleteCategoryId">
+        <input type="hidden" id="deleteCategoryType">
+        <div class="mb-3">
+          <label for="targetCategorySelect" class="form-label">Categoria di destinazione</label>
+          <select class="form-select" id="targetCategorySelect" required>
+            <option value="">-- Seleziona una categoria --</option>
+          </select>
+          <small class="form-text text-muted">
+            I movimenti verranno spostati a questa categoria prima dell'eliminazione.
+          </small>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-danger" onclick="confirmDeleteCategory()">
+          <i class="bi bi-trash"></i> Elimina e Sposta Movimenti
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -55,6 +131,11 @@
               <option value="transfer">Trasferimento</option>
             </select>
           </div>
+          <div class="mb-3">
+            <label for="categoryOrderIndex" class="form-label">Ordine (opzionale)</label>
+            <input type="number" class="form-control" id="categoryOrderIndex" min="0" value="0">
+            <small class="form-text text-muted">Numero intero positivo per ordinamento personalizzato</small>
+          </div>
         </form>
       </div>
       <div class="modal-footer">
@@ -76,17 +157,17 @@
       <div class="modal-body">
         <form id="editCategoryForm">
           <input type="hidden" id="editCategoryId">
+          <input type="hidden" id="editCategoryOldName">
           <div class="mb-3">
             <label for="editCategoryName" class="form-label">Nome</label>
             <input type="text" class="form-control" id="editCategoryName" required>
+            <small class="form-text text-muted">
+              <i class="bi bi-info-circle"></i> Se rinomini con un nome già esistente, le categorie verranno unite automaticamente.
+            </small>
           </div>
           <div class="mb-3">
-            <label for="editCategoryType" class="form-label">Tipo</label>
-            <select class="form-select" id="editCategoryType" required>
-              <option value="expense">Uscita</option>
-              <option value="income">Entrata</option>
-              <option value="transfer">Trasferimento</option>
-            </select>
+            <label for="editCategoryOrderIndex" class="form-label">Ordine</label>
+            <input type="number" class="form-control" id="editCategoryOrderIndex" min="0" required>
           </div>
         </form>
       </div>
@@ -103,10 +184,23 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 const accountId = {{ session.account_id }};
+let allCategories = [];
+let sortAlphabetically = false;
 
 // Carica le categorie all'avvio
 document.addEventListener('DOMContentLoaded', function() {
   loadCategories();
+  
+  // Toggle ordinamento alfabetico
+  document.getElementById('btnToggleSort').addEventListener('click', function() {
+    sortAlphabetically = !sortAlphabetically;
+    if (sortAlphabetically) {
+      this.innerHTML = '<i class="bi bi-sort-numeric-down"></i> Ordine Personalizzato';
+    } else {
+      this.innerHTML = '<i class="bi bi-sort-alpha-down"></i> Ordine Alfabetico';
+    }
+    renderCategories();
+  });
 });
 
 function showAlert(message, type = 'success') {
@@ -127,30 +221,8 @@ function loadCategories() {
   fetch('/api/categories')
     .then(response => response.json())
     .then(categories => {
-      const tbody = document.getElementById('categoriesTableBody');
-      tbody.innerHTML = '';
-      
-      categories.forEach(category => {
-        const typeLabel = category.type === 'expense' ? 'Uscita' : 
-                         category.type === 'income' ? 'Entrata' : 'Trasferimento';
-        const typeBadge = category.type === 'expense' ? 'danger' : 
-                         category.type === 'income' ? 'success' : 'info';
-        
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td>${category.name}</td>
-          <td><span class="badge bg-${typeBadge}">${typeLabel}</span></td>
-          <td>
-            <button class="btn btn-sm btn-warning" onclick="openEditModal(${category.id}, '${category.name}', '${category.type}')">
-              <i class="bi bi-pencil"></i> Modifica
-            </button>
-            <button class="btn btn-sm btn-danger" onclick="deleteCategory(${category.id})">
-              <i class="bi bi-trash"></i> Elimina
-            </button>
-          </td>
-        `;
-        tbody.appendChild(row);
-      });
+      allCategories = categories;
+      renderCategories();
     })
     .catch(error => {
       console.error('Errore:', error);
@@ -158,9 +230,102 @@ function loadCategories() {
     });
 }
 
+function renderCategories() {
+  const expenseTbody = document.getElementById('expenseCategoriesTableBody');
+  const incomeTbody = document.getElementById('incomeCategoriesTableBody');
+  
+  expenseTbody.innerHTML = '';
+  incomeTbody.innerHTML = '';
+  
+  // Separa categorie per tipo
+  let expenseCategories = allCategories.filter(c => c.type === 'expense');
+  let incomeCategories = allCategories.filter(c => c.type === 'income');
+  
+  // Ordina
+  if (sortAlphabetically) {
+    expenseCategories.sort((a, b) => a.name.localeCompare(b.name));
+    incomeCategories.sort((a, b) => a.name.localeCompare(b.name));
+  } else {
+    expenseCategories.sort((a, b) => a.order_index - b.order_index || a.name.localeCompare(b.name));
+    incomeCategories.sort((a, b) => a.order_index - b.order_index || a.name.localeCompare(b.name));
+  }
+  
+  // Renderizza uscite
+  expenseCategories.forEach(category => {
+    const row = createCategoryRow(category);
+    expenseTbody.appendChild(row);
+  });
+  
+  // Renderizza entrate
+  incomeCategories.forEach(category => {
+    const row = createCategoryRow(category);
+    incomeTbody.appendChild(row);
+  });
+}
+
+function createCategoryRow(category) {
+  const row = document.createElement('tr');
+  row.innerHTML = `
+    <td>
+      <input type="number" class="form-control form-control-sm" 
+             value="${category.order_index}" 
+             min="0"
+             onchange="updateCategoryOrder(${category.id}, this.value)"
+             style="width: 70px;">
+    </td>
+    <td>${category.name}</td>
+    <td>
+      <button class="btn btn-sm btn-warning" onclick='openEditModal(${category.id}, "${category.name}", "${category.type}", ${category.order_index})'>
+        <i class="bi bi-pencil"></i>
+      </button>
+      <button class="btn btn-sm btn-danger" onclick="deleteCategory(${category.id})">
+        <i class="bi bi-trash"></i>
+      </button>
+    </td>
+  `;
+  return row;
+}
+
+function updateCategoryOrder(id, newOrder) {
+  const orderIndex = parseInt(newOrder);
+  if (isNaN(orderIndex) || orderIndex < 0) {
+    showAlert('L\'ordine deve essere un numero intero positivo', 'warning');
+    loadCategories();
+    return;
+  }
+  
+  fetch(`/api/categories/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ order_index: orderIndex })
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.error) {
+      showAlert(data.error, 'danger');
+      loadCategories();
+    } else {
+      // Aggiorna localmente senza ricaricare tutto
+      const category = allCategories.find(c => c.id === id);
+      if (category) {
+        category.order_index = orderIndex;
+        renderCategories();
+      }
+    }
+  })
+  .catch(error => {
+    console.error('Errore:', error);
+    showAlert('Errore durante l\'aggiornamento dell\'ordine', 'danger');
+    loadCategories();
+  });
+}
+
 function addCategory() {
   const name = document.getElementById('categoryName').value;
   const type = document.getElementById('categoryType').value;
+  const orderIndex = parseInt(document.getElementById('categoryOrderIndex').value) || 0;
   
   if (!name) {
     showAlert('Il nome è obbligatorio', 'warning');
@@ -172,7 +337,7 @@ function addCategory() {
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ name, type })
+    body: JSON.stringify({ name, type, order_index: orderIndex })
   })
   .then(response => response.json())
   .then(data => {
@@ -191,10 +356,11 @@ function addCategory() {
   });
 }
 
-function openEditModal(id, name, type) {
+function openEditModal(id, name, type, orderIndex) {
   document.getElementById('editCategoryId').value = id;
+  document.getElementById('editCategoryOldName').value = name;
   document.getElementById('editCategoryName').value = name;
-  document.getElementById('editCategoryType').value = type;
+  document.getElementById('editCategoryOrderIndex').value = orderIndex;
   
   const modal = new bootstrap.Modal(document.getElementById('editCategoryModal'));
   modal.show();
@@ -202,15 +368,36 @@ function openEditModal(id, name, type) {
 
 function updateCategory() {
   const id = document.getElementById('editCategoryId').value;
+  const oldName = document.getElementById('editCategoryOldName').value;
   const name = document.getElementById('editCategoryName').value;
-  const type = document.getElementById('editCategoryType').value;
+  const orderIndex = parseInt(document.getElementById('editCategoryOrderIndex').value);
+  
+  if (!name) {
+    showAlert('Il nome è obbligatorio', 'warning');
+    return;
+  }
+  
+  if (isNaN(orderIndex) || orderIndex < 0) {
+    showAlert('L\'ordine deve essere un numero intero positivo', 'warning');
+    return;
+  }
+  
+  // Se il nome è cambiato, mostra conferma
+  if (name !== oldName) {
+    const existingCategory = allCategories.find(c => c.name === name && c.id != id);
+    if (existingCategory) {
+      if (!confirm(`Attenzione: Esiste già una categoria "${name}". Le due categorie verranno unite automaticamente e tutti i movimenti della categoria "${oldName}" verranno associati a "${name}". Vuoi continuare?`)) {
+        return;
+      }
+    }
+  }
   
   fetch(`/api/categories/${id}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ name, type })
+    body: JSON.stringify({ name, order_index: orderIndex })
   })
   .then(response => response.json())
   .then(data => {
@@ -229,20 +416,87 @@ function updateCategory() {
 }
 
 function deleteCategory(id) {
-  if (!confirm('Sei sicuro di voler eliminare questa categoria?')) {
-    return;
-  }
-  
+  // Primo tentativo di eliminazione senza categoria target
   fetch(`/api/categories/${id}`, {
     method: 'DELETE'
   })
   .then(response => response.json())
   .then(data => {
     if (data.error) {
+      // Se richiede categoria target, apri modal di selezione
+      if (data.requires_target) {
+        openDeleteModal(id, data.category_name, data.category_type, data.movements_count);
+      } else {
+        showAlert(data.error, 'danger');
+      }
+    } else {
+      showAlert(data.message || 'Categoria eliminata con successo', 'success');
+      loadCategories();
+    }
+  })
+  .catch(error => {
+    console.error('Errore:', error);
+    showAlert('Errore durante l\'eliminazione della categoria', 'danger');
+  });
+}
+
+function openDeleteModal(categoryId, categoryName, categoryType, movementsCount) {
+  document.getElementById('deleteCategoryId').value = categoryId;
+  document.getElementById('deleteCategoryName').textContent = categoryName;
+  document.getElementById('deleteCategoryType').value = categoryType;
+  document.getElementById('deleteMovementsCount').textContent = movementsCount;
+  
+  // Popola il dropdown con le categorie dello stesso tipo (esclusa quella da eliminare)
+  const targetSelect = document.getElementById('targetCategorySelect');
+  targetSelect.innerHTML = '<option value="">-- Seleziona una categoria --</option>';
+  
+  const sameTypeCategories = allCategories.filter(c => 
+    c.type === categoryType && c.id !== categoryId
+  );
+  
+  if (sameTypeCategories.length === 0) {
+    targetSelect.innerHTML = '<option value="">Nessuna categoria disponibile</option>';
+    targetSelect.disabled = true;
+    showAlert('Non ci sono altre categorie dello stesso tipo. Crea prima una nuova categoria.', 'warning');
+  } else {
+    targetSelect.disabled = false;
+    sameTypeCategories.forEach(cat => {
+      const option = document.createElement('option');
+      option.value = cat.id;
+      option.textContent = cat.name;
+      targetSelect.appendChild(option);
+    });
+  }
+  
+  const modal = new bootstrap.Modal(document.getElementById('deleteCategoryModal'));
+  modal.show();
+}
+
+function confirmDeleteCategory() {
+  const categoryId = document.getElementById('deleteCategoryId').value;
+  const targetCategoryId = document.getElementById('targetCategorySelect').value;
+  
+  if (!targetCategoryId) {
+    showAlert('Seleziona una categoria di destinazione', 'warning');
+    return;
+  }
+  
+  // Elimina con migrazione dei movimenti
+  fetch(`/api/categories/${categoryId}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ target_category_id: parseInt(targetCategoryId) })
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.error) {
       showAlert(data.error, 'danger');
     } else {
-      showAlert('Categoria eliminata con successo', 'success');
+      showAlert(data.message || 'Categoria eliminata e movimenti spostati con successo', 'success');
       loadCategories();
+      bootstrap.Modal.getInstance(document.getElementById('deleteCategoryModal')).hide();
     }
   })
   .catch(error => {

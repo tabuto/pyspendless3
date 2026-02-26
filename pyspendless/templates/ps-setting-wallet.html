@@ -75,6 +75,11 @@
               <option value="GBP">GBP (£)</option>
             </select>
           </div>
+          <div class="mb-3">
+            <label for="editWalletOrder" class="form-label">Ordine</label>
+            <input type="number" class="form-control" id="editWalletOrder" min="0" step="1" required>
+            <div class="form-text">Numero intero per ordinare i wallet (0, 1, 2, ...)</div>
+          </div>
         </form>
       </div>
       <div class="modal-footer">
@@ -135,14 +140,15 @@ function loadWallets() {
             <div class="card-body">
               <div class="d-flex justify-content-between align-items-start mb-3">
                 <h5 class="card-title">${wallet.name}</h5>
+                <span class="badge bg-secondary">Ordine: ${wallet.order_index || 0}</span>
               </div>
               <p class="card-text">
                 <strong>Saldo:</strong> 
                 <span class="${balanceClass}">${wallet.balance.toFixed(2)} ${getCurrencySymbol(wallet.currency)}</span>
               </p>
               <div class="d-flex gap-2">
-                <button class="btn btn-sm btn-warning" onclick="openEditModal(${wallet.id}, '${wallet.name}', '${wallet.currency}')">
-                  <i class="bi bi-pencil"></i> Rinomina
+                <button class="btn btn-sm btn-warning" onclick="openEditModal(${wallet.id}, '${wallet.name}', '${wallet.currency}', ${wallet.order_index || 0})">
+                  <i class="bi bi-pencil"></i> Modifica
                 </button>
                 <button class="btn btn-sm btn-danger" onclick="deleteWallet(${wallet.id})">
                   <i class="bi bi-trash"></i> Elimina
@@ -205,10 +211,11 @@ function addWallet() {
   });
 }
 
-function openEditModal(id, name, currency) {
+function openEditModal(id, name, currency, orderIndex) {
   document.getElementById('editWalletId').value = id;
   document.getElementById('editWalletName').value = name;
   document.getElementById('editWalletCurrency').value = currency;
+  document.getElementById('editWalletOrder').value = orderIndex || 0;
   
   const modal = new bootstrap.Modal(document.getElementById('editWalletModal'));
   modal.show();
@@ -218,13 +225,19 @@ function updateWallet() {
   const id = document.getElementById('editWalletId').value;
   const name = document.getElementById('editWalletName').value;
   const currency = document.getElementById('editWalletCurrency').value;
+  const orderIndex = parseInt(document.getElementById('editWalletOrder').value);
+  
+  if (orderIndex < 0) {
+    showAlert('L\'ordine deve essere un numero positivo', 'warning');
+    return;
+  }
   
   fetch(`/api/wallets/${id}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ name, currency })
+    body: JSON.stringify({ name, currency, order_index: orderIndex })
   })
   .then(response => response.json())
   .then(data => {

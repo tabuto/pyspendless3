@@ -64,6 +64,7 @@ Applicazione web per la gestione di spese personali e condivise. Registrazione t
    - name: String
    - account_id: FK (categorie per account)
    - type: Enum (expense | income | transfer)
+   - order_index: Integer (per ordinamento custom)
    - template_id: FK -> CategoryTemplate (opzionale)
 
 5. CategoryTemplate
@@ -181,6 +182,8 @@ Authorization: tutte le rotte scrittura devono verificare che l'utente apparteng
   );
 
 - In `models.py` definire un mapping SQLAlchemy per `Movement` che mappi i campi esistenti e includa colonne addizionali FK (user_id, category_id, wallet_id) con nullable=True per retrocompatibilità.
+
+- **Aggiornamenti Schema**: Nuovi script SQL per evolutive del DB devono essere posizionati nella cartella `sql/sqllite/NEXT_RELEASE`.
 
 ## conf.py (contenuti e costanti)
 - COSTANTI / CONFIGURAZIONI (esempi):

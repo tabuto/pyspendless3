@@ -17,7 +17,7 @@
       <!--begin::End Navbar Links-->
       <ul class="navbar-nav ms-auto">
         <li class="nav-item">
-          <span class="navbar-text">
+          <a href="{{ url_for('settings_group') }}" class="nav-link" title="Account">
             <i class="bi bi-person-circle"></i> 
             {% if session.user_email %}
               {{ session.user_email.split('@')[0] }}
@@ -26,7 +26,7 @@
             {% else %}
               User
             {% endif %}
-          </span>
+          </a>
         </li>
       </ul>
       <!--end::End Navbar Links-->

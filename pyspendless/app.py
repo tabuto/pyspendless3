@@ -358,7 +358,8 @@ def create():
         wallet_repo = WalletRepository(db)
         movement_repo = MovementRepository(db)
         
-        categories = category_repo.get_categories_for_account(account_id)
+        # Recupera categorie ordinate per order_index
+        categories = category_repo.get_categories_for_account(account_id, order_by_index=True)
         wallets = wallet_repo.get_wallets_for_account(account_id)
         
         # Se movement_id è presente, recupera il movimento per la modifica
@@ -408,8 +409,8 @@ def movements():
         wallet_repo = WalletRepository(db)
         movement_repo = MovementRepository(db)
         
-        # Recupera dati per i filtri
-        categories = category_repo.get_categories_for_account(account_id)
+        # Recupera dati per i filtri (ordinati per order_index per UX migliore)
+        categories = category_repo.get_categories_for_account(account_id, order_by_index=True)
         wallets = wallet_repo.get_wallets_for_account(account_id)
         
         # Recupera movimenti filtrati
@@ -495,13 +496,14 @@ def api_get_categories():
     db = get_db_session()
     try:
         category_repo = CategoryRepository(db)
-        categories = category_repo.get_categories_for_account(account_id)
+        categories = category_repo.get_categories_for_account(account_id, order_by_index=True)
         
         result = [
             {
                 'id': cat.id,
                 'name': cat.name,
-                'type': cat.type
+                'type': cat.type,
+                'order_index': cat.order_index
             }
             for cat in categories
         ]
@@ -879,12 +881,14 @@ def api_create_category(account_id):
         category = category_repo.create_category(
             name=data['name'],
             account_id=account_id,
-            type=data['type']
+            type=data['type'],
+            order_index=data.get('order_index', 0)
         )
         return jsonify({
             'id': category.id,
             'name': category.name,
-            'type': category.type
+            'type': category.type,
+            'order_index': category.order_index
         }), 201
     finally:
         db.close()
@@ -914,23 +918,37 @@ def api_update_category(category_id):
         return jsonify({
             'id': category.id,
             'name': category.name,
-            'type': category.type
+            'type': category.type,
+            'order_index': category.order_index
         }), 200
+    except Exception as e:
+        logger.error(f"Errore aggiornamento categoria: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return jsonify({'error': f'Errore durante aggiornamento: {str(e)}'}), 500
     finally:
         db.close()
 
 
 @app.route("/api/categories/<int:category_id>", methods=['DELETE'])
 def api_delete_category(category_id):
-    """API per eliminare una categoria"""
+    """
+    API per eliminare una categoria.
+    Se la categoria ha movimenti, richiede target_category_id come parametro per spostare i movimenti.
+    """
     if not session.get('user_id'):
         return jsonify({'error': 'Non autenticato'}), 401
     
     account_id = session.get('account_id')
     
+    # Leggi parametri dalla query string o dal body JSON
+    data = request.get_json() if request.is_json else {}
+    target_category_id = data.get('target_category_id') or request.args.get('target_category_id', type=int)
+    
     db = get_db_session()
     try:
         category_repo = CategoryRepository(db)
+        movement_repo = MovementRepository(db)
+        
         category = category_repo.get_category(category_id)
         
         if not category:
@@ -940,13 +958,36 @@ def api_delete_category(category_id):
             return jsonify({'error': 'Accesso non autorizzato'}), 403
         
         # Verifica se la categoria è usata in movimenti
-        movement_repo = MovementRepository(db)
         movements = movement_repo.get_movements_for_account(account_id, category_id=category_id)
-        if movements:
-            return jsonify({'error': 'Impossibile eliminare: categoria utilizzata in movimenti'}), 400
+        movements_count = len(movements) if movements else 0
         
-        category_repo.delete_category(category_id)
-        return jsonify({'message': 'Categoria eliminata'}), 200
+        if movements_count > 0 and not target_category_id:
+            # Restituisce info per permettere al client di chiedere la categoria target
+            return jsonify({
+                'error': 'Categoria utilizzata in movimenti',
+                'requires_target': True,
+                'movements_count': movements_count,
+                'category_name': category.name,
+                'category_type': category.type
+            }), 400
+        
+        # Elimina la categoria (con migrazione se target_category_id è fornito)
+        success = category_repo.delete_category(category_id, target_category_id)
+        
+        if success:
+            message = 'Categoria eliminata con successo'
+            if target_category_id and movements_count > 0:
+                message = f'Categoria eliminata e {movements_count} movimenti spostati'
+            return jsonify({'message': message}), 200
+        else:
+            return jsonify({'error': 'Errore durante eliminazione'}), 500
+            
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"Errore eliminazione categoria: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return jsonify({'error': f'Errore durante eliminazione: {str(e)}'}), 500
     finally:
         db.close()
 
@@ -982,7 +1023,8 @@ def api_get_wallets(account_id):
                 'code': wallet.code,
                 'name': wallet.name,
                 'currency': wallet.currency,
-                'balance': balance
+                'balance': balance,
+                'order_index': wallet.order_index if hasattr(wallet, 'order_index') else 0
             })
         
         return jsonify(result), 200
@@ -1017,7 +1059,8 @@ def api_create_wallet(account_id):
             'id': wallet.id,
             'code': wallet.code,
             'name': wallet.name,
-            'currency': wallet.currency
+            'currency': wallet.currency,
+            'order_index': wallet.order_index if hasattr(wallet, 'order_index') else 0
         }), 201
     finally:
         db.close()
@@ -1048,7 +1091,8 @@ def api_update_wallet(wallet_id):
             'id': wallet.id,
             'code': wallet.code,
             'name': wallet.name,
-            'currency': wallet.currency
+            'currency': wallet.currency,
+            'order_index': wallet.order_index if hasattr(wallet, 'order_index') else 0
         }), 200
     finally:
         db.close()
@@ -1310,8 +1354,8 @@ def api_import_movements():
                 # Converti data
                 date_obj = datetime.strptime(move_date_str, '%Y-%m-%d').date()
                 
-                # Trova categoria
-                categories = category_repo.get_categories_for_account(account_id)
+                # Trova categoria (ordine non critico per import ma per consistenza usiamo order_by_index)
+                categories = category_repo.get_categories_for_account(account_id, order_by_index=True)
                 category = next((c for c in categories if c.name == category_name), None)
                 if not category:
                     errors.append(f"Categoria '{category_name}' non trovata")

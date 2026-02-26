@@ -72,6 +72,34 @@ def inject_admin_status():
     """Rende disponibile is_admin in tutti i template"""
     return {'is_admin': is_admin()}
 
+# ===== MAINTENANCE MODE =====
+@app.before_request
+def check_maintenance_mode():
+    """
+    Intercetta tutte le richieste e mostra la pagina di manutenzione
+    se la variabile d'ambiente MAINTENANCE_MODE è impostata a '1'.
+    
+    Esclude:
+    - File statici (CSS, JS, immagini)
+    - Eventuali endpoint di health check
+    """
+    # Rilegge la variabile ad ogni richiesta per hot-reload
+    maintenance_mode = os.getenv('MAINTENANCE_MODE', '0') == '1'
+    
+    if not maintenance_mode:
+        return None  # Continua normalmente
+    
+    # Escludi i file statici per permettere il rendering corretto della pagina
+    if request.path.startswith('/static/'):
+        return None
+    
+    # Escludi eventuali endpoint di health check (opzionale)
+    if request.path == '/health':
+        return None
+    
+    # Mostra la pagina di manutenzione
+    return render_template('ps-maintenance.html'), 503
+
 @app.route("/")
 def index():
     """

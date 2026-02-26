@@ -1,0 +1,24 @@
+{% extends "ps-auth.html" %}
+
+{% block title %}Manutenzione in corso{% endblock %}
+
+{% block auth_content %}
+<div class="text-center mb-4">
+    <h1><b>Py</b>Spendless</h1>
+</div>
+<div class="text-center mb-4">
+    <i class="fas fa-tools fa-4x text-warning"></i>
+</div>
+<h4 class="text-center mb-3">Manutenzione in corso</h4>
+<p class="login-box-msg">
+    Il servizio è temporaneamente non disponibile per manutenzione programmata.
+</p>
+<p class="text-center text-muted">
+    <small>Ci scusiamo per il disagio. Riprova tra qualche minuto.</small>
+</p>
+<div class="text-center mt-4">
+    <button onclick="window.location.reload()" class="btn btn-outline-secondary">
+        <i class="fas fa-sync-alt"></i> Riprova
+    </button>
+</div>
+{% endblock %}

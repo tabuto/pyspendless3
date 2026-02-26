@@ -79,6 +79,9 @@ WHITELIST_EMAILS = os.getenv('WHITELIST_EMAILS', '').split(',')
 # ===== ADMIN USER ID =====
 ADMIN_USER_ID = os.getenv('ADMIN_USER_ID')
 
+# ===== MAINTENANCE MODE =====
+MAINTENANCE_MODE = os.getenv('MAINTENANCE_MODE', '0') == '1'
+
 # ===== DATABASE ENGINE E SESSION =====
 # Engine globale per l'applicazione
 _engine = None

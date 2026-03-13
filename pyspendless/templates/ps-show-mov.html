@@ -117,6 +117,7 @@
           <h5 class="card-title mb-0">Elenco Movimenti</h5>
         </div>
         <div class="card-body">
+          <div class="table-responsive">
           <table id="movementsTable" class="table table-striped table-bordered table-hover">
             <thead>
               <tr>
@@ -156,6 +157,7 @@
               {% endfor %}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </div>
@@ -167,9 +169,12 @@
 
 <!-- DataTables -->
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap5.min.css">
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
+<script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap5.min.js"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -180,7 +185,17 @@ document.addEventListener('DOMContentLoaded', function() {
     },
     order: [[0, 'desc']], // Ordina per data decrescente
     pageLength: 25,
-    responsive: true
+    responsive: true,
+    columnDefs: [
+      { responsivePriority: 1, targets: 0 }, // Data — sempre visibile
+      { responsivePriority: 2, targets: 7 }, // Azioni — sempre visibile
+      { responsivePriority: 3, targets: 5 }, // Entrata
+      { responsivePriority: 3, targets: 6 }, // Uscita
+      { responsivePriority: 4, targets: 1 }, // Categoria
+      { responsivePriority: 5, targets: 2 }, // Wallet
+      { responsivePriority: 6, targets: 3 }, // Nota — collassabile
+      { responsivePriority: 6, targets: 4 }, // Utente — collassabile
+    ]
   });
 
   // Prepara dati per il grafico

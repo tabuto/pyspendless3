@@ -8,28 +8,28 @@
   {% endif %}
   <p>Gestisci le tue spese personali e condivise in modo semplice e sicuro.</p>
   
-  <div class="row mt-4">
-    <div class="col-md-4">
-      <div class="card">
-        <div class="card-body">
+  <div class="row mt-4 row-cols-1 row-cols-md-3 g-3">
+    <div class="col">
+      <div class="card h-100">
+        <div class="card-body d-flex flex-column">
           <h5 class="card-title mb-3"><i class="bi bi-plus-circle text-primary me-2"></i>Nuovo Movimento</h5>
-          <a href="{{ url_for('create') }}" class="btn btn-primary">Crea Movimento</a>
+          <a href="{{ url_for('create') }}" class="btn btn-primary mt-auto">Crea Movimento</a>
         </div>
       </div>
     </div>
-    <div class="col-md-4">
-      <div class="card">
-        <div class="card-body">
+    <div class="col">
+      <div class="card h-100">
+        <div class="card-body d-flex flex-column">
           <h5 class="card-title mb-3"><i class="bi bi-list-ul text-info me-2"></i>Visualizza Movimenti</h5>
-          <a href="{{ url_for('movements') }}" class="btn btn-info">Vedi Movimenti</a>
+          <a href="{{ url_for('movements') }}" class="btn btn-info mt-auto">Vedi Movimenti</a>
         </div>
       </div>
     </div>
-    <div class="col-md-4">
-      <div class="card">
-        <div class="card-body">
+    <div class="col">
+      <div class="card h-100">
+        <div class="card-body d-flex flex-column">
           <h5 class="card-title mb-3"><i class="bi bi-gear text-secondary me-2"></i>Impostazioni</h5>
-          <div class="btn-group-vertical w-100" role="group">
+          <div class="btn-group-vertical w-100 mt-auto" role="group">
             <a href="{{ url_for('settings_categories') }}" class="btn btn-outline-secondary btn-sm">
               <i class="bi bi-tag"></i> Categorie
             </a>

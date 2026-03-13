@@ -42,20 +42,10 @@
             </button>
           </div>
         </div>
-        <div class="card-body">
-          <table class="table" id="membersTable">
-            <thead>
-              <tr>
-                <th>Email</th>
-                <th>Nome</th>
-                <th>Stato</th>
-                <th>Azioni</th>
-              </tr>
-            </thead>
-            <tbody id="membersTableBody">
-              <!-- Popolato dinamicamente -->
-            </tbody>
-          </table>
+        <div class="card-body p-0">
+          <ul class="list-group list-group-flush" id="membersTable">
+            <!-- Popolato dinamicamente -->
+          </ul>
         </div>
       </div>
     </div>
@@ -65,20 +55,11 @@
         <div class="card-header">
           <h3 class="card-title mb-0">Inviti Pendenti</h3>
         </div>
-        <div class="card-body">
-          <table class="table" id="pendingInvitesTable">
-            <thead>
-              <tr>
-                <th>Email</th>
-                <th>Data Invito</th>
-                <th>Azioni</th>
-              </tr>
-            </thead>
-            <tbody id="pendingInvitesBody">
-              <!-- Popolato dinamicamente -->
-            </tbody>
-          </table>
-          <p class="text-muted" id="noPendingMessage" style="display: none;">
+        <div class="card-body p-0">
+          <ul class="list-group list-group-flush" id="pendingInvitesTable">
+            <!-- Popolato dinamicamente -->
+          </ul>
+          <p class="text-muted px-3 py-2" id="noPendingMessage" style="display: none;">
             Nessun invito in attesa
           </p>
         </div>
@@ -370,57 +351,58 @@ function loadGroupMembers() {
   fetch(`/api/accounts/${accountId}/users`)
   .then(response => response.json())
   .then(data => {
-    const tbody = document.getElementById('membersTableBody');
+    const list = document.getElementById('membersTable');
     
     if (data.error) {
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="4" class="text-center text-danger">
-            Errore: ${data.error}
-          </td>
-        </tr>
+      list.innerHTML = `
+        <li class="list-group-item text-center text-danger">
+          Errore: ${data.error}
+        </li>
       `;
       return;
     }
     
     if (data.users && data.users.length > 0) {
-      tbody.innerHTML = '';
+      list.innerHTML = '';
       data.users.forEach(user => {
-        const row = document.createElement('tr');
         const roleText = user.role === 'owner' ? 'Proprietario' : 'Membro';
-        row.innerHTML = `
-          <td>${user.email}</td>
-          <td>${user.name || 'N/A'}</td>
-          <td><span class="badge bg-${user.role === 'owner' ? 'primary' : 'info'}">${roleText}</span></td>
-          <td>
-            ${user.role !== 'owner' ? 
-              `<button class="btn btn-sm btn-danger" onclick="removeMember('${user.id}')">
-                <i class="bi bi-trash"></i> Rimuovi
-              </button>` : 
-              '-'}
-          </td>
+        const badgeColor = user.role === 'owner' ? 'primary' : 'info';
+        const actionBtn = user.role !== 'owner'
+          ? `<button class="btn btn-sm btn-outline-danger" onclick="removeMember('${user.id}')">
+               <i class="bi bi-person-dash"></i> Rimuovi
+             </button>`
+          : '';
+        const item = document.createElement('li');
+        item.className = 'list-group-item';
+        item.innerHTML = `
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+              <div class="fw-semibold"><i class="bi bi-person-circle me-1"></i>${user.email}</div>
+              <small class="text-muted">${user.name || 'N/A'}</small>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge bg-${badgeColor}">${roleText}</span>
+              ${actionBtn}
+            </div>
+          </div>
         `;
-        tbody.appendChild(row);
+        list.appendChild(item);
       });
     } else {
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="4" class="text-center text-muted">
-            Nessun utente trovato
-          </td>
-        </tr>
+      list.innerHTML = `
+        <li class="list-group-item text-center text-muted">
+          Nessun utente trovato
+        </li>
       `;
     }
   })
   .catch(error => {
     console.error('Errore caricamento membri:', error);
-    const tbody = document.getElementById('membersTableBody');
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="4" class="text-center text-danger">
-          Errore durante il caricamento dei membri
-        </td>
-      </tr>
+    const list = document.getElementById('membersTable');
+    list.innerHTML = `
+      <li class="list-group-item text-center text-danger">
+        Errore durante il caricamento dei membri
+      </li>
     `;
   });
 }
@@ -429,30 +411,32 @@ function loadPendingInvites() {
   fetch('/api/pending-invites')
   .then(response => response.json())
   .then(data => {
-    const tbody = document.getElementById('pendingInvitesBody');
+    const list = document.getElementById('pendingInvitesTable');
     const noPendingMsg = document.getElementById('noPendingMessage');
-    const table = document.getElementById('pendingInvitesTable');
     
     if (data.invites && data.invites.length > 0) {
-      tbody.innerHTML = '';
+      list.innerHTML = '';
       data.invites.forEach(invite => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td>${invite.email}</td>
-          <td>${invite.created_at}</td>
-          <td>
-            <button class="btn btn-sm btn-danger" onclick="deletePendingInvite('${invite.token_uuid}')">
+        const item = document.createElement('li');
+        item.className = 'list-group-item';
+        item.innerHTML = `
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+              <div class="fw-semibold"><i class="bi bi-envelope me-1"></i>${invite.email}</div>
+              <small class="text-muted">${invite.created_at}</small>
+            </div>
+            <button class="btn btn-sm btn-outline-danger" onclick="deletePendingInvite('${invite.token_uuid}')">
               <i class="bi bi-trash"></i> Elimina
             </button>
-          </td>
+          </div>
         `;
-        tbody.appendChild(row);
+        list.appendChild(item);
       });
-      table.style.display = 'table';
+      list.style.display = '';
       noPendingMsg.style.display = 'none';
     } else {
-      tbody.innerHTML = '';
-      table.style.display = 'none';
+      list.innerHTML = '';
+      list.style.display = 'none';
       noPendingMsg.style.display = 'block';
     }
   })

@@ -171,6 +171,7 @@ def auth_callback():
                 logger.info(f"Utente esistente: {existing_user.email}")
                 
                 # Salva informazioni in sessione
+                session.permanent = True
                 session['user_id'] = existing_user.id
                 session['user_email'] = existing_user.email
                 session['user_name'] = existing_user.name
@@ -221,6 +222,7 @@ def auth_callback():
                 logger.info(f"Utente creato da invito: {user.email}, account_id: {user.account_id}")
                 
                 # Salva informazioni in sessione
+                session.permanent = True
                 session['user_id'] = user.id
                 session['user_email'] = user.email
                 session['user_name'] = user.name
@@ -331,6 +333,7 @@ def onboarding_submit():
         logger.info(f"Onboarding completato per utente: {user.email}, account_id: {user.account_id}")
         
         # Salva informazioni in sessione
+        session.permanent = True
         session['user_id'] = user.id
         session['user_email'] = user.email
         session['user_name'] = user.name

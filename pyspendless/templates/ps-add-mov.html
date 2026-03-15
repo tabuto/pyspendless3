@@ -75,6 +75,15 @@ document.addEventListener('DOMContentLoaded', function() {
   if (!movementId) {
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('move_date').value = today;
+
+    // Preseleziona l'ultimo wallet usato (solo nuova creazione)
+    const lastWalletId = localStorage.getItem('ps_last_wallet_id');
+    if (lastWalletId) {
+      const walletSelect = document.getElementById('wallet');
+      if (walletSelect.querySelector(`option[value="${lastWalletId}"]`)) {
+        walletSelect.value = lastWalletId;
+      }
+    }
   }
 
   // Elementi del form
@@ -161,6 +170,12 @@ document.addEventListener('DOMContentLoaded', function() {
       const result = await response.json();
 
       if (response.ok) {
+        // Successo - memorizza l'ultimo wallet usato
+        const walletId = parseInt(document.getElementById('wallet').value);
+        if (!isNaN(walletId)) {
+          localStorage.setItem('ps_last_wallet_id', walletId.toString());
+        }
+
         // Successo - mostra messaggio
         showAlert(result.message || 'Salvataggio avvenuto con successo!', 'success');
         
@@ -173,6 +188,14 @@ document.addEventListener('DOMContentLoaded', function() {
           document.getElementById('movement_type').value = 'expense';
           // Rifiltra le categorie dopo il reset
           filterCategories();
+          // Ripristina la preselezione del wallet dopo il reset
+          const lastWalletId = localStorage.getItem('ps_last_wallet_id');
+          if (lastWalletId) {
+            const walletSelect = document.getElementById('wallet');
+            if (walletSelect.querySelector(`option[value="${lastWalletId}"]`)) {
+              walletSelect.value = lastWalletId;
+            }
+          }
         }
       } else {
         // Errore - mostra messaggio di errore

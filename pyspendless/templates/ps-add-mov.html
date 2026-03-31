@@ -14,6 +14,24 @@
         <form id="movement-form">
           <input type="hidden" id="movement_id" name="movement_id" value="{% if movement %}{{ movement.id }}{% endif %}">
           <div class="card-body">
+            {% if not movement %}
+            <div class="mb-3" id="recurrent-template-block">
+              <label for="recurrent_template" class="form-label">Spesa Ricorrente</label>
+              <select class="form-select" id="recurrent_template" name="recurrent_template">
+                <option value="">— Seleziona spesa ricorrente (opzionale) —</option>
+                {% for rt in recurrent_movements %}
+                  <option value="{{ rt.id }}"
+                          data-movement-type="{{ 'income' if rt.income else 'expense' }}"
+                          data-category-id="{{ rt.category_id }}"
+                          data-wallet-id="{{ rt.wallet_id }}"
+                          data-amount="{{ rt.income or rt.expense }}"
+                          data-note="{{ rt.note or '' }}">
+                    {{ rt.name }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+            {% endif %}
             <div class="mb-3">
               <label for="move_date" class="form-label">Data</label>
               <input type="date" class="form-control" id="move_date" name="move_date" 
@@ -128,6 +146,26 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Filtra le categorie al caricamento iniziale
   filterCategories();
+
+  // Listener selettore spesa ricorrente (solo in creazione)
+  document.getElementById('recurrent_template')?.addEventListener('change', function () {
+    const selected = this.options[this.selectedIndex];
+    if (!selected.value) return;
+
+    const movType = selected.dataset.movementType;
+    const categoryId = selected.dataset.categoryId;
+    const walletId = selected.dataset.walletId;
+    const amount = selected.dataset.amount;
+    const note = selected.dataset.note;
+
+    document.getElementById('movement_type').value = movType;
+    filterCategories();
+    document.getElementById('category').value = categoryId;
+    document.getElementById('wallet').value = walletId;
+    document.getElementById('amount').value = amount;
+    document.getElementById('note').value = note;
+    // La data NON viene toccata
+  });
 
   // Gestione submit del form
   form.addEventListener('submit', async function(e) {

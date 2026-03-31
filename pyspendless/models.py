@@ -25,6 +25,7 @@ class Account(Base):
     wallets = relationship('Wallet', back_populates='account')
     categories = relationship('Category', back_populates='account')
     groups = relationship('UserGroup', back_populates='account')
+    recurrent_movements = relationship('RecurrentMovement', back_populates='account')
 
 
 class User(Base):
@@ -177,6 +178,26 @@ class GroupMembership(Base):
     group = relationship('UserGroup', back_populates='memberships')
     user = relationship('User', foreign_keys=[user_id])
     invited_by = relationship('User', foreign_keys=[invited_by_user_id])
+
+
+class RecurrentMovement(Base):
+    """Template di spesa/entrata ricorrente — usato per pre-popolare il form di creazione movimento"""
+    __tablename__ = 'RecurrentMovement'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(Text, nullable=False)
+    category_id = Column(Integer, ForeignKey('Category.id'), nullable=False)
+    wallet_id = Column(Integer, ForeignKey('Wallet.id'), nullable=False)
+    income = Column(Numeric(10, 2), nullable=True)
+    expense = Column(Numeric(10, 2), nullable=True)
+    note = Column(Text, nullable=True)
+    account_id = Column(Integer, ForeignKey('Account.id'), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    # Relationships
+    category_obj = relationship('Category', foreign_keys=[category_id])
+    wallet_obj = relationship('Wallet', foreign_keys=[wallet_id])
+    account = relationship('Account', back_populates='recurrent_movements')
 
 
 class Token(Base):

@@ -15,12 +15,14 @@ from typing import Optional, List, Dict, Any
 try:
     from .models import (
         Account, User, Wallet, Category, CategoryTemplate, 
-        EmailWhitelist, Movement, UserGroup, GroupMembership, Token
+        EmailWhitelist, Movement, UserGroup, GroupMembership, Token,
+        RecurrentMovement
     )
 except ImportError:
     from models import (
         Account, User, Wallet, Category, CategoryTemplate, 
-        EmailWhitelist, Movement, UserGroup, GroupMembership, Token
+        EmailWhitelist, Movement, UserGroup, GroupMembership, Token,
+        RecurrentMovement
     )
 
 
@@ -1253,3 +1255,81 @@ class AdminRepository:
         except SQLAlchemyError:
             self.db.rollback()
             return False
+
+
+class RecurrentMovementRepository:
+    """Repository per la gestione delle spese ricorrenti"""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def get_all_for_account(self, account_id: int) -> List[RecurrentMovement]:
+        """Restituisce tutte le spese ricorrenti dell'account, ordinate per nome"""
+        return (
+            self.db.query(RecurrentMovement)
+            .filter(RecurrentMovement.account_id == account_id)
+            .order_by(RecurrentMovement.name)
+            .all()
+        )
+
+    def get_by_id(self, rm_id: int, account_id: int) -> Optional[RecurrentMovement]:
+        """Restituisce una spesa ricorrente per id, verificando l'appartenenza all'account"""
+        return (
+            self.db.query(RecurrentMovement)
+            .filter(
+                RecurrentMovement.id == rm_id,
+                RecurrentMovement.account_id == account_id
+            )
+            .first()
+        )
+
+    def create(self, account_id: int, name: str, category_id: int, wallet_id: int,
+               movement_type: str, amount: float, note: Optional[str] = None) -> RecurrentMovement:
+        """Crea una nuova spesa ricorrente"""
+        rm = RecurrentMovement(
+            name=name,
+            category_id=category_id,
+            wallet_id=wallet_id,
+            income=amount if movement_type == 'income' else None,
+            expense=amount if movement_type == 'expense' else None,
+            note=note,
+            account_id=account_id,
+        )
+        self.db.add(rm)
+        self.db.commit()
+        self.db.refresh(rm)
+        return rm
+
+    def update(self, rm_id: int, account_id: int, data: Dict[str, Any]) -> Optional[RecurrentMovement]:
+        """Aggiorna una spesa ricorrente esistente"""
+        rm = self.get_by_id(rm_id, account_id)
+        if not rm:
+            return None
+
+        if 'name' in data:
+            rm.name = data['name']
+        if 'category_id' in data:
+            rm.category_id = data['category_id']
+        if 'wallet_id' in data:
+            rm.wallet_id = data['wallet_id']
+        if 'note' in data:
+            rm.note = data.get('note')
+
+        movement_type = data.get('movement_type')
+        amount = data.get('amount')
+        if movement_type is not None and amount is not None:
+            rm.income = float(amount) if movement_type == 'income' else None
+            rm.expense = float(amount) if movement_type == 'expense' else None
+
+        self.db.commit()
+        self.db.refresh(rm)
+        return rm
+
+    def delete(self, rm_id: int, account_id: int) -> bool:
+        """Elimina una spesa ricorrente"""
+        rm = self.get_by_id(rm_id, account_id)
+        if not rm:
+            return False
+        self.db.delete(rm)
+        self.db.commit()
+        return True

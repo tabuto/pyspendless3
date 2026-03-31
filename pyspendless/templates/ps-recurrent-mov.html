@@ -1,0 +1,282 @@
+{% extends 'ps-nav.html' %}
+
+{% block nav_content %}
+<div class="container-fluid mt-4">
+  <h1 class="mb-4">Spese Ricorrenti</h1>
+
+  <!-- Alert container -->
+  <div id="alertContainer"></div>
+
+  <!-- ===== FORM CREA / MODIFICA ===== -->
+  <div class="card card-primary mb-4">
+    <div class="card-header">
+      <h3 class="card-title" id="form-title">Nuova Spesa Ricorrente</h3>
+    </div>
+    <form id="recurrent-form">
+      <input type="hidden" id="rm_id" value="">
+      <div class="card-body">
+        <div class="mb-3">
+          <label for="rm_name" class="form-label">Nome <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="rm_name" placeholder="Es. Affitto, Netflix…" required>
+        </div>
+        <div class="mb-3">
+          <label for="rm_movement_type" class="form-label">Tipo Movimento <span class="text-danger">*</span></label>
+          <select class="form-select" id="rm_movement_type" required>
+            <option value="expense">Uscita</option>
+            <option value="income">Entrata</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label for="rm_category" class="form-label">Categoria <span class="text-danger">*</span></label>
+          <select class="form-select" id="rm_category" required>
+            <option value="">Seleziona una categoria</option>
+            {% for cat in categories %}
+              <option value="{{ cat.id }}" data-type="{{ cat.type }}">{{ cat.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label for="rm_wallet" class="form-label">Wallet <span class="text-danger">*</span></label>
+          <select class="form-select" id="rm_wallet" required>
+            {% for wal in wallets %}
+              <option value="{{ wal.id }}">{{ wal.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label for="rm_amount" class="form-label">Importo (€) <span class="text-danger">*</span></label>
+          <input type="number" step="0.01" min="0.01" class="form-control" id="rm_amount" required>
+        </div>
+        <div class="mb-3">
+          <label for="rm_note" class="form-label">Nota</label>
+          <textarea class="form-control" id="rm_note" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="card-footer d-flex gap-2">
+        <button type="submit" class="btn btn-primary" id="submit-btn">Salva</button>
+        <button type="button" class="btn btn-secondary" id="cancel-btn" style="display:none">Annulla</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ===== LISTA ===== -->
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">Elenco Spese Ricorrenti</h3>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-striped table-hover mb-0" id="recurrent-table">
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Tipo</th>
+              <th>Categoria</th>
+              <th>Wallet</th>
+              <th>Importo</th>
+              <th>Nota</th>
+              <th>Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="recurrent-tbody">
+            {% for rm in recurrent_movements %}
+            <tr id="row-{{ rm.id }}">
+              <td>{{ rm.name }}</td>
+              <td>
+                {% if rm.income %}
+                  <span class="badge bg-success">Entrata</span>
+                {% else %}
+                  <span class="badge bg-danger">Uscita</span>
+                {% endif %}
+              </td>
+              <td>{{ rm.category_obj.name if rm.category_obj else '—' }}</td>
+              <td>{{ rm.wallet_obj.name if rm.wallet_obj else '—' }}</td>
+              <td>€ {{ "%.2f"|format(rm.income or rm.expense) }}</td>
+              <td>{{ rm.note or '' }}</td>
+              <td>
+                <button class="btn btn-sm btn-outline-primary me-1"
+                        onclick="editRecurrent({{ rm.id }}, '{{ rm.name|e }}', '{{ 'income' if rm.income else 'expense' }}', {{ rm.category_id }}, {{ rm.wallet_id }}, {{ rm.income or rm.expense }}, '{{ rm.note|e if rm.note else '' }}')">
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger"
+                        onclick="confirmDelete({{ rm.id }}, '{{ rm.name|e }}')">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </td>
+            </tr>
+            {% else %}
+            <tr id="empty-row">
+              <td colspan="7" class="text-center text-muted py-3">Nessuna spesa ricorrente definita</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal conferma eliminazione -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Conferma eliminazione</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        Sei sicuro di voler eliminare la spesa ricorrente <strong id="delete-name"></strong>?
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-danger" id="confirm-delete-btn">Elimina</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Tutte le categorie con il loro tipo, per filtraggio dinamico
+const allCategories = [
+  {% for cat in categories %}
+  { id: {{ cat.id }}, name: {{ cat.name|tojson }}, type: '{{ cat.type }}' },
+  {% endfor %}
+];
+
+const typeSelect = document.getElementById('rm_movement_type');
+const categorySelect = document.getElementById('rm_category');
+
+function filterCategories(selectedCategoryId = null) {
+  const selectedType = typeSelect.value;
+  categorySelect.innerHTML = '<option value="">Seleziona una categoria</option>';
+  allCategories.forEach(cat => {
+    if (cat.type === selectedType) {
+      const opt = document.createElement('option');
+      opt.value = cat.id;
+      opt.textContent = cat.name;
+      if (selectedCategoryId && cat.id === selectedCategoryId) opt.selected = true;
+      categorySelect.appendChild(opt);
+    }
+  });
+}
+
+typeSelect.addEventListener('change', () => filterCategories());
+filterCategories();
+
+// ===== Modifica =====
+function editRecurrent(id, name, movType, categoryId, walletId, amount, note) {
+  document.getElementById('rm_id').value = id;
+  document.getElementById('rm_name').value = name;
+  document.getElementById('rm_movement_type').value = movType;
+  filterCategories(categoryId);
+  document.getElementById('rm_wallet').value = walletId;
+  document.getElementById('rm_amount').value = amount;
+  document.getElementById('rm_note').value = note;
+
+  document.getElementById('form-title').textContent = 'Modifica Spesa Ricorrente';
+  document.getElementById('cancel-btn').style.display = '';
+  document.getElementById('submit-btn').textContent = 'Aggiorna';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+document.getElementById('cancel-btn').addEventListener('click', resetForm);
+
+function resetForm() {
+  document.getElementById('recurrent-form').reset();
+  document.getElementById('rm_id').value = '';
+  document.getElementById('form-title').textContent = 'Nuova Spesa Ricorrente';
+  document.getElementById('cancel-btn').style.display = 'none';
+  document.getElementById('submit-btn').textContent = 'Salva';
+  filterCategories();
+}
+
+// ===== Submit (crea / aggiorna) =====
+document.getElementById('recurrent-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const rmId = document.getElementById('rm_id').value;
+  const payload = {
+    name: document.getElementById('rm_name').value,
+    movement_type: document.getElementById('rm_movement_type').value,
+    category_id: parseInt(document.getElementById('rm_category').value),
+    wallet_id: parseInt(document.getElementById('rm_wallet').value),
+    amount: parseFloat(document.getElementById('rm_amount').value),
+    note: document.getElementById('rm_note').value || null,
+  };
+
+  const submitBtn = document.getElementById('submit-btn');
+  submitBtn.disabled = true;
+
+  try {
+    const url = rmId ? `/api/recurrent-movements/${rmId}` : '/api/recurrent-movements';
+    const method = rmId ? 'PUT' : 'POST';
+    const response = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json();
+
+    if (response.ok) {
+      showAlert(result.message || 'Operazione completata', 'success');
+      resetForm();
+      // Ricarica la pagina per aggiornare la lista
+      setTimeout(() => location.reload(), 800);
+    } else {
+      showAlert(result.error || 'Errore durante il salvataggio', 'danger');
+    }
+  } catch (err) {
+    showAlert('Errore di comunicazione: ' + err.message, 'danger');
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+// ===== Elimina =====
+let pendingDeleteId = null;
+
+function confirmDelete(id, name) {
+  pendingDeleteId = id;
+  document.getElementById('delete-name').textContent = name;
+  new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+
+document.getElementById('confirm-delete-btn').addEventListener('click', async function() {
+  if (!pendingDeleteId) return;
+  const modal = bootstrap.Modal.getInstance(document.getElementById('deleteModal'));
+  modal.hide();
+
+  try {
+    const response = await fetch(`/api/recurrent-movements/${pendingDeleteId}`, { method: 'DELETE' });
+    const result = await response.json();
+
+    if (response.ok) {
+      showAlert(result.message || 'Eliminata con successo', 'success');
+      const row = document.getElementById(`row-${pendingDeleteId}`);
+      if (row) row.remove();
+      if (!document.querySelector('#recurrent-tbody tr[id^="row-"]')) {
+        document.getElementById('recurrent-tbody').innerHTML =
+          '<tr id="empty-row"><td colspan="7" class="text-center text-muted py-3">Nessuna spesa ricorrente definita</td></tr>';
+      }
+    } else {
+      showAlert(result.error || 'Errore durante l\'eliminazione', 'danger');
+    }
+  } catch (err) {
+    showAlert('Errore di comunicazione: ' + err.message, 'danger');
+  } finally {
+    pendingDeleteId = null;
+  }
+});
+
+// ===== Utility alert =====
+function showAlert(message, type) {
+  const container = document.getElementById('alertContainer');
+  const div = document.createElement('div');
+  div.className = `alert alert-${type} alert-dismissible fade show`;
+  div.role = 'alert';
+  div.innerHTML = `${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+  container.innerHTML = '';
+  container.appendChild(div);
+  setTimeout(() => { div.classList.remove('show'); setTimeout(() => div.remove(), 150); }, 5000);
+}
+</script>
+{% endblock %}

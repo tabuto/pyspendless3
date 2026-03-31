@@ -8,10 +8,10 @@ from flask import Flask, render_template, redirect, url_for, session, request, f
 # Support both relative and absolute imports
 try:
     from .conf import load_env, SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI, BASE_URL, ADMIN_USER_ID, get_db_session
-    from .repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, StatsRepository, AdminRepository, UnauthorizedError
+    from .repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, StatsRepository, AdminRepository, RecurrentMovementRepository, UnauthorizedError
 except ImportError:
     from conf import load_env, SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI, BASE_URL, ADMIN_USER_ID, get_db_session
-    from repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, StatsRepository, AdminRepository, UnauthorizedError
+    from repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, StatsRepository, AdminRepository, RecurrentMovementRepository, UnauthorizedError
 
 import os
 import logging
@@ -388,6 +388,7 @@ def create():
         category_repo = CategoryRepository(db)
         wallet_repo = WalletRepository(db)
         movement_repo = MovementRepository(db)
+        recurrent_repo = RecurrentMovementRepository(db)
         
         # Recupera categorie ordinate per order_index
         categories = category_repo.get_categories_for_account(account_id, order_by_index=True)
@@ -401,11 +402,14 @@ def create():
                 flash('Movimento non trovato', 'error')
                 return redirect(url_for('movements'))
         
+        recurrent_movements = recurrent_repo.get_all_for_account(account_id)
+
         return render_template(
             "ps-add-mov.html", 
             categories=categories, 
             wallets=wallets,
             movement=movement,
+            recurrent_movements=recurrent_movements,
             users=[]  # TODO: implementare quando ci saranno i gruppi
         )
     finally:
@@ -735,6 +739,152 @@ def search_movements():
             per_page=result['per_page'],
             search_text=search_text
         )
+    finally:
+        db.close()
+
+
+
+# ========== RECURRENT MOVEMENTS ==========
+
+@app.route("/recurrent-movements")
+def recurrent_movements_page():
+    """Pagina gestione spese ricorrenti"""
+    if not session.get('user_id'):
+        flash('Devi effettuare il login', 'warning')
+        return redirect(url_for('login'))
+
+    account_id = session.get('account_id')
+    db = get_db_session()
+    try:
+        recurrent_repo = RecurrentMovementRepository(db)
+        category_repo = CategoryRepository(db)
+        wallet_repo = WalletRepository(db)
+
+        recurrent_movements = recurrent_repo.get_all_for_account(account_id)
+        categories = category_repo.get_categories_for_account(account_id, order_by_index=True)
+        wallets = wallet_repo.get_wallets_for_account(account_id)
+
+        return render_template(
+            'ps-recurrent-mov.html',
+            recurrent_movements=recurrent_movements,
+            categories=categories,
+            wallets=wallets,
+        )
+    finally:
+        db.close()
+
+
+@app.route("/api/recurrent-movements", methods=['GET'])
+def api_get_recurrent_movements():
+    """Lista spese ricorrenti dell'account corrente"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+
+    account_id = session.get('account_id')
+    db = get_db_session()
+    try:
+        recurrent_repo = RecurrentMovementRepository(db)
+        items = recurrent_repo.get_all_for_account(account_id)
+        return jsonify([
+            {
+                'id': rm.id,
+                'name': rm.name,
+                'category_id': rm.category_id,
+                'category_name': rm.category_obj.name if rm.category_obj else None,
+                'wallet_id': rm.wallet_id,
+                'wallet_name': rm.wallet_obj.name if rm.wallet_obj else None,
+                'income': float(rm.income) if rm.income is not None else None,
+                'expense': float(rm.expense) if rm.expense is not None else None,
+                'note': rm.note,
+            }
+            for rm in items
+        ]), 200
+    finally:
+        db.close()
+
+
+@app.route("/api/recurrent-movements", methods=['POST'])
+def api_create_recurrent_movement():
+    """Crea una nuova spesa ricorrente"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+
+    account_id = session.get('account_id')
+    data = request.get_json()
+
+    if not data:
+        return jsonify({'error': 'Dati mancanti'}), 400
+
+    required = ['name', 'category_id', 'wallet_id', 'movement_type', 'amount']
+    missing = [f for f in required if not data.get(f)]
+    if missing:
+        return jsonify({'error': f'Campi obbligatori mancanti: {", ".join(missing)}'}), 400
+
+    if data['movement_type'] not in ('income', 'expense'):
+        return jsonify({'error': 'movement_type deve essere income o expense'}), 400
+
+    db = get_db_session()
+    try:
+        recurrent_repo = RecurrentMovementRepository(db)
+        rm = recurrent_repo.create(
+            account_id=account_id,
+            name=data['name'],
+            category_id=int(data['category_id']),
+            wallet_id=int(data['wallet_id']),
+            movement_type=data['movement_type'],
+            amount=float(data['amount']),
+            note=data.get('note'),
+        )
+        return jsonify({'id': rm.id, 'message': 'Spesa ricorrente creata con successo'}), 201
+    except Exception as e:
+        logger.error(f"Errore creazione spesa ricorrente: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/recurrent-movements/<int:rm_id>", methods=['PUT'])
+def api_update_recurrent_movement(rm_id):
+    """Aggiorna una spesa ricorrente"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+
+    account_id = session.get('account_id')
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Dati mancanti'}), 400
+
+    db = get_db_session()
+    try:
+        recurrent_repo = RecurrentMovementRepository(db)
+        rm = recurrent_repo.update(rm_id, account_id, data)
+        if not rm:
+            return jsonify({'error': 'Spesa ricorrente non trovata'}), 404
+        return jsonify({'id': rm.id, 'message': 'Spesa ricorrente aggiornata con successo'}), 200
+    except Exception as e:
+        logger.error(f"Errore aggiornamento spesa ricorrente: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route("/api/recurrent-movements/<int:rm_id>", methods=['DELETE'])
+def api_delete_recurrent_movement(rm_id):
+    """Elimina una spesa ricorrente"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+
+    account_id = session.get('account_id')
+    db = get_db_session()
+    try:
+        recurrent_repo = RecurrentMovementRepository(db)
+        deleted = recurrent_repo.delete(rm_id, account_id)
+        if not deleted:
+            return jsonify({'error': 'Spesa ricorrente non trovata'}), 404
+        return jsonify({'message': 'Spesa ricorrente eliminata con successo'}), 200
+    except Exception as e:
+        logger.error(f"Errore eliminazione spesa ricorrente: {e}")
+        return jsonify({'error': str(e)}), 500
     finally:
         db.close()
 

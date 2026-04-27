@@ -811,6 +811,55 @@ def search_movements():
 
 
 
+@app.route("/api/search-movements", methods=['GET'])
+def api_search_movements():
+    """
+    API JSON per la ricerca movimenti con paginazione.
+    Utilizzata dalla vista card mobile con infinite scroll.
+    """
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+
+    account_id  = session.get('account_id')
+    search_text = request.args.get('search', '').strip()
+    page        = max(1, request.args.get('page',     type=int, default=1))
+    per_page    = min(50, max(1, request.args.get('per_page', type=int, default=20)))
+
+    db = get_db_session()
+    try:
+        movement_repo = MovementRepository(db)
+        result = movement_repo.search_movements(
+            account_id=account_id,
+            search_text=search_text if search_text else None,
+            page=page,
+            per_page=per_page
+        )
+
+        movements_out = []
+        for mov in result['movements']:
+            category_name = mov.category_obj.name if mov.category_obj else mov.category
+            wallet_name   = mov.wallet_obj.name   if mov.wallet_obj   else mov.wallet
+            movements_out.append({
+                'id':        mov.id,
+                'move_date': mov.move_date.strftime('%d/%m/%Y'),
+                'category':  category_name,
+                'wallet':    wallet_name,
+                'income':    float(mov.income)  if mov.income  is not None else None,
+                'expense':   float(mov.expense) if mov.expense is not None else None,
+                'note':      mov.note or '',
+            })
+
+        return jsonify({
+            'movements': movements_out,
+            'page':      result['current_page'],
+            'per_page':  result['per_page'],
+            'total':     result['total'],
+            'has_more':  result['current_page'] < result['pages'],
+        }), 200
+    finally:
+        db.close()
+
+
 # ========== RECURRENT MOVEMENTS ==========
 
 @app.route("/recurrent-movements")

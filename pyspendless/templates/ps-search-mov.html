@@ -31,6 +31,26 @@
             </div>
           </form>
 
+          <!-- Card list — visibile solo su mobile (<md) -->
+          <div id="movements-card-list" class="d-md-none">
+            <div id="cards-container"></div>
+            <div id="load-more-trigger" style="height:1px;"></div>
+            <div id="cards-spinner" class="text-center py-3 d-none">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Caricamento...</span>
+              </div>
+            </div>
+            <div id="no-more-msg" class="text-center text-muted py-3 d-none">
+              Nessun altro movimento
+            </div>
+            <div id="no-results-msg" class="text-center text-muted py-3 d-none">
+              Nessun movimento trovato
+            </div>
+          </div>
+
+          <!-- Tabella — visibile solo su desktop (≥md) -->
+          <div class="d-none d-md-block">
+
           <!-- Risultati -->
           {% if total > 0 %}
           <div class="mb-3">
@@ -133,6 +153,8 @@
             {% endif %}
           </div>
           {% endif %}
+
+          </div> <!-- end d-none d-md-block -->
         </div>
       </div>
     </div>
@@ -188,5 +210,107 @@ function showAlert(message, type) {
     setTimeout(() => alert.remove(), 150);
   }, 5000);
 }
+
+// ── Infinite scroll card list (mobile) ──────────────────────────────────
+(function () {
+  let currentPage = 0;
+  let isLoading   = false;
+  let hasMore     = true;
+
+  const container = document.getElementById('cards-container');
+  const trigger   = document.getElementById('load-more-trigger');
+  const spinner   = document.getElementById('cards-spinner');
+  const noMore    = document.getElementById('no-more-msg');
+  const noResults = document.getElementById('no-results-msg');
+
+  function buildApiUrl(page) {
+    const params = new URLSearchParams(window.location.search);
+    params.set('page', page);
+    params.set('per_page', 20);
+    return '/api/search-movements?' + params.toString();
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function renderCards(movements) {
+    movements.forEach(function (mov) {
+      const isExpense  = mov.expense !== null;
+      const amount     = isExpense ? mov.expense : mov.income;
+      const colorClass = isExpense ? 'text-danger' : 'text-success';
+      const sign       = isExpense ? '−' : '+';
+      const note       = mov.note ? escHtml(mov.note) : '';
+
+      const card = document.createElement('div');
+      card.className = 'card mb-2 shadow-sm';
+      card.innerHTML =
+        '<div class="card-body py-2 px-3">' +
+          '<div class="d-flex justify-content-between align-items-center">' +
+            '<div class="text-truncate me-2" style="max-width:60%">' +
+              '<span class="fw-semibold">' + escHtml(mov.category) + '</span>' +
+              '<span class="text-muted small ms-1">· ' + escHtml(mov.wallet) + '</span>' +
+            '</div>' +
+            '<span class="fw-bold fs-5 ' + colorClass + ' text-nowrap">' +
+              sign + ' € ' + parseFloat(amount).toFixed(2) +
+            '</span>' +
+          '</div>' +
+          '<div class="d-flex justify-content-between align-items-center mt-1">' +
+            '<span class="text-muted small">' + escHtml(mov.move_date) + '</span>' +
+            (note ? '<span class="text-muted small fst-italic text-truncate ms-2" style="max-width:50%">' + note + '</span>' : '') +
+          '</div>' +
+          '<div class="mt-2 text-end">' +
+            '<a href="/create?movement_id=' + encodeURIComponent(mov.id) + '" class="btn btn-sm btn-outline-primary py-0 px-2 me-1" title="Modifica">' +
+              '<i class="fas fa-edit"></i>' +
+            '</a>' +
+            '<button onclick="deleteMovement(\'' + mov.id + '\')" class="btn btn-sm btn-outline-danger py-0 px-2" title="Elimina">' +
+              '<i class="fas fa-trash"></i>' +
+            '</button>' +
+          '</div>' +
+        '</div>';
+      container.appendChild(card);
+    });
+  }
+
+  async function loadMore() {
+    if (isLoading || !hasMore) return;
+    isLoading = true;
+    spinner.classList.remove('d-none');
+
+    try {
+      const res  = await fetch(buildApiUrl(currentPage + 1));
+      const data = await res.json();
+
+      currentPage = data.page;
+      hasMore     = data.has_more;
+
+      if (currentPage === 1 && data.movements.length === 0) {
+        noResults.classList.remove('d-none');
+      } else {
+        renderCards(data.movements);
+        if (!hasMore) {
+          noMore.classList.remove('d-none');
+        }
+      }
+    } catch (e) {
+      console.error('Errore caricamento movimenti:', e);
+    } finally {
+      isLoading = false;
+      spinner.classList.add('d-none');
+    }
+  }
+
+  const observer = new IntersectionObserver(function (entries) {
+    if (entries[0].isIntersecting) {
+      loadMore();
+    }
+  }, { threshold: 0.1 });
+
+  observer.observe(trigger);
+})();
 </script>
 {% endblock %}

@@ -109,7 +109,7 @@
     </div>
   </div>
 
-  <!-- Tabella Movimenti -->
+  <!-- Elenco Movimenti: card su mobile, tabella su desktop -->
   <div class="row">
     <div class="col-12">
       <div class="card">
@@ -117,47 +117,66 @@
           <h5 class="card-title mb-0">Elenco Movimenti</h5>
         </div>
         <div class="card-body">
-          <div class="table-responsive">
-          <table id="movementsTable" class="table table-striped table-bordered table-hover">
-            <thead>
-              <tr>
-                <th>Data</th>
-                <th>Categoria</th>
-                <th>Wallet</th>
-                <th>Nota</th>
-                <th>Utente</th>
-                <th class="text-end">Entrata</th>
-                <th class="text-end">Uscita</th>
-                <th class="text-center">Azioni</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for mov in movements %}
-              <tr>
-                <td>{{ mov.move_date.strftime('%d/%m/%Y') }}</td>
-                <td>{{ mov.category }}</td>
-                <td>{{ mov.wallet_obj.name if mov.wallet_obj else mov.wallet }}</td>
-                <td>{{ mov.note if mov.note else '-' }}</td>
-                <td>{{ mov.user }}</td>
-                <td class="text-end text-success">
-                  {% if mov.income %}€ {{ "%.2f"|format(mov.income) }}{% else %}-{% endif %}
-                </td>
-                <td class="text-end text-danger">
-                  {% if mov.expense %}€ {{ "%.2f"|format(mov.expense) }}{% else %}-{% endif %}
-                </td>
-                <td class="text-center">
-                  <a href="/create?movement_id={{ mov.id }}" class="btn btn-sm btn-primary" title="Modifica">
-                    <i class="bi bi-pencil"></i>
-                  </a>
-                  <button class="btn btn-sm btn-danger" onclick="deleteMovement('{{ mov.id }}')" title="Elimina">
-                    <i class="bi bi-trash"></i>
-                  </button>
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+
+          <!-- Card list — visibile solo su mobile (<md) -->
+          <div id="movements-card-list" class="d-md-none">
+            <div id="cards-container"></div>
+            <div id="load-more-trigger" style="height:1px;"></div>
+            <div id="cards-spinner" class="text-center py-3 d-none">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Caricamento...</span>
+              </div>
+            </div>
+            <div id="no-more-msg" class="text-center text-muted py-3 d-none">
+              Nessun altro movimento
+            </div>
           </div>
+
+          <!-- Tabella DataTables — visibile solo su desktop (≥md) -->
+          <div class="d-none d-md-block">
+            <div class="table-responsive">
+            <table id="movementsTable" class="table table-striped table-bordered table-hover">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Categoria</th>
+                  <th>Wallet</th>
+                  <th>Nota</th>
+                  <th>Utente</th>
+                  <th class="text-end">Entrata</th>
+                  <th class="text-end">Uscita</th>
+                  <th class="text-center">Azioni</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for mov in movements %}
+                <tr>
+                  <td>{{ mov.move_date.strftime('%d/%m/%Y') }}</td>
+                  <td>{{ mov.category }}</td>
+                  <td>{{ mov.wallet_obj.name if mov.wallet_obj else mov.wallet }}</td>
+                  <td>{{ mov.note if mov.note else '-' }}</td>
+                  <td>{{ mov.user }}</td>
+                  <td class="text-end text-success">
+                    {% if mov.income %}€ {{ "%.2f"|format(mov.income) }}{% else %}-{% endif %}
+                  </td>
+                  <td class="text-end text-danger">
+                    {% if mov.expense %}€ {{ "%.2f"|format(mov.expense) }}{% else %}-{% endif %}
+                  </td>
+                  <td class="text-center">
+                    <a href="/create?movement_id={{ mov.id }}" class="btn btn-sm btn-primary" title="Modifica">
+                      <i class="bi bi-pencil"></i>
+                    </a>
+                    <button class="btn btn-sm btn-danger" onclick="deleteMovement('{{ mov.id }}')" title="Elimina">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
@@ -178,7 +197,8 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  // Inizializza DataTables
+  // Inizializza DataTables solo su desktop (la tabella è d-none su mobile)
+  if (window.matchMedia('(min-width: 768px)').matches) {
   $('#movementsTable').DataTable({
     language: {
       url: 'https://cdn.datatables.net/plug-ins/1.13.7/i18n/it-IT.json'
@@ -197,6 +217,7 @@ document.addEventListener('DOMContentLoaded', function() {
       { responsivePriority: 6, targets: 4 }, // Utente — collassabile
     ]
   });
+  } // end matchMedia desktop
 
   // Prepara dati per il grafico
   const expensesData = {{ stats.expenses_by_category | tojson }};
@@ -287,6 +308,108 @@ document.addEventListener('DOMContentLoaded', function() {
       alert('Errore di comunicazione con il server: ' + error.message);
     }
   };
-});
+
+  // ── Infinite scroll card list (mobile) ──────────────────────────────────
+  (function () {
+    // L'IntersectionObserver non scatta se il contenitore è display:none (desktop),
+    // quindi non serve guard esplicito sul viewport width.
+    let currentPage = 0;
+    let isLoading   = false;
+    let hasMore     = true;
+
+    const container = document.getElementById('cards-container');
+    const trigger   = document.getElementById('load-more-trigger');
+    const spinner   = document.getElementById('cards-spinner');
+    const noMore    = document.getElementById('no-more-msg');
+
+    function buildApiUrl(page) {
+      const params = new URLSearchParams(window.location.search);
+      params.set('page', page);
+      params.set('per_page', 20);
+      return '/api/movements?' + params.toString();
+    }
+
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function renderCards(movements) {
+      movements.forEach(function (mov) {
+        const isExpense   = mov.expense !== null;
+        const amount      = isExpense ? mov.expense : mov.income;
+        const colorClass  = isExpense ? 'text-danger' : 'text-success';
+        const sign        = isExpense ? '−' : '+';
+        const note        = mov.note ? escHtml(mov.note) : '';
+
+        const card = document.createElement('div');
+        card.className = 'card mb-2 shadow-sm';
+        card.innerHTML =
+          '<div class="card-body py-2 px-3">' +
+            '<div class="d-flex justify-content-between align-items-center">' +
+              '<div class="text-truncate me-2" style="max-width:60%">' +
+                '<span class="fw-semibold">' + escHtml(mov.category) + '</span>' +
+                '<span class="text-muted small ms-1">· ' + escHtml(mov.wallet) + '</span>' +
+              '</div>' +
+              '<span class="fw-bold fs-5 ' + colorClass + ' text-nowrap">' +
+                sign + ' € ' + parseFloat(amount).toFixed(2) +
+              '</span>' +
+            '</div>' +
+            '<div class="d-flex justify-content-between align-items-center mt-1">' +
+              '<span class="text-muted small">' + escHtml(mov.move_date) + '</span>' +
+              (note ? '<span class="text-muted small fst-italic text-truncate ms-2" style="max-width:50%">' + note + '</span>' : '') +
+            '</div>' +
+            '<div class="mt-2 text-end">' +
+              '<a href="/create?movement_id=' + encodeURIComponent(mov.id) + '" class="btn btn-sm btn-outline-primary py-0 px-2 me-1" title="Modifica">' +
+                '<i class="bi bi-pencil"></i>' +
+              '</a>' +
+              '<button onclick="deleteMovement(\'' + mov.id + '\')" class="btn btn-sm btn-outline-danger py-0 px-2" title="Elimina">' +
+                '<i class="bi bi-trash"></i>' +
+              '</button>' +
+            '</div>' +
+          '</div>';
+        container.appendChild(card);
+      });
+    }
+
+    async function loadMore() {
+      if (isLoading || !hasMore) return;
+      isLoading = true;
+      spinner.classList.remove('d-none');
+
+      try {
+        const res  = await fetch(buildApiUrl(currentPage + 1));
+        const data = await res.json();
+
+        currentPage = data.page;
+        hasMore     = data.has_more;
+
+        renderCards(data.movements);
+
+        if (!hasMore) {
+          noMore.classList.remove('d-none');
+        }
+      } catch (e) {
+        console.error('Errore caricamento movimenti:', e);
+      } finally {
+        isLoading = false;
+        spinner.classList.add('d-none');
+      }
+    }
+
+    // IntersectionObserver: carica appena la sentinella entra nel viewport
+    const observer = new IntersectionObserver(function (entries) {
+      if (entries[0].isIntersecting) {
+        loadMore();
+      }
+    }, { threshold: 0.1 });
+
+    observer.observe(trigger);
+  })();
+
+}); // end DOMContentLoaded
 </script>
 {% endblock %}

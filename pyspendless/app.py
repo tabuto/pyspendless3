@@ -548,6 +548,73 @@ def api_get_categories():
         db.close()
 
 
+@app.route("/api/movements", methods=['GET'])
+def api_get_movements():
+    """
+    API per recuperare i movimenti dell'account con filtri e paginazione.
+    Utilizzata dalla vista card mobile con infinite scroll.
+    """
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+
+    account_id = session.get('account_id')
+
+    from datetime import datetime as _dt
+    current_year = _dt.now().year
+    current_month = _dt.now().month
+
+    year         = request.args.get('year',          type=int, default=current_year)
+    month        = request.args.get('month',         type=int, default=current_month)
+    wallet_id    = request.args.get('wallet_id',     type=int, default=None)
+    category_type = request.args.get('category_type', default=None)
+    category_id  = request.args.get('category_id',  type=int, default=None)
+    page         = max(1, request.args.get('page',   type=int, default=1))
+    per_page     = min(50, max(1, request.args.get('per_page', type=int, default=20)))
+
+    db = get_db_session()
+    try:
+        movement_repo = MovementRepository(db)
+        all_movements = movement_repo.get_movements_for_account(
+            account_id=account_id,
+            wallet_id=wallet_id,
+            year=year,
+            month=month,
+            category_id=category_id,
+            category_type=category_type
+        )
+
+        total    = len(all_movements)
+        offset   = (page - 1) * per_page
+        page_items = all_movements[offset: offset + per_page]
+        has_more = (offset + per_page) < total
+
+        result = []
+        for mov in page_items:
+            category_name = mov.category_obj.name if mov.category_obj else mov.category
+            wallet_name   = mov.wallet_obj.name   if mov.wallet_obj   else mov.wallet
+            user_name     = mov.user_obj.name     if mov.user_obj     else (mov.user or '')
+            result.append({
+                'id':        mov.id,
+                'move_date': mov.move_date.strftime('%d/%m/%Y'),
+                'category':  category_name,
+                'wallet':    wallet_name,
+                'income':    float(mov.income)  if mov.income  is not None else None,
+                'expense':   float(mov.expense) if mov.expense is not None else None,
+                'note':      mov.note or '',
+                'user':      user_name,
+            })
+
+        return jsonify({
+            'movements': result,
+            'page':      page,
+            'per_page':  per_page,
+            'total':     total,
+            'has_more':  has_more,
+        }), 200
+    finally:
+        db.close()
+
+
 @app.route("/api/movements", methods=['POST'])
 def api_create_movement():
     """

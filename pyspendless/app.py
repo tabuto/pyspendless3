@@ -2234,10 +2234,6 @@ def api_filters_years():
         return jsonify({'error': f'Errore: {str(e)}'}), 500
 
 
-if __name__ == "__main__":
-    app.run(debug=True)
-
-
 # =============================================
 # Reports Routes
 # =============================================
@@ -2322,3 +2318,6 @@ def api_reports_annual():
         logger.error(f"Errore generazione report PDF: {str(e)}")
         logger.debug(traceback.format_exc())
         return jsonify({'error': f'Errore generazione PDF: {str(e)}'}), 500
+
+if __name__ == "__main__":
+    app.run(debug=True)

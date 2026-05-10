@@ -1333,3 +1333,214 @@ class RecurrentMovementRepository:
         self.db.delete(rm)
         self.db.commit()
         return True
+
+
+class ReportRepository:
+    """Repository per la generazione dei dati del report annuale"""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def get_annual_report_data(self, account_id: int, year: int) -> Dict[str, Any]:
+        """
+        Raccoglie tutti i dati necessari per il report annuale PDF.
+
+        Returns:
+            Dizionario strutturato con tutte le sezioni del report.
+        """
+        from sqlalchemy import text
+
+        def q(sql, params):
+            return self.db.execute(text(sql), params).fetchall()
+
+        # Q1 – Sommario anno
+        row = q("""
+            SELECT
+                COALESCE(SUM(income), 0)  AS tot_income,
+                COALESCE(SUM(expense), 0) AS tot_expense,
+                COUNT(*)                   AS n_movimenti
+            FROM Movement
+            WHERE account_id = :account_id AND move_year = :year
+        """, {"account_id": account_id, "year": year})[0]
+        tot_income = float(row.tot_income)
+        tot_expense = float(row.tot_expense)
+        summary = {
+            "year": year,
+            "tot_income": tot_income,
+            "tot_expense": tot_expense,
+            "saldo": round(tot_income - tot_expense, 2),
+            "n_movimenti": int(row.n_movimenti),
+        }
+
+        # Q2 – Serie storica anni
+        rows = q("""
+            SELECT
+                move_year,
+                ROUND(COALESCE(SUM(income), 0),  2) AS tot_income,
+                ROUND(COALESCE(SUM(expense), 0), 2) AS tot_expense,
+                COUNT(*) AS n_movimenti
+            FROM Movement
+            WHERE account_id = :account_id
+            GROUP BY move_year
+            ORDER BY move_year
+        """, {"account_id": account_id})
+        yearly_history = []
+        for i, r in enumerate(rows):
+            prev_exp = float(rows[i - 1].tot_expense) if i > 0 else None
+            cur_exp = float(r.tot_expense)
+            delta_pct = None
+            if prev_exp and prev_exp > 0:
+                delta_pct = round((cur_exp - prev_exp) / prev_exp * 100, 1)
+            yearly_history.append({
+                "year": r.move_year,
+                "tot_income": float(r.tot_income),
+                "tot_expense": cur_exp,
+                "saldo": round(float(r.tot_income) - cur_exp, 2),
+                "n_movimenti": int(r.n_movimenti),
+                "delta_expense_pct": delta_pct,
+            })
+
+        # Q3 – Trend mensile anno selezionato
+        rows = q("""
+            SELECT
+                move_month,
+                ROUND(COALESCE(SUM(income), 0),  2) AS tot_income,
+                ROUND(COALESCE(SUM(expense), 0), 2) AS tot_expense
+            FROM Movement
+            WHERE account_id = :account_id AND move_year = :year
+            GROUP BY move_month
+            ORDER BY move_month
+        """, {"account_id": account_id, "year": year})
+        month_data = {r.move_month: (float(r.tot_income), float(r.tot_expense)) for r in rows}
+        monthly_trend = [
+            {"month": m, "income": month_data.get(m, (0, 0))[0], "expense": month_data.get(m, (0, 0))[1]}
+            for m in range(1, 13)
+        ]
+
+        # Q4 – Top 10 spese singole
+        rows = q("""
+            SELECT
+                m.move_date,
+                m.category,
+                COALESCE(w.name, m.wallet) AS wallet_name,
+                m.note,
+                m.expense
+            FROM Movement m
+            LEFT JOIN Wallet w ON m.wallet_id = w.id
+            WHERE m.account_id = :account_id AND m.move_year = :year
+              AND m.expense IS NOT NULL
+            ORDER BY m.expense DESC
+            LIMIT 10
+        """, {"account_id": account_id, "year": year})
+        top_expenses = [
+            {
+                "date": str(r.move_date),
+                "category": r.category,
+                "wallet": r.wallet_name,
+                "note": r.note or "",
+                "amount": float(r.expense),
+            }
+            for r in rows
+        ]
+
+        # Q5 – Spese per categoria anno corrente
+        rows_cur = q("""
+            SELECT
+                category,
+                ROUND(SUM(expense), 2) AS tot_expense,
+                COUNT(*)               AS n_movimenti
+            FROM Movement
+            WHERE account_id = :account_id AND move_year = :year
+              AND expense IS NOT NULL
+            GROUP BY category
+            ORDER BY tot_expense DESC
+        """, {"account_id": account_id, "year": year})
+
+        # Q5b – Spese per categoria anno precedente (per confronto)
+        rows_prev = q("""
+            SELECT category, ROUND(SUM(expense), 2) AS tot_expense
+            FROM Movement
+            WHERE account_id = :account_id AND move_year = :prev_year
+              AND expense IS NOT NULL
+            GROUP BY category
+        """, {"account_id": account_id, "prev_year": year - 1})
+        prev_by_cat = {r.category: float(r.tot_expense) for r in rows_prev}
+
+        expense_by_category = []
+        for r in rows_cur:
+            cur = float(r.tot_expense)
+            prev = prev_by_cat.get(r.category, 0.0)
+            pct_budget = round(cur / tot_expense * 100, 1) if tot_expense else 0
+            delta = round(((cur - prev) / prev * 100), 1) if prev else None
+            expense_by_category.append({
+                "category": r.category,
+                "tot_expense": cur,
+                "n_movimenti": int(r.n_movimenti),
+                "pct_budget": pct_budget,
+                "prev_year_expense": prev,
+                "delta_pct": delta,
+            })
+
+        # Q6 – Spese per wallet
+        rows = q("""
+            SELECT
+                COALESCE(w.name, m.wallet) AS wallet_name,
+                ROUND(SUM(m.expense), 2)   AS tot_expense,
+                COUNT(*)                    AS n_movimenti
+            FROM Movement m
+            LEFT JOIN Wallet w ON m.wallet_id = w.id
+            WHERE m.account_id = :account_id AND m.move_year = :year
+              AND m.expense IS NOT NULL
+            GROUP BY COALESCE(w.name, m.wallet)
+            ORDER BY tot_expense DESC
+        """, {"account_id": account_id, "year": year})
+        expense_by_wallet = [
+            {
+                "wallet": r.wallet_name,
+                "tot_expense": float(r.tot_expense),
+                "pct": round(float(r.tot_expense) / tot_expense * 100, 1) if tot_expense else 0,
+                "n_movimenti": int(r.n_movimenti),
+            }
+            for r in rows
+        ]
+
+        # Q7 – Mesi anomali (uscite > media mensile + 20%)
+        rows = q("""
+            WITH monthly AS (
+                SELECT move_month, ROUND(SUM(expense), 2) AS tot
+                FROM Movement
+                WHERE account_id = :account_id AND move_year = :year AND expense IS NOT NULL
+                GROUP BY move_month
+            ),
+            avg_month AS (SELECT AVG(tot) AS media FROM monthly)
+            SELECT m.move_month, m.tot, ROUND(m.tot - a.media, 2) AS delta, a.media
+            FROM monthly m, avg_month a
+            WHERE m.tot > a.media * 1.2
+            ORDER BY m.tot DESC
+        """, {"account_id": account_id, "year": year})
+        month_names = ["", "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+                       "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"]
+        anomalous_months = [
+            {
+                "month_num": r.move_month,
+                "month_name": month_names[r.move_month],
+                "tot_expense": float(r.tot),
+                "delta": float(r.delta),
+                "media": round(float(r.media), 2),
+            }
+            for r in rows
+        ]
+
+        # Top 5 categorie per incidenza (≥5% budget)
+        top5_categories = [c for c in expense_by_category if c["pct_budget"] >= 5][:5]
+
+        return {
+            "summary": summary,
+            "yearly_history": yearly_history,
+            "monthly_trend": monthly_trend,
+            "top_expenses": top_expenses,
+            "expense_by_category": expense_by_category,
+            "top5_categories": top5_categories,
+            "expense_by_wallet": expense_by_wallet,
+            "anomalous_months": anomalous_months,
+        }

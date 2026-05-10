@@ -1,0 +1,174 @@
+{% extends 'ps-nav.html' %}
+
+{% block nav_content %}
+<div class="app-content-header">
+  <div class="container-fluid">
+    <div class="row">
+      <div class="col-sm-6">
+        <h3 class="mb-0"><i class="bi bi-file-earmark-bar-graph me-2"></i>Reports</h3>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="app-content">
+  <div class="container-fluid">
+
+    <!-- Card principale -->
+    <div class="row justify-content-center">
+      <div class="col-lg-8 col-md-10">
+        <div class="card shadow-sm">
+          <div class="card-header bg-primary text-white">
+            <h5 class="card-title mb-0">
+              <i class="bi bi-file-earmark-pdf me-2"></i>Report Annuale PDF
+            </h5>
+          </div>
+          <div class="card-body">
+
+            <p class="text-muted mb-4">
+              Seleziona un anno e scarica il report completo in PDF. Il report include:
+              riepilogo entrate/uscite, confronto storico, trend mensile, top&nbsp;10 spese,
+              incidenza per categoria, distribuzione per wallet e mesi anomali.
+            </p>
+
+            <div class="row g-3 align-items-end">
+              <div class="col-md-5">
+                <label for="reportYear" class="form-label fw-semibold">Anno</label>
+                <select class="form-select" id="reportYear">
+                  <option value="">Caricamento anni...</option>
+                </select>
+              </div>
+              <div class="col-md-4">
+                <button id="btnDownload" class="btn btn-primary w-100" onclick="downloadReport()" disabled>
+                  <i class="bi bi-download me-1"></i> Scarica Report PDF
+                </button>
+              </div>
+            </div>
+
+            <!-- Spinner + messaggi di stato -->
+            <div id="statusArea" class="mt-4 d-none">
+              <div id="loadingMsg" class="d-flex align-items-center text-primary d-none">
+                <div class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></div>
+                <span>Generazione PDF in corso, attendere…</span>
+              </div>
+              <div id="successMsg" class="alert alert-success d-none" role="alert">
+                <i class="bi bi-check-circle me-1"></i>
+                <strong>PDF generato!</strong> Il download è partito automaticamente.
+              </div>
+              <div id="errorMsg" class="alert alert-danger d-none" role="alert">
+                <i class="bi bi-exclamation-triangle me-1"></i>
+                <strong>Errore:</strong> <span id="errorDetail"></span>
+              </div>
+            </div>
+
+          </div><!-- /.card-body -->
+        </div><!-- /.card -->
+
+        <!-- Info sezioni del report -->
+        <div class="card shadow-sm mt-4">
+          <div class="card-header">
+            <h6 class="card-title mb-0"><i class="bi bi-info-circle me-1"></i>Contenuto del report</h6>
+          </div>
+          <div class="card-body p-0">
+            <ul class="list-group list-group-flush">
+              <li class="list-group-item"><i class="bi bi-1-circle text-primary me-2"></i><strong>Sommario anno</strong> – Entrate totali, uscite totali, saldo, numero movimenti</li>
+              <li class="list-group-item"><i class="bi bi-2-circle text-primary me-2"></i><strong>Confronto storico</strong> – Entrate e uscite year-by-year con variazione %</li>
+              <li class="list-group-item"><i class="bi bi-3-circle text-primary me-2"></i><strong>Trend mensile</strong> – Grafico a linee dei 12 mesi dell'anno selezionato</li>
+              <li class="list-group-item"><i class="bi bi-4-circle text-primary me-2"></i><strong>Top 10 spese singole</strong> – Le 10 spese più grandi dell'anno</li>
+              <li class="list-group-item"><i class="bi bi-5-circle text-primary me-2"></i><strong>Spese per categoria</strong> – Incidenza % e confronto con l'anno precedente</li>
+              <li class="list-group-item"><i class="bi bi-6-circle text-primary me-2"></i><strong>Top categorie</strong> – Le categorie che pesano di più sul budget (≥5%)</li>
+              <li class="list-group-item"><i class="bi bi-7-circle text-primary me-2"></i><strong>Distribuzione per wallet</strong> – Spese ripartite per conto/wallet</li>
+              <li class="list-group-item"><i class="bi bi-8-circle text-primary me-2"></i><strong>Mesi anomali</strong> – Mesi con uscite superiori del 20% alla media mensile</li>
+            </ul>
+          </div>
+        </div>
+
+      </div><!-- /.col -->
+    </div><!-- /.row -->
+
+  </div><!-- /.container-fluid -->
+</div><!-- /.app-content -->
+
+<script>
+// Carica gli anni disponibili all'avvio
+document.addEventListener('DOMContentLoaded', () => {
+  fetch('/api/filters/years')
+    .then(res => res.json())
+    .then(years => {
+      const sel = document.getElementById('reportYear');
+      sel.innerHTML = '';
+      if (!years || years.length === 0) {
+        sel.innerHTML = '<option value="">Nessun dato disponibile</option>';
+        return;
+      }
+      years.forEach((y, i) => {
+        const opt = document.createElement('option');
+        opt.value = y;
+        opt.textContent = y;
+        if (i === 0) opt.selected = true;  // anno più recente di default
+        sel.appendChild(opt);
+      });
+      document.getElementById('btnDownload').disabled = false;
+    })
+    .catch(() => {
+      document.getElementById('reportYear').innerHTML = '<option value="">Errore caricamento anni</option>';
+    });
+});
+
+function setStatus(state, detail) {
+  const area     = document.getElementById('statusArea');
+  const loading  = document.getElementById('loadingMsg');
+  const success  = document.getElementById('successMsg');
+  const error    = document.getElementById('errorMsg');
+
+  area.classList.remove('d-none');
+  loading.classList.add('d-none');
+  success.classList.add('d-none');
+  error.classList.add('d-none');
+
+  if (state === 'loading') loading.classList.remove('d-none');
+  if (state === 'success') success.classList.remove('d-none');
+  if (state === 'error') {
+    error.classList.remove('d-none');
+    document.getElementById('errorDetail').textContent = detail || 'Errore sconosciuto';
+  }
+}
+
+async function downloadReport() {
+  const year = document.getElementById('reportYear').value;
+  if (!year) return;
+
+  const btn = document.getElementById('btnDownload');
+  btn.disabled = true;
+  setStatus('loading');
+
+  try {
+    const res = await fetch(`/api/reports/annual?year=${year}`);
+
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      setStatus('error', json.error || `Errore HTTP ${res.status}`);
+      btn.disabled = false;
+      return;
+    }
+
+    // Trigger download
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `report-spese-${year}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    setStatus('success');
+  } catch (err) {
+    setStatus('error', err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+</script>
+{% endblock %}

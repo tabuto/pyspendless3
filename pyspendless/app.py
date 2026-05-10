@@ -8,10 +8,10 @@ from flask import Flask, render_template, redirect, url_for, session, request, f
 # Support both relative and absolute imports
 try:
     from .conf import load_env, SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI, BASE_URL, ADMIN_USER_ID, get_db_session
-    from .repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, StatsRepository, AdminRepository, RecurrentMovementRepository, UnauthorizedError
+    from .repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, StatsRepository, AdminRepository, RecurrentMovementRepository, ReportRepository, UnauthorizedError
 except ImportError:
     from conf import load_env, SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI, BASE_URL, ADMIN_USER_ID, get_db_session
-    from repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, StatsRepository, AdminRepository, RecurrentMovementRepository, UnauthorizedError
+    from repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, StatsRepository, AdminRepository, RecurrentMovementRepository, ReportRepository, UnauthorizedError
 
 import os
 import logging
@@ -2236,3 +2236,89 @@ def api_filters_years():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
+
+# =============================================
+# Reports Routes
+# =============================================
+
+@app.route("/reports")
+def reports_page():
+    """Pagina Reports – selezione anno e download PDF annuale."""
+    user_id = session.get('user_id')
+    account_id = session.get('account_id')
+
+    if not user_id or not account_id:
+        flash('Devi effettuare il login per accedere a questa pagina', 'warning')
+        return redirect(url_for('login'))
+
+    return render_template("ps-reports.html")
+
+
+@app.route("/api/reports/annual", methods=['GET'])
+def api_reports_annual():
+    """
+    Genera e scarica il report annuale in PDF.
+    Query param: year (int, obbligatorio)
+    """
+    try:
+        from io import BytesIO
+        from flask import send_file
+
+        user_id = session.get('user_id')
+        account_id = session.get('account_id')
+
+        if not user_id or not account_id:
+            return jsonify({'error': 'Non autorizzato'}), 401
+
+        year = request.args.get('year', type=int)
+        if not year:
+            return jsonify({'error': 'Parametro year obbligatorio'}), 400
+
+        db = get_db_session()
+        try:
+            # Verifica che l'anno abbia dati
+            stats_repo = StatsRepository(db)
+            available_years = stats_repo.get_available_years(account_id)
+            if year not in available_years:
+                return jsonify({'error': f'Nessun dato disponibile per l\'anno {year}'}), 400
+
+            # Recupera nome account
+            account_repo = AccountRepository(db)
+            account = account_repo.get_account(account_id)
+            account_name = account.name if account else f"Account {account_id}"
+
+            # Raccoglie dati report
+            report_repo = ReportRepository(db)
+            data = report_repo.get_annual_report_data(account_id, year)
+        finally:
+            db.close()
+
+        # Genera grafici (fuori dalla sessione DB)
+        try:
+            from .report_charts import generate_all_charts
+        except ImportError:
+            from report_charts import generate_all_charts
+        charts = generate_all_charts(data)
+
+        # Genera PDF
+        try:
+            from .report_pdf import build_annual_report
+        except ImportError:
+            from report_pdf import build_annual_report
+        pdf_bytes = build_annual_report(data, charts, account_name)
+
+        buf = BytesIO(pdf_bytes)
+        buf.seek(0)
+        filename = f"report-spese-{year}.pdf"
+        return send_file(
+            buf,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=filename,
+        )
+
+    except Exception as e:
+        logger.error(f"Errore generazione report PDF: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return jsonify({'error': f'Errore generazione PDF: {str(e)}'}), 500

@@ -6,3 +6,5 @@ python-dotenv
 marshmallow
 alembic
 requests
+fpdf2
+matplotlib

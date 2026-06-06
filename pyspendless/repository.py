@@ -5,7 +5,7 @@ Funzioni CRUD e logica di accesso ai dati
 
 import uuid
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func
@@ -563,20 +563,22 @@ class MovementRepository:
         self.db = db_session
     
     def get_movements_for_account(
-        self, 
+        self,
         account_id: int,
         wallet_id: Optional[int] = None,
         user_id: Optional[int] = None,
         year: Optional[int] = None,
         month: Optional[int] = None,
         category_id: Optional[int] = None,
-        category_type: Optional[str] = None
+        category_type: Optional[str] = None,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
     ) -> List[Movement]:
         """
         Recupera i movimenti di un account con filtri opzionali
         """
         query = self.db.query(Movement).filter_by(account_id=account_id)
-        
+
         if wallet_id:
             query = query.filter_by(wallet_id=wallet_id)
         if user_id:
@@ -587,11 +589,15 @@ class MovementRepository:
             query = query.filter_by(move_month=month)
         if category_id:
             query = query.filter_by(category_id=category_id)
-        
+        if date_from:
+            query = query.filter(Movement.move_date >= date_from)
+        if date_to:
+            query = query.filter(Movement.move_date <= date_to)
+
         # Filtra per tipo categoria (tramite join)
         if category_type:
             query = query.join(Category, Movement.category_id == Category.id).filter(Category.type == category_type)
-        
+
         return query.order_by(Movement.move_date.desc()).all()
     
     def get_movement(self, movement_id: str) -> Optional[Movement]:
@@ -701,7 +707,9 @@ class MovementRepository:
         year: Optional[int] = None,
         month: Optional[int] = None,
         category_id: Optional[int] = None,
-        category_type: Optional[str] = None
+        category_type: Optional[str] = None,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
     ) -> Dict[str, Any]:
         """
         Calcola statistiche aggregate sui movimenti
@@ -709,7 +717,7 @@ class MovementRepository:
             Dict con: total_income, total_expense, balance, expenses_by_category
         """
         from sqlalchemy import func
-        
+
         # Recupera i movimenti filtrati
         movements = self.get_movements_for_account(
             account_id=account_id,
@@ -718,7 +726,9 @@ class MovementRepository:
             year=year,
             month=month,
             category_id=category_id,
-            category_type=category_type
+            category_type=category_type,
+            date_from=date_from,
+            date_to=date_to,
         )
         
         # Calcola totali
@@ -762,6 +772,10 @@ class MovementRepository:
             query = query.filter(Movement.move_month == month)
         if category_id:
             query = query.filter(Movement.category_id == category_id)
+        if date_from:
+            query = query.filter(Movement.move_date >= date_from)
+        if date_to:
+            query = query.filter(Movement.move_date <= date_to)
         if category_type:
             query = query.filter(Category.type == category_type)
         

@@ -10,20 +10,14 @@
     <div class="card-body">
       <form method="GET" action="{{ url_for('movements') }}" class="row g-3">
         <div class="col-md-2">
-          <label for="year" class="form-label">Anno</label>
-          <select class="form-select" id="year" name="year">
-            {% for y in years %}
-              <option value="{{ y }}" {% if y == filters.year %}selected{% endif %}>{{ y }}</option>
-            {% endfor %}
-          </select>
+          <label for="date_from" class="form-label">Dal</label>
+          <input type="date" class="form-control" id="date_from" name="date_from"
+                 value="{{ filters.date_from }}">
         </div>
         <div class="col-md-2">
-          <label for="month" class="form-label">Mese</label>
-          <select class="form-select" id="month" name="month">
-            {% for m in months %}
-              <option value="{{ m.value }}" {% if m.value == filters.month %}selected{% endif %}>{{ m.name }}</option>
-            {% endfor %}
-          </select>
+          <label for="date_to" class="form-label">Al</label>
+          <input type="date" class="form-control" id="date_to" name="date_to"
+                 value="{{ filters.date_to }}">
         </div>
         <div class="col-md-3">
           <label for="wallet_id" class="form-label">Wallet</label>

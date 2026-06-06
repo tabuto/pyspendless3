@@ -426,85 +426,77 @@ def movements():
         return redirect(url_for('login'))
     
     account_id = session.get('account_id')
-    
+
     # Recupera filtri dalla query string
-    from datetime import datetime
-    current_year = datetime.now().year
-    current_month = datetime.now().month
-    
-    year = request.args.get('year', type=int, default=current_year)
-    month = request.args.get('month', type=int, default=current_month)
-    wallet_id = request.args.get('wallet_id', type=int, default=None)
+    from datetime import datetime, date as _date
+    today = _date.today()
+    default_date_from = today.replace(day=1).isoformat()
+    default_date_to   = today.isoformat()
+
+    date_from_str = request.args.get('date_from', default=default_date_from)
+    date_to_str   = request.args.get('date_to',   default=default_date_to)
+
+    try:
+        date_from = _date.fromisoformat(date_from_str)
+    except ValueError:
+        date_from = today.replace(day=1)
+    try:
+        date_to = _date.fromisoformat(date_to_str)
+    except ValueError:
+        date_to = today
+
+    wallet_id     = request.args.get('wallet_id',     type=int, default=None)
     category_type = request.args.get('category_type', default=None)
-    category_id = request.args.get('category_id', type=int, default=None)
-    
+    category_id   = request.args.get('category_id',   type=int, default=None)
+
     db = get_db_session()
     try:
         category_repo = CategoryRepository(db)
-        wallet_repo = WalletRepository(db)
+        wallet_repo   = WalletRepository(db)
         movement_repo = MovementRepository(db)
-        
+
         # Recupera dati per i filtri (ordinati per order_index per UX migliore)
         categories = category_repo.get_categories_for_account(account_id, order_by_index=True)
-        wallets = wallet_repo.get_wallets_for_account(account_id)
-        
+        wallets    = wallet_repo.get_wallets_for_account(account_id)
+
         # Recupera movimenti filtrati
         movements = movement_repo.get_movements_for_account(
             account_id=account_id,
             wallet_id=wallet_id,
-            year=year,
-            month=month,
             category_id=category_id,
-            category_type=category_type
+            category_type=category_type,
+            date_from=date_from,
+            date_to=date_to,
         )
-        
+
         # Recupera statistiche
         stats = movement_repo.get_movements_stats(
             account_id=account_id,
             wallet_id=wallet_id,
-            year=year,
-            month=month,
             category_id=category_id,
-            category_type=category_type
+            category_type=category_type,
+            date_from=date_from,
+            date_to=date_to,
         )
-        
-        # Prepara anni disponibili (dal 2020 ad oggi + 1 anno futuro)
-        years = list(range(2020, current_year + 2))
-        months = [
-            {'value': 1, 'name': 'Gennaio'},
-            {'value': 2, 'name': 'Febbraio'},
-            {'value': 3, 'name': 'Marzo'},
-            {'value': 4, 'name': 'Aprile'},
-            {'value': 5, 'name': 'Maggio'},
-            {'value': 6, 'name': 'Giugno'},
-            {'value': 7, 'name': 'Luglio'},
-            {'value': 8, 'name': 'Agosto'},
-            {'value': 9, 'name': 'Settembre'},
-            {'value': 10, 'name': 'Ottobre'},
-            {'value': 11, 'name': 'Novembre'},
-            {'value': 12, 'name': 'Dicembre'}
-        ]
-        
+
         category_types = [
             {'value': 'expense', 'name': 'Uscite'},
-            {'value': 'income', 'name': 'Entrate'}
+            {'value': 'income',  'name': 'Entrate'}
         ]
-        
+
         return render_template(
             "ps-show-mov.html",
             movements=movements,
             stats=stats,
             categories=categories,
             wallets=wallets,
-            years=years,
-            months=months,
             category_types=category_types,
             filters={
-                'year': year,
-                'month': month,
-                'wallet_id': wallet_id,
+                'date_from':     date_from.isoformat(),
+                'date_to':       date_to.isoformat(),
+                'wallet_id':     wallet_id,
                 'category_type': category_type,
-                'category_id': category_id
+                'category_id':   category_id,
             }
         )
     finally:
@@ -559,17 +551,31 @@ def api_get_movements():
 
     account_id = session.get('account_id')
 
-    from datetime import datetime as _dt
-    current_year = _dt.now().year
-    current_month = _dt.now().month
+    from datetime import date as _date
+    today = _date.today()
+    default_date_from = today.replace(day=1).isoformat()
+    default_date_to   = today.isoformat()
 
-    year         = request.args.get('year',          type=int, default=current_year)
-    month        = request.args.get('month',         type=int, default=current_month)
-    wallet_id    = request.args.get('wallet_id',     type=int, default=None)
+    date_from_str = request.args.get('date_from', default=default_date_from)
+    date_to_str   = request.args.get('date_to',   default=default_date_to)
+
+    try:
+        date_from = _date.fromisoformat(date_from_str)
+    except ValueError:
+        date_from = today.replace(day=1)
+    try:
+        date_to = _date.fromisoformat(date_to_str)
+    except ValueError:
+        date_to = today
+
+    if date_from > date_to:
+        return jsonify({'error': 'date_from non può essere successiva a date_to'}), 400
+
+    wallet_id     = request.args.get('wallet_id',     type=int, default=None)
     category_type = request.args.get('category_type', default=None)
-    category_id  = request.args.get('category_id',  type=int, default=None)
-    page         = max(1, request.args.get('page',   type=int, default=1))
-    per_page     = min(50, max(1, request.args.get('per_page', type=int, default=20)))
+    category_id   = request.args.get('category_id',   type=int, default=None)
+    page          = max(1, request.args.get('page',    type=int, default=1))
+    per_page      = min(50, max(1, request.args.get('per_page', type=int, default=20)))
 
     db = get_db_session()
     try:
@@ -577,10 +583,10 @@ def api_get_movements():
         all_movements = movement_repo.get_movements_for_account(
             account_id=account_id,
             wallet_id=wallet_id,
-            year=year,
-            month=month,
             category_id=category_id,
-            category_type=category_type
+            category_type=category_type,
+            date_from=date_from,
+            date_to=date_to,
         )
 
         total    = len(all_movements)

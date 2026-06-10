@@ -569,14 +569,18 @@ class MovementRepository:
         user_id: Optional[int] = None,
         year: Optional[int] = None,
         month: Optional[int] = None,
-        category_id: Optional[int] = None,
+        category_id: Optional[int] = None,       # mantenuto per retrocompatibilità
+        category_ids: Optional[List[int]] = None, # multi-selezione categorie
         category_type: Optional[str] = None,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
+        keywords: Optional[List[str]] = None,    # ricerca LIKE su note
     ) -> List[Movement]:
         """
         Recupera i movimenti di un account con filtri opzionali
         """
+        from sqlalchemy import or_
+
         query = self.db.query(Movement).filter_by(account_id=account_id)
 
         if wallet_id:
@@ -587,12 +591,18 @@ class MovementRepository:
             query = query.filter_by(move_year=year)
         if month:
             query = query.filter_by(move_month=month)
-        if category_id:
+        # category_ids ha precedenza; category_id è il fallback legacy
+        if category_ids:
+            query = query.filter(Movement.category_id.in_(category_ids))
+        elif category_id:
             query = query.filter_by(category_id=category_id)
         if date_from:
             query = query.filter(Movement.move_date >= date_from)
         if date_to:
             query = query.filter(Movement.move_date <= date_to)
+        if keywords:
+            kw_filters = [Movement.note.ilike(f'%{kw}%') for kw in keywords]
+            query = query.filter(or_(*kw_filters))
 
         # Filtra per tipo categoria (tramite join)
         if category_type:
@@ -707,16 +717,18 @@ class MovementRepository:
         year: Optional[int] = None,
         month: Optional[int] = None,
         category_id: Optional[int] = None,
+        category_ids: Optional[List[int]] = None,
         category_type: Optional[str] = None,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
+        keywords: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Calcola statistiche aggregate sui movimenti
         Returns:
             Dict con: total_income, total_expense, balance, expenses_by_category
         """
-        from sqlalchemy import func
+        from sqlalchemy import func, or_
 
         # Recupera i movimenti filtrati
         movements = self.get_movements_for_account(
@@ -726,9 +738,11 @@ class MovementRepository:
             year=year,
             month=month,
             category_id=category_id,
+            category_ids=category_ids,
             category_type=category_type,
             date_from=date_from,
             date_to=date_to,
+            keywords=keywords,
         )
         
         # Calcola totali
@@ -770,12 +784,17 @@ class MovementRepository:
             query = query.filter(Movement.move_year == year)
         if month:
             query = query.filter(Movement.move_month == month)
-        if category_id:
+        if category_ids:
+            query = query.filter(Movement.category_id.in_(category_ids))
+        elif category_id:
             query = query.filter(Movement.category_id == category_id)
         if date_from:
             query = query.filter(Movement.move_date >= date_from)
         if date_to:
             query = query.filter(Movement.move_date <= date_to)
+        if keywords:
+            kw_filters = [Movement.note.ilike(f'%{kw}%') for kw in keywords]
+            query = query.filter(or_(*kw_filters))
         if category_type:
             query = query.filter(Category.type == category_type)
         

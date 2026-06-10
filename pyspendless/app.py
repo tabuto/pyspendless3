@@ -447,7 +447,10 @@ def movements():
 
     wallet_id     = request.args.get('wallet_id',     type=int, default=None)
     category_type = request.args.get('category_type', default=None)
-    category_id   = request.args.get('category_id',   type=int, default=None)
+    category_ids  = request.args.getlist('category_id', type=int)  # multi-select
+
+    keywords_raw  = request.args.get('keywords', default='').strip()
+    keywords      = [k.strip() for k in keywords_raw.replace(',', ' ').split() if k.strip()]
 
     db = get_db_session()
     try:
@@ -463,20 +466,22 @@ def movements():
         movements = movement_repo.get_movements_for_account(
             account_id=account_id,
             wallet_id=wallet_id,
-            category_id=category_id,
+            category_ids=category_ids,
             category_type=category_type,
             date_from=date_from,
             date_to=date_to,
+            keywords=keywords,
         )
 
         # Recupera statistiche
         stats = movement_repo.get_movements_stats(
             account_id=account_id,
             wallet_id=wallet_id,
-            category_id=category_id,
+            category_ids=category_ids,
             category_type=category_type,
             date_from=date_from,
             date_to=date_to,
+            keywords=keywords,
         )
 
         category_types = [
@@ -496,7 +501,8 @@ def movements():
                 'date_to':       date_to.isoformat(),
                 'wallet_id':     wallet_id,
                 'category_type': category_type,
-                'category_id':   category_id,
+                'category_ids':  category_ids,
+                'keywords':      keywords_raw,
             }
         )
     finally:
@@ -573,7 +579,11 @@ def api_get_movements():
 
     wallet_id     = request.args.get('wallet_id',     type=int, default=None)
     category_type = request.args.get('category_type', default=None)
-    category_id   = request.args.get('category_id',   type=int, default=None)
+    category_ids  = request.args.getlist('category_id', type=int)
+
+    keywords_raw  = request.args.get('keywords', default='').strip()
+    keywords      = [k.strip() for k in keywords_raw.replace(',', ' ').split() if k.strip()]
+
     page          = max(1, request.args.get('page',    type=int, default=1))
     per_page      = min(50, max(1, request.args.get('per_page', type=int, default=20)))
 
@@ -583,10 +593,11 @@ def api_get_movements():
         all_movements = movement_repo.get_movements_for_account(
             account_id=account_id,
             wallet_id=wallet_id,
-            category_id=category_id,
+            category_ids=category_ids,
             category_type=category_type,
             date_from=date_from,
             date_to=date_to,
+            keywords=keywords,
         )
 
         total    = len(all_movements)

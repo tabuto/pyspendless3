@@ -9,17 +9,18 @@
     </div>
     <div class="card-body">
       <form method="GET" action="{{ url_for('movements') }}" class="row g-3">
-        <div class="col-md-2">
+        <!-- Riga 1: date e filtri semplici -->
+        <div class="col-6 col-md-2">
           <label for="date_from" class="form-label">Dal</label>
           <input type="date" class="form-control" id="date_from" name="date_from"
                  value="{{ filters.date_from }}">
         </div>
-        <div class="col-md-2">
+        <div class="col-6 col-md-2">
           <label for="date_to" class="form-label">Al</label>
           <input type="date" class="form-control" id="date_to" name="date_to"
                  value="{{ filters.date_to }}">
         </div>
-        <div class="col-md-3">
+        <div class="col-12 col-md-4">
           <label for="wallet_id" class="form-label">Wallet</label>
           <select class="form-select" id="wallet_id" name="wallet_id">
             <option value="">Tutti</option>
@@ -28,7 +29,7 @@
             {% endfor %}
           </select>
         </div>
-        <div class="col-md-2">
+        <div class="col-12 col-md-4">
           <label for="category_type" class="form-label">Tipo</label>
           <select class="form-select" id="category_type" name="category_type">
             <option value="">Tutti</option>
@@ -37,16 +38,29 @@
             {% endfor %}
           </select>
         </div>
-        <div class="col-md-2">
-          <label for="category_id" class="form-label">Categoria</label>
-          <select class="form-select" id="category_id" name="category_id">
-            <option value="">Tutte</option>
+        <!-- Riga 2: multi-selezione categorie + keywords + pulsante -->
+        <div class="col-12 col-md-4">
+          <label for="category_id" class="form-label">Categorie</label>
+          <select id="category_id" name="category_id" multiple
+                  placeholder="Tutte le categorie">
             {% for cat in categories %}
-              <option value="{{ cat.id }}" {% if cat.id == filters.category_id %}selected{% endif %}>{{ cat.name }}</option>
+              <option value="{{ cat.id }}"
+                {% if cat.id in filters.category_ids %}selected{% endif %}>
+                {{ cat.name }}
+              </option>
             {% endfor %}
           </select>
         </div>
-        <div class="col-md-1 d-flex align-items-end">
+        <div class="col-12 col-md-6">
+          <label for="keywords" class="form-label">
+            Parole chiave
+            <span class="text-muted small">(separate da spazio o virgola)</span>
+          </label>
+          <input type="text" class="form-control" id="keywords" name="keywords"
+                 placeholder="es. supermercato amazon bolletta"
+                 value="{{ filters.keywords }}">
+        </div>
+        <div class="col-12 col-md-2 d-flex align-items-end">
           <button type="submit" class="btn btn-primary w-100">Filtra</button>
         </div>
       </form>
@@ -189,6 +203,10 @@
 <script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
 <script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap5.min.js"></script>
 
+<!-- Tom Select (multi-select mobile-friendly) — AdminLTE 4 recommended -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css">
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   // Inizializza DataTables solo su desktop (la tabella è d-none su mobile)
@@ -302,6 +320,20 @@ document.addEventListener('DOMContentLoaded', function() {
       alert('Errore di comunicazione con il server: ' + error.message);
     }
   };
+
+  // ── Tom Select — multi-select categorie ────────────────────────────────
+  new TomSelect('#category_id', {
+    plugins: ['remove_button', 'checkbox_options'],
+    create: false,
+    placeholder: 'Tutte le categorie',
+    maxOptions: null,
+    closeAfterSelect: false,
+    render: {
+      no_results: function() {
+        return '<div class="no-results">Nessun risultato</div>';
+      }
+    }
+  });
 
   // ── Infinite scroll card list (mobile) ──────────────────────────────────
   (function () {

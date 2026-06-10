@@ -50,6 +50,10 @@
               </option>
             {% endfor %}
           </select>
+          <div class="mt-1 text-end">
+            <a href="#" id="cat-select-all" class="small text-primary me-2">Seleziona tutto</a>
+            <a href="#" id="cat-deselect-all" class="small text-secondary">Deseleziona</a>
+          </div>
         </div>
         <div class="col-12 col-md-6">
           <label for="keywords" class="form-label">
@@ -322,7 +326,7 @@ document.addEventListener('DOMContentLoaded', function() {
   };
 
   // ── Tom Select — multi-select categorie ────────────────────────────────
-  new TomSelect('#category_id', {
+  const tsCategories = new TomSelect('#category_id', {
     plugins: ['remove_button', 'checkbox_options'],
     create: false,
     placeholder: 'Tutte le categorie',
@@ -333,6 +337,16 @@ document.addEventListener('DOMContentLoaded', function() {
         return '<div class="no-results">Nessun risultato</div>';
       }
     }
+  });
+
+  document.getElementById('cat-select-all').addEventListener('click', function(e) {
+    e.preventDefault();
+    tsCategories.setValue(Object.keys(tsCategories.options));
+  });
+
+  document.getElementById('cat-deselect-all').addEventListener('click', function(e) {
+    e.preventDefault();
+    tsCategories.clear();
   });
 
   // ── Infinite scroll card list (mobile) ──────────────────────────────────

@@ -75,6 +75,7 @@
               <th>Wallet</th>
               <th>Importo</th>
               <th>Nota</th>
+              <th>Data ultima spesa</th>
               <th>Azioni</th>
             </tr>
           </thead>
@@ -94,6 +95,13 @@
               <td>€ {{ "%.2f"|format(rm.income or rm.expense) }}</td>
               <td>{{ rm.note or '' }}</td>
               <td>
+                {% if rm.last_move_date %}
+                  {{ rm.last_move_date.strftime('%d/%m/%Y') }}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td>
                 <button class="btn btn-sm btn-outline-primary me-1"
                         onclick="editRecurrent({{ rm.id }}, '{{ rm.name|e }}', '{{ 'income' if rm.income else 'expense' }}', {{ rm.category_id }}, {{ rm.wallet_id }}, {{ rm.income or rm.expense }}, '{{ rm.note|e if rm.note else '' }}')">
                   <i class="bi bi-pencil"></i>
@@ -106,7 +114,7 @@
             </tr>
             {% else %}
             <tr id="empty-row">
-              <td colspan="7" class="text-center text-muted py-3">Nessuna spesa ricorrente definita</td>
+              <td colspan="8" class="text-center text-muted py-3">Nessuna spesa ricorrente definita</td>
             </tr>
             {% endfor %}
           </tbody>

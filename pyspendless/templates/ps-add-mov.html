@@ -13,6 +13,7 @@
         </div>
         <form id="movement-form">
           <input type="hidden" id="movement_id" name="movement_id" value="{% if movement %}{{ movement.id }}{% endif %}">
+          <input type="hidden" id="recurrent_movement_id" value="">
           <div class="card-body">
             {% if not movement %}
             <div class="mb-3" id="recurrent-template-block">
@@ -150,6 +151,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // Listener selettore spesa ricorrente (solo in creazione)
   document.getElementById('recurrent_template')?.addEventListener('change', function () {
     const selected = this.options[this.selectedIndex];
+    document.getElementById('recurrent_movement_id').value = selected.value || '';
     if (!selected.value) return;
 
     const movType = selected.dataset.movementType;
@@ -181,13 +183,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const movId = document.getElementById('movement_id').value;
     
     // Prepara i dati: salva l'importo nella colonna corretta
+    const recurrentMovId = parseInt(document.getElementById('recurrent_movement_id').value) || null;
     const formData = {
       move_date: document.getElementById('move_date').value,
       category_id: parseInt(document.getElementById('category').value),
       wallet_id: parseInt(document.getElementById('wallet').value),
       income: movementType === 'income' ? parseFloat(amount) : null,
       expense: movementType === 'expense' ? parseFloat(amount) : null,
-      note: document.getElementById('note').value
+      note: document.getElementById('note').value,
+      recurrent_movement_id: recurrentMovId,
     };
 
     // Se stiamo modificando, aggiungi l'ID

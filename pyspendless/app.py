@@ -708,6 +708,10 @@ def api_create_movement():
                 'category_id': category_id,
                 'wallet_id': wallet_id
             }
+
+            recurrent_movement_id = data.get('recurrent_movement_id')
+            if recurrent_movement_id:
+                movement_data['recurrent_movement_id'] = int(recurrent_movement_id)
             
             # UPDATE o CREATE
             if movement_id:

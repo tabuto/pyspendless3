@@ -1297,13 +1297,29 @@ class RecurrentMovementRepository:
         self.db = db
 
     def get_all_for_account(self, account_id: int) -> List[RecurrentMovement]:
-        """Restituisce tutte le spese ricorrenti dell'account, ordinate per nome"""
-        return (
-            self.db.query(RecurrentMovement)
+        """Restituisce tutte le spese ricorrenti dell'account con la data dell'ultimo movimento associato."""
+        subq = (
+            self.db.query(
+                Movement.recurrent_movement_id,
+                func.max(Movement.move_date).label('last_move_date')
+            )
+            .filter(Movement.account_id == account_id)
+            .group_by(Movement.recurrent_movement_id)
+            .subquery()
+        )
+
+        rows = (
+            self.db.query(RecurrentMovement, subq.c.last_move_date)
+            .outerjoin(subq, RecurrentMovement.id == subq.c.recurrent_movement_id)
             .filter(RecurrentMovement.account_id == account_id)
             .order_by(RecurrentMovement.name)
             .all()
         )
+
+        for rm, last_date in rows:
+            rm.last_move_date = last_date
+
+        return [rm for rm, _ in rows]
 
     def get_by_id(self, rm_id: int, account_id: int) -> Optional[RecurrentMovement]:
         """Restituisce una spesa ricorrente per id, verificando l'appartenenza all'account"""

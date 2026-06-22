@@ -134,11 +134,13 @@ class Movement(Base):
     user_id = Column(Text, ForeignKey('User.id'), nullable=True)
     category_id = Column(Integer, ForeignKey('Category.id'), nullable=True)
     wallet_id = Column(Integer, ForeignKey('Wallet.id'), nullable=True)
-    
+    recurrent_movement_id = Column(Integer, ForeignKey('RecurrentMovement.id', ondelete='SET NULL'), nullable=True)
+
     # Relationships
     user_obj = relationship('User', back_populates='movements', foreign_keys=[user_id])
     category_obj = relationship('Category', back_populates='movements', foreign_keys=[category_id])
     wallet_obj = relationship('Wallet', back_populates='movements', foreign_keys=[wallet_id])
+    recurrent_movement_obj = relationship('RecurrentMovement', foreign_keys=[recurrent_movement_id])
 
 
 class UserGroup(Base):

@@ -14,3 +14,5 @@ pyspendless/.env_pa
 *.db
 pyspendless/migrations/mapping_conf.json
 migration_mapping.json
+migrations/*.csv
+migrations/*.sql

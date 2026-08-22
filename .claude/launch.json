@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pyspendless",
+      "runtimeExecutable": ".venv/bin/python3",
+      "runtimeArgs": ["pyspendless/app.py"],
+      "port": 5000
+    }
+  ]
+}

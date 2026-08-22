@@ -125,8 +125,12 @@
   <div class="row">
     <div class="col-12">
       <div class="card">
-        <div class="card-header">
+        <div class="card-header d-flex justify-content-between align-items-center">
           <h5 class="card-title mb-0">Elenco Movimenti</h5>
+          <button type="button" id="export-csv-btn" class="btn btn-outline-success btn-sm"
+                  {% if not movements %}disabled{% endif %}>
+            <i class="bi bi-download"></i> Esporta
+          </button>
         </div>
         <div class="card-body">
 
@@ -324,6 +328,13 @@ document.addEventListener('DOMContentLoaded', function() {
       alert('Errore di comunicazione con il server: ' + error.message);
     }
   };
+
+  // ── Esporta CSV ──────────────────────────────────────────────────────
+  document.getElementById('export-csv-btn').addEventListener('click', function() {
+    if (this.disabled) return;
+    const params = new URLSearchParams(window.location.search);
+    window.location.href = '/api/movements/export?' + params.toString();
+  });
 
   // ── Tom Select — multi-select categorie ────────────────────────────────
   const tsCategories = new TomSelect('#category_id', {

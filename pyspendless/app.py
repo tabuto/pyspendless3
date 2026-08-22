@@ -415,20 +415,12 @@ def create():
     finally:
         db.close()
 
-@app.route("/movements")
-def movements():
+def _parse_movement_filters():
     """
-    Pagina visualizzazione movimenti con filtri e statistiche
+    Estrae dalla query string i filtri di ricerca movimenti, condivisi tra
+    la pagina /movements e l'export CSV così da restare sempre allineati.
     """
-    # Verifica autenticazione
-    if not session.get('user_id'):
-        flash('Devi effettuare il login', 'warning')
-        return redirect(url_for('login'))
-    
-    account_id = session.get('account_id')
-
-    # Recupera filtri dalla query string
-    from datetime import datetime, date as _date
+    from datetime import date as _date
     today = _date.today()
     default_date_from = today.replace(day=1).isoformat()
     default_date_to   = today.isoformat()
@@ -451,6 +443,39 @@ def movements():
 
     keywords_raw  = request.args.get('keywords', default='').strip()
     keywords      = [k.strip() for k in keywords_raw.replace(',', ' ').split() if k.strip()]
+
+    return {
+        'date_from':     date_from,
+        'date_to':       date_to,
+        'wallet_id':     wallet_id,
+        'category_type': category_type,
+        'category_ids':  category_ids,
+        'keywords':      keywords,
+        'keywords_raw':  keywords_raw,
+    }
+
+
+@app.route("/movements")
+def movements():
+    """
+    Pagina visualizzazione movimenti con filtri e statistiche
+    """
+    # Verifica autenticazione
+    if not session.get('user_id'):
+        flash('Devi effettuare il login', 'warning')
+        return redirect(url_for('login'))
+
+    account_id = session.get('account_id')
+
+    # Recupera filtri dalla query string
+    f = _parse_movement_filters()
+    date_from     = f['date_from']
+    date_to       = f['date_to']
+    wallet_id     = f['wallet_id']
+    category_type = f['category_type']
+    category_ids  = f['category_ids']
+    keywords      = f['keywords']
+    keywords_raw  = f['keywords_raw']
 
     db = get_db_session()
     try:
@@ -628,6 +653,63 @@ def api_get_movements():
             'total':     total,
             'has_more':  has_more,
         }), 200
+    finally:
+        db.close()
+
+
+@app.route("/api/movements/export", methods=['GET'])
+def api_export_movements_filtered():
+    """
+    Esporta in CSV tutti i movimenti che rispettano i filtri correnti della
+    pagina /movements (stessi parametri della route), non solo quelli
+    già caricati/visualizzati (tabella paginata client-side o infinite
+    scroll mobile). Il formato è compatibile con /api/import/movements.
+    """
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+
+    account_id = session.get('account_id')
+    f = _parse_movement_filters()
+
+    db = get_db_session()
+    try:
+        movement_repo = MovementRepository(db)
+        movements = movement_repo.get_movements_for_account(
+            account_id=account_id,
+            wallet_id=f['wallet_id'],
+            category_ids=f['category_ids'],
+            category_type=f['category_type'],
+            date_from=f['date_from'],
+            date_to=f['date_to'],
+            keywords=f['keywords'],
+        )
+
+        import csv
+        from io import StringIO
+        from datetime import date as _date
+
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['Data', 'Categoria', 'Wallet', 'Entrata', 'Spesa', 'Note'])
+
+        for m in movements:
+            writer.writerow([
+                m.move_date.strftime('%Y-%m-%d'),
+                m.category,
+                m.wallet,
+                '%.2f' % m.income if m.income else '',
+                '%.2f' % m.expense if m.expense else '',
+                m.note or ''
+            ])
+
+        output.seek(0)
+
+        from flask import make_response
+        filename = 'movimenti_{}.csv'.format(_date.today().strftime('%Y%m%d'))
+        response = make_response(output.getvalue())
+        response.headers['Content-Type'] = 'text/csv'
+        response.headers['Content-Disposition'] = 'attachment; filename={}'.format(filename)
+        return response
     finally:
         db.close()
 

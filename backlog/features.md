@@ -8,3 +8,4 @@
 | Gestione Export | gestione export: tutto, anno, anno-mese. filtro Opzionale Categoria; filtro opzionale keyword | TODO |
 | Filtri Visualizza Movimenti | in visualizza movimenti, aggiungi la possibilità di non inserire il mese in modo da avere le spese dell'anno; aggiungi un filtro keyword che agisce sulle note | TODO |
 | Gestione Categorie Avanzata | Separate sezioni entrata/uscita. Ordinamento custom e alfabetico. Rinominare categoria aggiorna i movimenti. Merge automatico se rinomina coincide con esistente. | TODO |
+| Ripeti Movimento | Pulsante "Ripeti" nell'elenco movimenti: apre il form di creazione pre-compilato con tutti i campi dell'originale e la data odierna (task17-0) | DONE |

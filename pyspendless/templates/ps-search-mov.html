@@ -96,6 +96,9 @@
                     <a href="/create?movement_id={{ mov.id }}" class="btn btn-sm btn-primary" title="Modifica">
                       <i class="fas fa-edit"></i>
                     </a>
+                    <a href="/create?repeat_from={{ mov.id }}" class="btn btn-sm btn-secondary" title="Ripeti oggi">
+                      <i class="fas fa-redo"></i>
+                    </a>
                     <button class="btn btn-sm btn-danger" onclick="deleteMovement('{{ mov.id }}')" title="Elimina">
                       <i class="fas fa-trash"></i>
                     </button>
@@ -266,6 +269,9 @@ function showAlert(message, type) {
           '<div class="mt-2 text-end">' +
             '<a href="/create?movement_id=' + encodeURIComponent(mov.id) + '" class="btn btn-sm btn-outline-primary py-0 px-2 me-1" title="Modifica">' +
               '<i class="fas fa-edit"></i>' +
+            '</a>' +
+            '<a href="/create?repeat_from=' + encodeURIComponent(mov.id) + '" class="btn btn-sm btn-outline-secondary py-0 px-2 me-1" title="Ripeti oggi">' +
+              '<i class="fas fa-redo"></i>' +
             '</a>' +
             '<button onclick="deleteMovement(\'' + mov.id + '\')" class="btn btn-sm btn-outline-danger py-0 px-2" title="Elimina">' +
               '<i class="fas fa-trash"></i>' +

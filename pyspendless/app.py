@@ -373,18 +373,23 @@ def create():
     """
     Form per creare o modificare un movimento
     Se movement_id è presente nella query string, carica il movimento per la modifica
+    Se repeat_from è presente, pre-compila il form con i dati di quel movimento
+    (funzione "Ripeti"): nuovo movimento, quindi senza id e con la data odierna
     """
     # Verifica autenticazione
     if not session.get('user_id'):
         flash('Devi effettuare il login', 'warning')
         return redirect(url_for('login'))
-    
+
     account_id = session.get('account_id')
     movement_id = request.args.get('movement_id')
-    
+    repeat_from = request.args.get('repeat_from')
+
     # Recupera dati dal database
     db = get_db_session()
     try:
+        from datetime import date as _date
+
         category_repo = CategoryRepository(db)
         wallet_repo = WalletRepository(db)
         movement_repo = MovementRepository(db)
@@ -401,14 +406,26 @@ def create():
             if not movement:
                 flash('Movimento non trovato', 'error')
                 return redirect(url_for('movements'))
-        
+
+        # Se repeat_from è presente (e non siamo in modifica), recupera il
+        # movimento da usare come sorgente per pre-compilare il form.
+        # Il filtro su account_id impedisce di leggere movimenti di altri account.
+        repeat_source = None
+        if repeat_from and not movement:
+            repeat_source = movement_repo.get_movement_by_id(repeat_from, account_id)
+            if not repeat_source:
+                flash('Movimento da ripetere non trovato', 'error')
+                return redirect(url_for('movements'))
+
         recurrent_movements = recurrent_repo.get_all_for_account(account_id)
 
         return render_template(
-            "ps-add-mov.html", 
-            categories=categories, 
+            "ps-add-mov.html",
+            categories=categories,
             wallets=wallets,
             movement=movement,
+            repeat_source=repeat_source,
+            today=_date.today(),
             recurrent_movements=recurrent_movements,
             users=[]  # TODO: implementare quando ci saranno i gruppi
         )

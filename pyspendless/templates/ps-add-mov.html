@@ -1,19 +1,36 @@
 {% extends 'ps-nav.html' %}
 
 {% block nav_content %}
+{# `src` è il movimento che fornisce i valori del form:
+   - in modifica    → il movimento stesso (`movement`)
+   - in ripetizione → il movimento sorgente (`repeat_source`), ma senza id e con data odierna
+   In creazione da zero entrambi sono None e il form resta vuoto.
+   Il set è dentro al block: le variabili definite fuori non sarebbero visibili qui. #}
+{% set src = movement or repeat_source %}
 <div class="container mt-4">
   <div class="row justify-content-center">
     <div class="col-md-8">
       <!-- Alert container per messaggi di successo/errore -->
       <div id="alert-container"></div>
 
+      {% if repeat_source %}
+      <div class="alert alert-info" role="alert">
+        <i class="bi bi-arrow-repeat"></i>
+        Stai ripetendo il movimento del {{ repeat_source.move_date.strftime('%d/%m/%Y') }}:
+        la data è stata impostata a oggi, gli altri campi sono modificabili prima di salvare.
+      </div>
+      {% endif %}
+
       <div class="card card-primary">
         <div class="card-header">
-          <h3 class="card-title">{% if movement %}Modifica Movimento{% else %}Nuovo Movimento{% endif %}</h3>
+          <h3 class="card-title">
+            {% if movement %}Modifica Movimento{% elif repeat_source %}Ripeti Movimento{% else %}Nuovo Movimento{% endif %}
+          </h3>
         </div>
         <form id="movement-form">
           <input type="hidden" id="movement_id" name="movement_id" value="{% if movement %}{{ movement.id }}{% endif %}">
-          <input type="hidden" id="recurrent_movement_id" value="">
+          <input type="hidden" id="is_repeat" value="{% if repeat_source %}1{% endif %}">
+          <input type="hidden" id="recurrent_movement_id" value="{% if repeat_source and repeat_source.recurrent_movement_id %}{{ repeat_source.recurrent_movement_id }}{% endif %}">
           <div class="card-body">
             {% if not movement %}
             <div class="mb-3" id="recurrent-template-block">
@@ -22,6 +39,7 @@
                 <option value="">— Seleziona spesa ricorrente (opzionale) —</option>
                 {% for rt in recurrent_movements %}
                   <option value="{{ rt.id }}"
+                          {% if repeat_source and repeat_source.recurrent_movement_id == rt.id %}selected{% endif %}
                           data-movement-type="{{ 'income' if rt.income else 'expense' }}"
                           data-category-id="{{ rt.category_id }}"
                           data-wallet-id="{{ rt.wallet_id }}"
@@ -35,14 +53,14 @@
             {% endif %}
             <div class="mb-3">
               <label for="move_date" class="form-label">Data</label>
-              <input type="date" class="form-control" id="move_date" name="move_date" 
-                     value="{% if movement %}{{ movement.move_date.strftime('%Y-%m-%d') }}{% endif %}" required>
+              <input type="date" class="form-control" id="move_date" name="move_date"
+                     value="{% if movement %}{{ movement.move_date.strftime('%Y-%m-%d') }}{% elif repeat_source %}{{ today.strftime('%Y-%m-%d') }}{% endif %}" required>
             </div>
             <div class="mb-3">
               <label for="movement_type" class="form-label">Tipo Movimento</label>
               <select class="form-select" id="movement_type" name="movement_type" required>
-                <option value="expense" {% if movement and movement.expense %}selected{% endif %}>Uscita</option>
-                <option value="income" {% if movement and movement.income %}selected{% endif %}>Entrata</option>
+                <option value="expense" {% if src and src.expense %}selected{% endif %}>Uscita</option>
+                <option value="income" {% if src and src.income %}selected{% endif %}>Entrata</option>
               </select>
             </div>
             <div class="mb-3">
@@ -50,8 +68,8 @@
               <select class="form-select" id="category" name="category" required>
                 <option value="">Seleziona una categoria</option>
                 {% for cat in categories %}
-                  <option value="{{ cat.id }}" data-type="{{ cat.type }}" 
-                          {% if movement and movement.category_id == cat.id %}selected{% endif %}>
+                  <option value="{{ cat.id }}" data-type="{{ cat.type }}"
+                          {% if src and src.category_id == cat.id %}selected{% endif %}>
                     {{ cat.name }}
                   </option>
                 {% endfor %}
@@ -61,7 +79,7 @@
               <label for="wallet" class="form-label">Wallet</label>
               <select class="form-select" id="wallet" name="wallet" required>
                 {% for wal in wallets %}
-                  <option value="{{ wal.id }}" {% if movement and movement.wallet_id == wal.id %}selected{% endif %}>
+                  <option value="{{ wal.id }}" {% if src and src.wallet_id == wal.id %}selected{% endif %}>
                     {{ wal.name }}
                   </option>
                 {% endfor %}
@@ -69,13 +87,13 @@
             </div>
             <div class="mb-3">
               <label for="amount" class="form-label">Importo (€)</label>
-              <input type="number" step="0.01" class="form-control" id="amount" name="amount" 
-                     value="{% if movement %}{{ movement.income or movement.expense }}{% endif %}" 
+              <input type="number" step="0.01" class="form-control" id="amount" name="amount"
+                     value="{% if src %}{{ src.income or src.expense }}{% endif %}"
                      required min="0.01">
             </div>
             <div class="mb-3">
               <label for="note" class="form-label">Nota</label>
-              <textarea class="form-control" id="note" name="note" rows="2">{% if movement %}{{ movement.note or '' }}{% endif %}</textarea>
+              <textarea class="form-control" id="note" name="note" rows="2">{% if src %}{{ src.note or '' }}{% endif %}</textarea>
             </div>
           </div>
           <div class="card-footer text-end">
@@ -91,7 +109,12 @@
 document.addEventListener('DOMContentLoaded', function() {
   // Imposta la data odierna come default solo se non stiamo modificando
   const movementId = document.getElementById('movement_id').value;
-  if (!movementId) {
+  // In modalità "Ripeti" i campi arrivano già valorizzati dal server:
+  // la data odierna è renderizzata server-side e il wallet è quello del
+  // movimento sorgente, quindi non va sovrascritto con l'ultimo usato.
+  const isRepeat = document.getElementById('is_repeat').value === '1';
+
+  if (!movementId && !isRepeat) {
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('move_date').value = today;
 
@@ -220,7 +243,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Successo - mostra messaggio
         showAlert(result.message || 'Salvataggio avvenuto con successo!', 'success');
-        
+
+        if (isRepeat) {
+          // "Ripeti" è un'azione one-shot: torna all'elenco movimenti.
+          // Evita anche il reset del form, che qui ripristinerebbe i valori
+          // pre-compilati del movimento sorgente invece di svuotarlo.
+          setTimeout(() => {
+            window.location.href = '/movements';
+          }, 1000);
+          return;
+        }
+
         if (!movId) {
           // Solo in creazione: resetta il form
           form.reset();

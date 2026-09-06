@@ -45,6 +45,7 @@ il rimando.
 |----|------|-------------|----------|-------|
 | MB-001 | evolutiva | Al salvataggio di un movimento portare il focus sul messaggio di successo | media | APERTA |
 | MB-002 | evolutiva | Pannello filtri di "Vedi Movimenti" collassabile e chiuso di default | media | APERTA |
+| MB-003 | evolutiva | Versione applicativa: variabile privata in `app.py`, API `/version`, visibile nel footer | bassa | APERTA |
 
 ## Aperte
 
@@ -137,6 +138,73 @@ Bootstrap Icons sono disponibili (riga 54), quindi non servono dipendenze nuove.
   un eventuale `localStorage` andrebbe coordinato con il punto precedente.
 - Intervento analogo possibile su `ps-search-mov.html`: fuori scope qui, aprire
   una voce dedicata se serve.
+
+### MB-003 — Versione applicativa: variabile privata, API `/version`, footer
+
+- **Tipo**: evolutiva
+- **Priorità**: bassa
+- **Dove**: `pyspendless/app.py` (header modulo, ~riga 27; context processor
+  `inject_admin_status` riga 70), `pyspendless/templates/ps-base.html` — footer
+  (righe 73-78)
+
+**Problema**
+Non esiste un numero di versione dell'applicazione: non è possibile sapere quale
+build è in esecuzione su PythonAnywhere né correlarla a un tag/commit. Il footer
+mostra solo `© 2026 PySpendless`.
+
+**Proposta**
+Una sola fonte di verità, letta sia dall'API sia dal template.
+
+1. **Variabile privata in `app.py`** — subito dopo il setup del logger
+   (`logger = logging.getLogger(__name__)`, riga 27):
+   ```python
+   _APP_VERSION = "0.1.0"   # semver; bump manuale a ogni release/tag
+   ```
+   Nome con underscore iniziale = "privato di modulo" (convenzione Python),
+   coerente con la richiesta. Nessun import da file esterni.
+
+2. **API REST `/version`** — endpoint pubblico (nessun `session.get('user_id')`),
+   accanto agli altri `@app.route(...)`:
+   ```python
+   @app.route("/version", methods=['GET'])
+   def version():
+       """Ritorna la versione dell'applicazione."""
+       return jsonify({"version": _APP_VERSION})
+   ```
+   > Nota convenzione: tutte le altre API stanno sotto `/api/...`
+   > (`api_get_categories`, `api_get_movements`, ...). La richiesta parla di
+   > `/version`: implementare `/version`, valutando in fase di PR se aggiungere
+   > anche l'alias `/api/version` per uniformità. `jsonify` è già importato
+   > (`app.py:6`).
+
+3. **Footer** — esporre la versione ai template via il context processor già
+   presente (`inject_admin_status`, `app.py:70`), senza ri-hardcodarla
+   nell'HTML:
+   ```python
+   return {'is_admin': is_admin(), 'app_version': _APP_VERSION}
+   ```
+   In `ps-base.html`, footer:
+   ```html
+   <span class="text-muted">&copy; 2026 PySpendless &middot; v{{ app_version }}</span>
+   ```
+
+**Note / casi limite**
+
+- `/version` deve restare raggiungibile **senza login**: verificare che non ci
+  siano `before_request` che la intercettano. C'è `check_maintenance_mode`
+  (`app.py:75`): decidere se in manutenzione `/version` risponde comunque
+  (utile per i check esterni) aggiungendola all'allowlist del maintenance, o se
+  è accettabile che venga bloccata.
+- Il footer `{% block footer %}` è sovrascritto in alcuni template figli:
+  cercare `{% block footer %}` nelle altre `templates/*.html` e allineare, o
+  spostare la versione in un punto ereditato da tutti.
+- La pagina di login/manutenzione usa `ps-base.html`? Se sì il `app_version` nel
+  context processor è sufficiente; se qualche pagina non passa dal context
+  processor (render statico), passarla esplicitamente nel `render_template`.
+- Bump manuale: la variabile va aggiornata a mano prima di creare il tag `vX.Y.Z`
+  usato dal deploy (task18-0). Fuori scope qui automatizzarlo (es. derivarla da
+  `git describe`).
+- Nessuna dipendenza nuova, nessuna modifica a modello dati o migrazioni.
 
 ## Risolte
 

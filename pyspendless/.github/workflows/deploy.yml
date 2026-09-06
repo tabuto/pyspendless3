@@ -1,0 +1,38 @@
+name: Deploy to PythonAnywhere
+
+on:
+  push:
+    tags:
+      - 'v*'   # si attiva solo sui tag tipo v1.0, v2.3.1, ecc.
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via PythonAnywhere API
+        env:
+          PA_USER: ${{ secrets.PA_USER }}
+          PA_TOKEN: ${{ secrets.PA_TOKEN }}
+          PA_DOMAIN: ${{ secrets.PA_DOMAIN }}
+          PA_REPO_PATH: ${{ secrets.PA_REPO_PATH }}
+        run: |
+          API="https://www.pythonanywhere.com/api/v0/user/$PA_USER"
+
+          CONSOLE_ID=$(curl -s -H "Authorization: Token $PA_TOKEN" \
+            -X POST "$API/consoles/" \
+            -d "executable=bash" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+
+          curl -s -H "Authorization: Token $PA_TOKEN" \
+            -X POST "$API/consoles/$CONSOLE_ID/send_input/" \
+            --data-urlencode "input=cd $PA_REPO_PATH && git pull && exit
+"
+
+          sleep 8
+
+          curl -s -H "Authorization: Token $PA_TOKEN" \
+            "$API/consoles/$CONSOLE_ID/get_latest_output/"
+
+          curl -s -H "Authorization: Token $PA_TOKEN" \
+            -X POST "$API/webapps/$PA_DOMAIN/reload/"
+
+          echo "Deploy completato: pull + reload eseguiti."

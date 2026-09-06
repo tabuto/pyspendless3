@@ -5,6 +5,13 @@ on:
     tags:
       - 'v*'   # si attiva solo sui tag tipo v1.0, v2.3.1, ecc.
 
+env:
+  # ID di una console Bash PythonAnywhere GIA' AVVIATA (aperta almeno una
+  # volta nel browser). Le console create solo via API restano dormienti e
+  # non eseguono l'input inviato. Aggiornare qui se la console viene
+  # chiusa/ricreata su PA.
+  PA_CONSOLE_ID: "45331030"
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -16,23 +23,51 @@ jobs:
           PA_DOMAIN: ${{ secrets.PA_DOMAIN }}
           PA_REPO_PATH: ${{ secrets.PA_REPO_PATH }}
         run: |
+          set -eo pipefail
+
           API="https://www.pythonanywhere.com/api/v0/user/$PA_USER"
+          AUTH="Authorization: Token $PA_TOKEN"
+          CID="$PA_CONSOLE_ID"
 
-          CONSOLE_ID=$(curl -s -H "Authorization: Token $PA_TOKEN" \
-            -X POST "$API/consoles/" \
-            -d "executable=bash" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          echo "Invio 'git pull' alla console $CID"
+          INPUT=$(printf 'cd %s && git pull; echo "PULL_EXIT=$?"\n' "$PA_REPO_PATH")
+          CODE=$(curl -s -o /tmp/send.json -w '%{http_code}' -H "$AUTH" \
+            -X POST "$API/consoles/$CID/send_input/" \
+            --data-urlencode "input=$INPUT")
+          cat /tmp/send.json; echo
+          if [ "$CODE" != "200" ]; then
+            echo "::error::send_input ha risposto HTTP $CODE"; exit 1
+          fi
+          if grep -qi 'not yet started' /tmp/send.json; then
+            echo "::error::Console $CID dormiente: aprila una volta nel browser PA e ritaggare"
+            exit 1
+          fi
 
-          INPUT=$(printf 'cd %s && git pull && exit\n' "$PA_REPO_PATH")
-          curl -s -H "Authorization: Token $PA_TOKEN" \
-            -X POST "$API/consoles/$CONSOLE_ID/send_input/" \
-            --data-urlencode "input=$INPUT"
+          echo "Attendo l'esito del pull (max ~60s)"
+          OUT=""
+          for i in $(seq 1 20); do
+            sleep 3
+            OUT=$(curl -s -H "$AUTH" "$API/consoles/$CID/get_latest_output/" \
+              | python3 -c "import sys,json; print(json.load(sys.stdin).get('output',''))")
+            if printf '%s' "$OUT" | grep -qE 'PULL_EXIT=[0-9]'; then
+              break
+            fi
+          done
+          echo "----- output console -----"
+          printf '%s\n' "$OUT"
+          echo "--------------------------"
 
-          sleep 8
+          if ! printf '%s' "$OUT" | grep -q 'PULL_EXIT=0'; then
+            echo "::error::git pull non riuscito (nessun PULL_EXIT=0 nell'output console)"
+            exit 1
+          fi
 
-          curl -s -H "Authorization: Token $PA_TOKEN" \
-            "$API/consoles/$CONSOLE_ID/get_latest_output/"
+          echo "Reload della web app $PA_DOMAIN"
+          CODE=$(curl -s -o /tmp/reload.json -w '%{http_code}' -H "$AUTH" \
+            -X POST "$API/webapps/$PA_DOMAIN/reload/")
+          cat /tmp/reload.json; echo
+          if [ "$CODE" != "200" ]; then
+            echo "::error::reload ha risposto HTTP $CODE"; exit 1
+          fi
 
-          curl -s -H "Authorization: Token $PA_TOKEN" \
-            -X POST "$API/webapps/$PA_DOMAIN/reload/"
-
-          echo "Deploy completato: pull + reload eseguiti."
+          echo "Deploy OK: git pull + reload completati sulla console $CID."

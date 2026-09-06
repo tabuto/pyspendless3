@@ -5,7 +5,7 @@
   <div class="row">
     <div class="col-12">
       <!-- Alert container per messaggi -->
-      <div id="alert-container"></div>
+      <div id="alert-container" aria-live="polite" aria-atomic="true"></div>
 
       <div class="card">
         <div class="card-header">
@@ -195,23 +195,44 @@ async function deleteMovement(movementId) {
 }
 
 function showAlert(message, type) {
+  const AUTO_HIDE_MS = 5000;
+
   const alertContainer = document.getElementById('alert-container');
   const alert = document.createElement('div');
   alert.className = `alert alert-${type} alert-dismissible fade show`;
   alert.role = 'alert';
+  // Focalizzabile da script ma non raggiungibile con Tab
+  alert.tabIndex = -1;
   alert.innerHTML = `
     ${message}
     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
   `;
-  
+
   alertContainer.innerHTML = '';
   alertContainer.appendChild(alert);
 
-  // Auto-nascondi dopo 5 secondi
-  setTimeout(() => {
+  // L'alert è in cima alla pagina: portalo nella viewport e dallo al focus,
+  // altrimenti agendo su un movimento in fondo alla lista non si vede l'esito
+  alert.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  alert.focus({ preventScroll: true });
+
+  // Auto-nascondi dopo 5 secondi, ma non mentre l'utente lo sta leggendo
+  function hide() {
     alert.classList.remove('show');
     setTimeout(() => alert.remove(), 150);
-  }, 5000);
+  }
+
+  function scheduleHide() {
+    setTimeout(() => {
+      if (document.activeElement === alert) {
+        alert.addEventListener('blur', scheduleHide, { once: true });
+        return;
+      }
+      hide();
+    }, AUTO_HIDE_MS);
+  }
+
+  scheduleHide();
 }
 
 // ── Infinite scroll card list (mobile) ──────────────────────────────────

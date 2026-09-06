@@ -26,6 +26,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Versione dell'applicazione (semver): unica fonte di verità, esposta
+# dall'endpoint /version e dal footer via context processor.
+# Bump manuale prima di creare il tag vX.Y.Z usato dal deploy.
+_APP_VERSION = "0.1.4"
+
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
@@ -69,8 +74,8 @@ def is_admin():
 # ===== CONTEXT PROCESSOR =====
 @app.context_processor
 def inject_admin_status():
-    """Rende disponibile is_admin in tutti i template"""
-    return {'is_admin': is_admin()}
+    """Rende disponibili is_admin e app_version in tutti i template"""
+    return {'is_admin': is_admin(), 'app_version': _APP_VERSION}
 
 # ===== MAINTENANCE MODE =====
 @app.before_request
@@ -94,11 +99,21 @@ def check_maintenance_mode():
         return None
     
     # Escludi eventuali endpoint di health check (opzionale)
-    if request.path == '/health':
+    # /version resta raggiungibile anche in manutenzione: serve ai check esterni
+    # per sapere quale build è in esecuzione proprio quando l'app è ferma.
+    if request.path in ('/health', '/version'):
         return None
-    
+
     # Mostra la pagina di manutenzione
     return render_template('ps-maintenance.html'), 503
+
+@app.route("/version", methods=['GET'])
+def version():
+    """
+    Ritorna la versione dell'applicazione.
+    Endpoint pubblico: nessuna autenticazione richiesta.
+    """
+    return jsonify({'version': _APP_VERSION}), 200
 
 @app.route("/")
 def index():
@@ -461,6 +476,17 @@ def _parse_movement_filters():
     keywords_raw  = request.args.get('keywords', default='').strip()
     keywords      = [k.strip() for k in keywords_raw.replace(',', ' ').split() if k.strip()]
 
+    # Numero di filtri che si discostano dai default: usato dalla pagina
+    # /movements per aprire il pannello filtri (chiuso di default) e per il
+    # badge con il conteggio, così i filtri attivi restano visibili.
+    active_count = sum([
+        1 if (date_from != today.replace(day=1) or date_to != today) else 0,
+        1 if wallet_id else 0,
+        1 if category_type else 0,
+        1 if category_ids else 0,
+        1 if keywords else 0,
+    ])
+
     return {
         'date_from':     date_from,
         'date_to':       date_to,
@@ -469,6 +495,7 @@ def _parse_movement_filters():
         'category_ids':  category_ids,
         'keywords':      keywords,
         'keywords_raw':  keywords_raw,
+        'active_count':  active_count,
     }
 
 
@@ -545,6 +572,7 @@ def movements():
                 'category_type': category_type,
                 'category_ids':  category_ids,
                 'keywords':      keywords_raw,
+                'active_count':  f['active_count'],
             }
         )
     finally:

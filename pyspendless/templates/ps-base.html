@@ -73,7 +73,10 @@
     {% block footer %}
     <footer class="footer mt-auto py-3 bg-light">
         <div class="container text-center">
-            <span class="text-muted">&copy; 2026 PySpendless</span>
+            <span class="text-muted">
+                &copy; 2026 PySpendless
+                {% if app_version %}&middot; v{{ app_version }}{% endif %}
+            </span>
         </div>
     </footer>
     {% endblock %}

@@ -2,11 +2,27 @@
 
 {% block nav_content %}
 <div class="container-fluid mt-4">
-  <!-- Barra dei Filtri -->
+  <!-- Barra dei Filtri — pannello collassabile, chiuso di default a ogni
+       larghezza; si apre da solo se ci sono filtri diversi dai default -->
   <div class="card mb-4">
-    <div class="card-header">
-      <h5 class="card-title mb-0">Filtri</h5>
+    <div class="card-header p-0">
+      <button class="btn btn-link w-100 text-decoration-none text-start d-flex
+                     justify-content-between align-items-center py-2 px-3 filters-toggle"
+              type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#filters-collapse"
+              aria-expanded="{{ 'true' if filters.active_count else 'false' }}"
+              aria-controls="filters-collapse">
+        <span class="h5 mb-0">
+          Filtri
+          {% if filters.active_count %}
+            <span class="badge bg-primary ms-1">{{ filters.active_count }}</span>
+          {% endif %}
+        </span>
+        <i class="bi bi-chevron-down filters-chevron"></i>
+      </button>
     </div>
+    <div class="collapse{% if filters.active_count %} show{% endif %}" id="filters-collapse">
     <div class="card-body">
       <form method="GET" action="{{ url_for('movements') }}" class="row g-3">
         <!-- Riga 1: date e filtri semplici -->
@@ -69,6 +85,7 @@
         </div>
       </form>
     </div>
+    </div><!-- /#filters-collapse -->
   </div>
 
   <!-- Sezione Statistiche (KPI Cards) -->
@@ -201,6 +218,23 @@
     </div>
   </div>
 </div>
+
+<style>
+  /* Toggle del pannello filtri: niente stile "link" (blu/underline),
+     testo del colore del body e chevron che ruota con lo stato */
+  .filters-toggle,
+  .filters-toggle:hover,
+  .filters-toggle:focus {
+    color: var(--bs-body-color);
+    box-shadow: none;
+  }
+  .filters-chevron {
+    transition: transform 0.2s ease-in-out;
+  }
+  .filters-toggle[aria-expanded="true"] .filters-chevron {
+    transform: rotate(180deg);
+  }
+</style>
 
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -340,26 +374,44 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   // ── Tom Select — multi-select categorie ────────────────────────────────
-  const tsCategories = new TomSelect('#category_id', {
-    plugins: ['remove_button', 'checkbox_options'],
-    create: false,
-    placeholder: 'Tutte le categorie',
-    maxOptions: null,
-    closeAfterSelect: false,
-    render: {
-      no_results: function() {
-        return '<div class="no-results">Nessun risultato</div>';
+  // Il pannello filtri è collassato: inizializzare Tom Select mentre il
+  // contenitore è display:none produce larghezze e posizionamento del dropdown
+  // sbagliati, quindi l'init è rimandato alla prima apertura del pannello.
+  let tsCategories = null;
+
+  function initCategorySelect() {
+    if (tsCategories) return;
+    tsCategories = new TomSelect('#category_id', {
+      plugins: ['remove_button', 'checkbox_options'],
+      create: false,
+      placeholder: 'Tutte le categorie',
+      maxOptions: null,
+      closeAfterSelect: false,
+      render: {
+        no_results: function() {
+          return '<div class="no-results">Nessun risultato</div>';
+        }
       }
-    }
-  });
+    });
+  }
+
+  const filtersCollapse = document.getElementById('filters-collapse');
+  if (filtersCollapse.classList.contains('show')) {
+    // Pannello già aperto (filtri attivi): 'shown.bs.collapse' non scatterebbe mai
+    initCategorySelect();
+  } else {
+    filtersCollapse.addEventListener('shown.bs.collapse', initCategorySelect, { once: true });
+  }
 
   document.getElementById('cat-select-all').addEventListener('click', function(e) {
     e.preventDefault();
+    if (!tsCategories) return;
     tsCategories.setValue(Object.keys(tsCategories.options));
   });
 
   document.getElementById('cat-deselect-all').addEventListener('click', function(e) {
     e.preventDefault();
+    if (!tsCategories) return;
     tsCategories.clear();
   });
 

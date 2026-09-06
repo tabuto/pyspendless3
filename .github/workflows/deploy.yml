@@ -22,10 +22,10 @@ jobs:
             -X POST "$API/consoles/" \
             -d "executable=bash" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 
+          INPUT=$(printf 'cd %s && git pull && exit\n' "$PA_REPO_PATH")
           curl -s -H "Authorization: Token $PA_TOKEN" \
             -X POST "$API/consoles/$CONSOLE_ID/send_input/" \
-            --data-urlencode "input=cd $PA_REPO_PATH && git pull && exit
-"
+            --data-urlencode "input=$INPUT"
 
           sleep 8
 

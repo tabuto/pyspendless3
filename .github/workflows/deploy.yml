@@ -30,10 +30,12 @@ jobs:
           CID="$PA_CONSOLE_ID"
 
           echo "Invio 'git pull' alla console $CID"
-          INPUT=$(printf 'cd %s && git pull; echo "PULL_EXIT=$?"\n' "$PA_REPO_PATH")
+          # $(...) toglie i newline finali: il newline che "preme Invio" nella
+          # console va concatenato DOPO, come stringa a se' ($'\n').
+          CMD="cd $PA_REPO_PATH && git pull; echo PULL_EXIT=\$?"
           CODE=$(curl -s -o /tmp/send.json -w '%{http_code}' -H "$AUTH" \
             -X POST "$API/consoles/$CID/send_input/" \
-            --data-urlencode "input=$INPUT")
+            --data-urlencode "input=${CMD}"$'\n')
           cat /tmp/send.json; echo
           if [ "$CODE" != "200" ]; then
             echo "::error::send_input ha risposto HTTP $CODE"; exit 1

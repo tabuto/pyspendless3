@@ -234,11 +234,18 @@ def run(base_url, user_id, keep):
         # --- autenticazione ---
         checker.section('Autenticazione')
 
+        # Nota: un 401 (o un header WWW-Authenticate) farebbe partire il flusso OAuth
+        # lato client. Gli errori di autenticazione devono viaggiare come esito di tool.
         anonymous = McpClient(url)
         response = anonymous.call('tools/call', {'name': 'list_categories', 'arguments': {}})
-        checker.check('tools/call senza token -> 401', response.status_code == 401, response.status_code)
-        checker.check('401 include WWW-Authenticate',
-                      'WWW-Authenticate' in response.headers, dict(response.headers))
+        is_error, text, structured = tool_payload(response)
+        checker.check('tools/call senza token -> 200 con isError',
+                      response.status_code == 200 and is_error is True,
+                      '{} {}'.format(response.status_code, text[:80]))
+        checker.check('errore di auth marcato in structuredContent',
+                      structured.get('auth_error') is True, structured)
+        checker.check('nessun header WWW-Authenticate (non deve innescare OAuth)',
+                      'WWW-Authenticate' not in response.headers, dict(response.headers))
 
         response = anonymous.call('tools/list')
         checker.check('tools/list resta accessibile senza token (sonda del connettore)',
@@ -246,7 +253,23 @@ def run(base_url, user_id, keep):
 
         wrong = McpClient(url, 'segreto-inventato')
         response = wrong.call('tools/call', {'name': 'list_categories', 'arguments': {}})
-        checker.check('token errato -> 401', response.status_code == 401, response.status_code)
+        is_error, _, structured = tool_payload(response)
+        checker.check('token errato -> 200 con isError',
+                      response.status_code == 200 and is_error is True, response.status_code)
+        checker.check('token errato non emette WWW-Authenticate',
+                      'WWW-Authenticate' not in response.headers)
+
+        # --- discovery OAuth: deve essere 404 JSON, mai HTML o redirect ---
+        for path in ('/.well-known/oauth-protected-resource',
+                     '/.well-known/oauth-protected-resource/mcp',
+                     '/.well-known/oauth-authorization-server',
+                     '/.well-known/oauth-authorization-server/mcp',
+                     '/.well-known/openid-configuration'):
+            probe = requests.get(base_url.rstrip('/') + path, timeout=30, allow_redirects=False)
+            checker.check('{} -> 404 JSON'.format(path),
+                          probe.status_code == 404
+                          and 'json' in probe.headers.get('Content-Type', ''),
+                          '{} {}'.format(probe.status_code, probe.headers.get('Content-Type')))
 
         for header in ('x-api-token', 'x-api-key', 'x-auth-token'):
             alt = McpClient(url, secret, header_mode=header)
@@ -384,7 +407,11 @@ def run(base_url, user_id, keep):
 
         revoke_token(token_hash)
         response = client.call('tools/call', {'name': 'list_categories', 'arguments': {}})
-        checker.check('token revocato -> 401', response.status_code == 401, response.status_code)
+        is_error, _, structured = tool_payload(response)
+        checker.check('token revocato -> 200 con isError',
+                      response.status_code == 200 and is_error is True, response.status_code)
+        checker.check('token revocato marcato come auth_error',
+                      structured.get('auth_error') is True, structured)
 
         return checker.summary()
 

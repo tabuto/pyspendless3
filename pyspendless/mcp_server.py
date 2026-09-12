@@ -65,6 +65,25 @@ ERR_INTERNAL = -32603
 # Tutto ciò che legge o scrive dati passa da `tools/call`, che è autenticato.
 AUTH_REQUIRED_METHODS = ('tools/call',)
 
+# ATTENZIONE — perché un errore di autenticazione NON risponde 401.
+#
+# Nella specifica MCP il 401 a livello di trasporto (con o senza header
+# WWW-Authenticate) è il segnale che avvia il flusso OAuth lato client: Claude
+# sospende la chiamata, cerca i metadata di discovery e, non trovandoli, tenta la
+# Dynamic Client Registration, fallendo con "impossibile registrarsi con il
+# servizio di accesso". Questo server non usa OAuth ma un token statico passato
+# in un header, quindi non deve MAI emettere un 401.
+#
+# Un 200 con isError=True viene invece consegnato al modello come esito del tool:
+# nessun prompt di accesso, e l'utente legge in chat che cosa deve configurare.
+AUTH_ERROR_TEXT = (
+    "Non sono autenticato su PySpendless: il token personale manca o non è più valido. "
+    "Genera un token dalla pagina Impostazioni > Profilo di PySpendless e configuralo nel "
+    "connettore, come header 'authorization' con valore 'Bearer <token>' (in alternativa "
+    "'x-api-token', 'x-api-key' o 'x-auth-token' con il solo token). Se il token è stato "
+    "revocato o è scaduto, va generato di nuovo e il connettore va rimosso e riaggiunto."
+)
+
 # Header accettati per il token (decisione D1).
 # `Authorization: Bearer <segreto>` è la forma primaria; gli altri sono fallback
 # con valore nudo, per adattarsi a quello che la UI dei connettori rende
@@ -668,6 +687,16 @@ def _tool_error(text, structured=None):
     return result
 
 
+def _auth_error_result():
+    """
+    Esito di un tool invocato senza token valido.
+
+    È deliberatamente un risultato di tool (HTTP 200, isError=True) e non un 401:
+    vedi la nota su AUTH_ERROR_TEXT in cima al modulo.
+    """
+    return _tool_error(AUTH_ERROR_TEXT, {'auth_error': True})
+
+
 def _success_response(request_id, result):
     return {'jsonrpc': '2.0', 'id': request_id, 'result': result}
 
@@ -713,7 +742,8 @@ def _handle_tools_call(params, secret, app_version):
     try:
         ctx = authenticate(db, secret)
         if ctx is None:
-            return None, 'unauthorized'
+            logger.warning('[MCP] tool=%s rifiutato: token assente o non valido', name)
+            return _auth_error_result(), None
 
         started = datetime.utcnow()
         result = handler(db, ctx, arguments)
@@ -740,7 +770,8 @@ def _dispatch(message, secret, app_version):
     Returns:
         (risposta_dict | None, stato_speciale | None)
         `None` come risposta significa notifica (nessun corpo da restituire).
-        Lo stato speciale 'unauthorized' fa rispondere 401 al livello HTTP.
+        Il secondo elemento è riservato a usi futuri: oggi è sempre None, perché
+        nessun esito di questo server richiede uno status HTTP diverso da 200/202.
     """
     if not isinstance(message, dict):
         return _error_response(None, ERR_INVALID_REQUEST, 'Messaggio JSON-RPC non valido.'), None
@@ -760,8 +791,13 @@ def _dispatch(message, secret, app_version):
     # Notifiche: nessun 'id' -> nessuna risposta
     is_notification = 'id' not in message
 
+    # Token assente: si risponde comunque 200 con un errore di tool (mai 401,
+    # che innescherebbe il flusso OAuth lato client)
     if method in AUTH_REQUIRED_METHODS and not secret:
-        return None, 'unauthorized'
+        logger.warning('[MCP] %s senza token: rifiutato come errore di tool', method)
+        if is_notification:
+            return None, None
+        return _success_response(request_id, _auth_error_result()), None
 
     try:
         if method == 'initialize':
@@ -781,9 +817,6 @@ def _dispatch(message, secret, app_version):
 
         if method == 'tools/call':
             result, special = _handle_tools_call(params, secret, app_version)
-
-            if special == 'unauthorized':
-                return None, 'unauthorized'
 
             if isinstance(special, tuple) and special[0] == 'invalid_params':
                 return _error_response(request_id, ERR_INVALID_PARAMS, special[1]), None
@@ -809,6 +842,9 @@ def handle_http_request(flask_request, app_version):
 
     Returns:
         (body, status_code) — `body` è None quando non c'è corpo da restituire (202).
+
+    Nota: questo endpoint non restituisce mai 401. Un errore di autenticazione
+    viaggia come esito di tool dentro una risposta 200 (vedi AUTH_ERROR_TEXT).
     """
     secret = extract_token(flask_request.headers)
 
@@ -827,9 +863,7 @@ def handle_http_request(flask_request, app_version):
 
         responses = []
         for item in message:
-            response, special = _dispatch(item, secret, app_version)
-            if special == 'unauthorized':
-                return _unauthorized_body(), 401
+            response, _ = _dispatch(item, secret, app_version)
             if response is not None:
                 responses.append(response)
 
@@ -837,11 +871,7 @@ def handle_http_request(flask_request, app_version):
             return None, 202
         return responses, 200
 
-    response, special = _dispatch(message, secret, app_version)
-
-    if special == 'unauthorized':
-        logger.warning('[MCP] richiesta non autorizzata (token assente o non valido)')
-        return _unauthorized_body(), 401
+    response, _ = _dispatch(message, secret, app_version)
 
     if response is None:
         return None, 202
@@ -849,12 +879,22 @@ def handle_http_request(flask_request, app_version):
     return response, 200
 
 
-def _unauthorized_body():
-    return _error_response(
-        None, ERR_INVALID_REQUEST,
-        'Token mancante o non valido. Configura il token personale generato dal profilo '
-        'PySpendless nell\'header Authorization: Bearer <token>.'
-    )
+def not_found_body(path):
+    """
+    Corpo JSON per i path di discovery OAuth che Claude sonda (.well-known/...).
+
+    Questo server non implementa OAuth: la risposta dev'essere un 404 pulito e
+    *in JSON*, non la pagina HTML di errore di Flask né un redirect al login,
+    che potrebbero far credere al client che esista un authorization server.
+    """
+    return {
+        'error': 'not_found',
+        'error_description': (
+            "Questo server MCP non usa OAuth: l'autenticazione avviene con un token "
+            "statico passato in un header della richiesta."
+        ),
+        'path': path
+    }
 
 
 def method_not_allowed_body():

@@ -19,7 +19,8 @@ movimento finisca nel DB di PySpendless.
 | Trasporto MCP | **Streamable HTTP stateless**: un solo endpoint `POST /mcp`, risposta `application/json`, nessun SSE, nessuna sessione |
 | Metodi implementati | `initialize`, `notifications/initialized`, `tools/list`, `tools/call` (+ `ping`) |
 | Tool esposti | **due**: `add_movement` (scrittura) e `list_categories` (lettura) — D2 |
-| Auth | `Authorization: Bearer <segreto>`, **fallback `x-api-token: <segreto>`**; segreto **hashato SHA-256** nella tabella `Token` esistente con `type='MCP'` — D1, D3 |
+| Auth | `Authorization: Bearer <segreto>`, **fallback `x-api-token` / `x-api-key` / `x-auth-token`**; segreto **hashato SHA-256** nella tabella `Token` esistente con `type='MCP'` — D1, D3 |
+| Errori di auth | **200 con `isError: true`, mai 401 né `WWW-Authenticate`** (innescherebbero OAuth lato client) — vedi §3.bis |
 | Anti-duplicazione | confronto dell'hash `importo-categoria-descrizione` con l'**ultimo** movimento inserito dall'utente; bypass esplicito con `force: true` — D7 |
 | **Prerequisito bloccante** | **Il sistema di "custom auth token nel profilo utente" NON esiste ancora nel repo** → va costruito (Fase 0, dentro questo task — D11) |
 | Nuovi file Python | `pyspendless/mcp_server.py` (logica MCP), registrato in `app.py` |
@@ -408,17 +409,66 @@ cambiano comportamento.
 3. **Contesto**: da `get_payload()` si ricavano `user_id` e `account_id`, che **sostituiscono**
    `session['user_id']` / `session['account_id']` nella logica di scrittura. Il resto dei controlli di
    appartenenza (categoria e wallet dello stesso `account_id`, `app.py:812-814`) resta identico.
-4. **Fallimento**: HTTP **401** con `WWW-Authenticate: Bearer` e body JSON-RPC di errore. Mai
-   restituire 200 con un errore di auth: il client non se ne accorgerebbe.
+4. **Fallimento**: HTTP **200** con un errore di *tool* (`isError: true`) e un testo in italiano che
+   spiega come configurare il token. **Mai 401, mai `WWW-Authenticate`** — vedi §3.bis: sono il
+   segnale che avvia il flusso OAuth lato client.
 5. **Decoratore** `@mcp_token_required` in `mcp_server.py`, per non spargere la logica nelle rotte
    (stesso pattern di `admin_required`, `app.py:59-68`).
 6. **Nessun cookie di sessione** viene letto o scritto su `/mcp`: il flusso è completamente
    indipendente dal login browser.
 
+### 3.bis — Perché il fallimento di autenticazione NON è un 401 (correzione del 2026-09-12)
+
+**Sintomo.** Al primo tentativo di collegare il connettore, Claude rispondeva:
+*«Impossibile registrarsi con il servizio di accesso di mcp-pyspendless. Puoi riprovare oppure
+aggiungere un OAuth Client ID nelle impostazioni del connettore.»*
+
+**Causa.** La prima stesura restituiva `401` + `WWW-Authenticate: Bearer` quando il token mancava.
+Nella specifica MCP quello **è** il segnale di lazy authentication: un 401 a livello di trasporto fa
+sospendere la chiamata al client, che cerca i metadata di discovery e avvia OAuth. La documentazione
+Anthropic è esplicita: *«Only a transport-level 401 causes Claude to pause the call, run the OAuth
+flow, and retry»*, mentre un 200 con `isError: true` *«Claude passes the error text to the model as
+the tool result and moves on — there is no auth prompt»*.
+
+Era quindi implementato il protocollo di challenge OAuth su un server che OAuth non ha. La catena
+completa osservata in produzione:
+
+1. `tools/call` senza token → `401` + `WWW-Authenticate: Bearer`;
+2. l'header non porta il parametro `resource_metadata`, quindi Claude sonda i well-known
+   sull'origine: `/.well-known/oauth-protected-resource/mcp` e varianti → 404 HTML di Flask;
+3. senza metadata, il client assume che l'authorization server sia l'origine stessa e tenta la
+   **Dynamic Client Registration** su `POST /register` → 404;
+4. errore mostrato all'utente.
+
+Verificato in analisi che il resto dell'ipotesi *non* era in causa: l'app **non** ha rotte catch-all
+(`<path:...>` non compare), l'unico `before_request` è `check_maintenance_mode`, e i path di
+discovery non producevano alcun redirect verso il login Google — solo un 404.
+
+**Correzione applicata.**
+
+- L'endpoint `/mcp` non emette più **né 401 né `WWW-Authenticate`**, in nessun caso.
+- Token assente, errato, revocato o scaduto → risposta **200** con `isError: true`,
+  `structuredContent: {"auth_error": true}` e il testo di `AUTH_ERROR_TEXT`, che spiega all'utente
+  come generare il token dal profilo e come configurarlo nel connettore.
+- Rotte difensive per `/.well-known/oauth-protected-resource`,
+  `/.well-known/oauth-authorization-server`, `/.well-known/openid-configuration` (e le varianti con
+  path suffisso): rispondono **404 in JSON**, escluse dalla modalità manutenzione, così non possono
+  mai degenerare in HTML o in un redirect che suggerisca l'esistenza di un authorization server.
+
+**Conseguenza operativa**: le impostazioni di autenticazione di un connettore non sono modificabili
+dopo la creazione → il connettore va **rimosso e riaggiunto**. Inoltre Claude tiene in cache i
+documenti di discovery **globalmente per URL, per circa 5 minuti**: conviene attendere qualche minuto
+fra un tentativo e il successivo.
+
+**Se un domani servisse davvero OAuth** (scenario D1 sfavorevole), il 401 va reintrodotto *insieme* a
+tutta la catena di discovery — PRM, metadata dell'authorization server, `/authorize`, `/token` — mai
+da solo.
+
 ### File coinvolti
 
 - `pyspendless/mcp_server.py` (**nuovo**)
 - `pyspendless/repository.py` (`validate_mcp_secret` per il lookup su hash)
+- `pyspendless/app.py` (rotte `.well-known` di discovery → 404 JSON)
 
 ### Rischi residui
 
@@ -501,10 +551,14 @@ in linea col progetto: uno **script di verifica manuale** riproducibile, non l'i
    - **data (D5)**: chiamata senza `date` → `move_date` = oggi in `Europe/Rome` (da verificare
      esplicitamente a cavallo di mezzanotte simulando l'ora, o almeno controllando che `zoneinfo`
      risolva `Europe/Rome` senza eccezioni);
-   - `tools/call` senza alcun header di auth → **401**;
+   - `tools/call` senza alcun header di auth → **200 con `isError: true`** e
+     `structuredContent.auth_error`, **senza** header `WWW-Authenticate` (vedi §3.bis);
    - `tools/call` con `x-api-token` valido → **200** (verifica del fallback, D1);
-   - `tools/call` con segreto errato → **401** (e verifica che in DB ci sia solo l'hash, D3);
-   - `tools/call` con token revocato (`status='USED'`) → **401**;
+   - `tools/call` con segreto errato → **200 con `isError`** (e verifica che in DB ci sia solo
+     l'hash, D3);
+   - `tools/call` con token revocato (`status='USED'`) → **200 con `isError`**;
+   - i cinque path `.well-known` di discovery OAuth → **404 con `Content-Type: application/json`**,
+     senza redirect (§3.bis);
    - `tools/call` con token di un altro account → il movimento **non** deve finire sull'account sbagliato;
    - `GET /mcp` e `DELETE /mcp` → **405** con body JSON, non HTML;
    - body non-JSON → `-32700`; metodo sconosciuto → `-32601`;

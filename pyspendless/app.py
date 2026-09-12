@@ -111,6 +111,11 @@ def check_maintenance_mode():
     if request.path == '/mcp':
         return jsonify(mcp_server.maintenance_body()), 503
 
+    # I path di discovery OAuth devono restare 404 JSON anche in manutenzione:
+    # una pagina HTML 503 al loro posto confonde i client MCP.
+    if request.path.startswith('/.well-known/'):
+        return None
+
     # Mostra la pagina di manutenzione
     return render_template('ps-maintenance.html'), 503
 
@@ -2616,6 +2621,12 @@ def mcp_endpoint():
     Non usa la sessione Flask: l'autenticazione avviene con il token personale
     generato dalla pagina profilo (header Authorization: Bearer <token>).
     Tutta la logica sta in `mcp_server.py`.
+
+    Questo endpoint non restituisce MAI 401 né l'header WWW-Authenticate: nella
+    specifica MCP sono il segnale che fa partire il flusso OAuth lato client
+    (Claude cercherebbe i metadata di discovery e tenterebbe la Dynamic Client
+    Registration, fallendo). Gli errori di autenticazione tornano come esito di
+    tool dentro una risposta 200.
     """
     try:
         body, status = mcp_server.handle_http_request(request, _APP_VERSION)
@@ -2626,10 +2637,6 @@ def mcp_endpoint():
 
         response = jsonify(body)
         response.status_code = status
-
-        if status == 401:
-            response.headers['WWW-Authenticate'] = 'Bearer'
-
         return response
     except Exception as e:
         logger.error(f"[MCP] errore non gestito sull'endpoint: {str(e)}")
@@ -2648,6 +2655,24 @@ def mcp_endpoint_not_allowed():
     Si risponde 405 in JSON, non con la pagina HTML di errore di Flask.
     """
     return jsonify(mcp_server.method_not_allowed_body()), 405
+
+
+@app.route("/.well-known/oauth-protected-resource", methods=['GET'])
+@app.route("/.well-known/oauth-protected-resource/<path:resource_path>", methods=['GET'])
+@app.route("/.well-known/oauth-authorization-server", methods=['GET'])
+@app.route("/.well-known/oauth-authorization-server/<path:resource_path>", methods=['GET'])
+@app.route("/.well-known/openid-configuration", methods=['GET'])
+def mcp_oauth_discovery_not_found(resource_path=None):
+    """
+    Path di discovery OAuth sondati dai client MCP.
+
+    Il server MCP di PySpendless non usa OAuth (autenticazione con token statico in
+    header), quindi qui si risponde un 404 esplicito e in JSON. Serve a garantire che
+    questi path non restituiscano mai HTML né un redirect verso il login: un client
+    potrebbe interpretarli come la presenza di un authorization server e avviare un
+    flusso di registrazione destinato a fallire.
+    """
+    return jsonify(mcp_server.not_found_body(request.path)), 404
 
 
 if __name__ == "__main__":

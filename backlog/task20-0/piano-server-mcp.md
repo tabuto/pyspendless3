@@ -638,9 +638,7 @@ verificate in analisi):
 Procedura (da eseguire **solo su richiesta esplicita**, come da `CLAUDE.md`):
 
 1. Bump di `_APP_VERSION` in `pyspendless/app.py:32` → `0.2.0` (feature nuova, non patch).
-   **Non eseguito in fase di implementazione**: `_APP_VERSION` è tuttora `0.1.8`, perché il bump è
-   il primo passo della procedura di rilascio, che `CLAUDE.md` riserva alla richiesta esplicita
-   dell'utente.
+   **Eseguito il 2026-09-12** su via libera esplicita dell'utente.
 2. `git commit` delle modifiche.
 3. `git tag v0.2.0`.
 4. `git push && git push --tags` → parte la GitHub Action (`deploy.yml`: `git pull` via console PA +

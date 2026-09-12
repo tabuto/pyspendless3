@@ -46,10 +46,74 @@ il rimando.
 | MB-001 | evolutiva | Al salvataggio di un movimento portare il focus sul messaggio di successo | media | RISOLTA |
 | MB-002 | evolutiva | Pannello filtri di "Vedi Movimenti" collassabile e chiuso di default | media | RISOLTA |
 | MB-003 | evolutiva | Versione applicativa: variabile privata in `app.py`, API `/version`, visibile nel footer | bassa | RISOLTA |
+| MB-004 | evolutiva | Gestione del wallet preferito (wallet di default esplicito dell'account) | media | APERTA |
+| MB-005 | evolutiva | Il server MCP usa il wallet preferito quando la chiamata non ne specifica uno (dipende da MB-004) | bassa | APERTA |
 
 ## Aperte
 
-_Nessuna voce aperta._
+### MB-004 — Gestione del wallet preferito
+
+- **Tipo**: evolutiva
+- **Priorità**: media
+- **Dove**: `pyspendless/models.py:49` (`Wallet`), `pyspendless/repository.py:335`
+  (`WalletRepository.get_wallets_for_account`), `pyspendless/templates/ps-setting-wallet.html`,
+  `pyspendless/templates/ps-add-mov.html`
+
+**Problema** — non esiste il concetto di wallet preferito. Oggi il "default" è
+implicito e posizionale: `get_wallets_for_account` ordina per `order_index` poi
+per nome, e chi consuma la lista tratta il primo elemento come predefinito. Per
+cambiare wallet di default bisogna quindi riordinare tutti gli altri, e
+l'intenzione ("questo è quello che uso quasi sempre") non è espressa da nessuna
+parte.
+
+**Proposta** — rendere esplicita la preferenza, restando dentro i confini di una
+voce minor:
+
+1. marcare il wallet preferito **senza aggiungere colonne**, usando la
+   convenzione `order_index == 0` come "preferito", e aggiungere in
+   `WalletRepository` un `get_preferred_wallet(account_id)` che incapsuli la
+   regola (unico punto da cambiare se domani diventa una colonna vera);
+2. in `ps-setting-wallet.html`, un'azione "Imposta come preferito" che porta il
+   wallet a `order_index = 0` e sposta in avanti gli altri, più un badge nella
+   card;
+3. preselezionare il wallet preferito nel form di `ps-add-mov.html`.
+
+**Note / casi limite** — l'ordinamento attuale è usato anche altrove (filtri di
+"Vedi Movimenti", elenco wallet), quindi la convenzione non deve alterare l'ordine
+visualizzato. Account senza wallet, o con più wallet a `order_index = 0` per dati
+storici: `get_preferred_wallet` deve restare deterministico (primo per
+`order_index`, poi per nome) e tollerare il caso "nessun wallet".
+
+> Se si preferisce una colonna dedicata (`Wallet.is_default`), l'intervento
+> richiede `ALTER TABLE` + file in `sql/sqllite/NEXT_RELEASE/` e migrazione sul
+> server: in quel caso va **promosso a `taskN-0.md`** e qui resta solo il rimando.
+
+### MB-005 — Il server MCP usa il wallet preferito se non specificato
+
+- **Tipo**: evolutiva
+- **Priorità**: bassa
+- **Dipende da**: **MB-004** (senza il concetto di wallet preferito non c'è nulla
+  da leggere: questa voce non è implementabile prima)
+- **Dove**: `pyspendless/mcp_server.py` — `resolve_wallet()`, chiamata da
+  `_tool_add_movement()`; `_tool_list_categories()` per il flag `is_default`
+
+**Problema** — il tool `add_movement` ha il parametro `wallet` opzionale. Quando
+manca, `resolve_wallet()` ripiega sul **primo wallet della lista**
+(`wallets[0]`, cioè il minore per `order_index`), che è una scelta posizionale e
+non la preferenza dell'utente. Registrando una spesa a voce senza nominare il
+wallet, il movimento può finire su quello sbagliato.
+
+**Proposta** — quando `wallet` non è valorizzato, usare
+`WalletRepository.get_preferred_wallet(account_id)` introdotto da MB-004, con
+ripiego sul comportamento attuale (primo della lista) se l'account non ha un
+preferito. Allineare anche `_tool_list_categories()`, che oggi marca
+`is_default: true` sull'indice 0, così l'elenco restituito a Claude dice il vero.
+
+**Note / casi limite** — non cambiare la semantica quando il wallet è indicato
+esplicitamente nella chiamata: la risoluzione per nome/codice resta prioritaria.
+Il caso "account senza wallet" deve continuare a produrre l'errore di tool
+esistente (`no_wallet`), non un'eccezione. Da aggiornare i controlli su wallet in
+`pyspendless/dev_mcp_check.py`.
 
 ## Risolte
 

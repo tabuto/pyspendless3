@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 # Versione dell'applicazione (semver): unica fonte di verità, esposta
 # dall'endpoint /version e dal footer via context processor.
 # Bump manuale prima di creare il tag vX.Y.Z usato dal deploy.
-_APP_VERSION = "0.1.8"
+_APP_VERSION = "0.2.0"
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY

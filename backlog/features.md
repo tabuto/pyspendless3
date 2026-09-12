@@ -10,3 +10,5 @@
 | Gestione Categorie Avanzata | Separate sezioni entrata/uscita. Ordinamento custom e alfabetico. Rinominare categoria aggiorna i movimenti. Merge automatico se rinomina coincide con esistente. | TODO |
 | Ripeti Movimento | Pulsante "Ripeti" nell'elenco movimenti: apre il form di creazione pre-compilato con tutti i campi dell'originale e la data odierna (task17-0) | DONE |
 | Deploy PythonAnywhere | GitHub Actions (`deploy.yml`, trigger sui tag `v*`) che fa `git pull`/checkout sul server PA e reload della web app via API token; segreti nei GitHub repository secrets (task18-0) | TODO |
+| Server MCP | Endpoint `/mcp` (JSON-RPC stateless) con tool `add_movement` e `list_categories`, autenticati via token personale generato dal profilo utente, per registrare spese parlando a Claude (task20-0) | TODO |
+| Rate limiting endpoint MCP | Limite di richieste/401 sull'endpoint `/mcp`, scorporato da task20-0 (decisione D9) | TODO |

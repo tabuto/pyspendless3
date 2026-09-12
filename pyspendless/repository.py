@@ -5,10 +5,12 @@ Funzioni CRUD e logica di accesso ai dati
 
 import uuid
 import json
+import hashlib
+import hmac
 from datetime import datetime, timedelta, date
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy import func
+from sqlalchemy import func, text
 from typing import Optional, List, Dict, Any
 
 # Support both relative and absolute imports
@@ -643,11 +645,37 @@ class MovementRepository:
         movement = self.get_movement(movement_id)
         if not movement:
             return False
-        
+
         self.db.delete(movement)
         self.db.commit()
         return True
-    
+
+    def get_last_inserted_for_user(self, user_id: Any, account_id: int) -> Optional[Movement]:
+        """
+        Recupera l'ULTIMO movimento inserito da un utente (ordine di scrittura, non di data).
+
+        Usato dal server MCP per la verifica anti-duplicazione (task20-0, decisione D7).
+
+        Nota: `Movement` non ha una colonna di data/ora di inserimento (`move_date` è la data
+        della spesa e la PK è un UUID testuale, quindi non ordinabile cronologicamente).
+        Si usa il `rowid` implicito di SQLite, che è crescente nell'ordine di INSERT.
+        È una dipendenza dal motore SQLite, accettata consapevolmente per non modificare lo
+        schema: se in futuro si migra a un altro DB, questo metodo va riscritto (oppure si
+        aggiunge una colonna `created_at` a Movement).
+        """
+        base_query = self.db.query(Movement).filter(
+            Movement.user_id == str(user_id),
+            Movement.account_id == account_id
+        )
+
+        try:
+            return base_query.order_by(text('rowid DESC')).first()
+        except SQLAlchemyError:
+            # Motore senza rowid (non SQLite): ripiego sulla data della spesa.
+            # Meno preciso, ma non fa fallire l'inserimento.
+            self.db.rollback()
+            return base_query.order_by(Movement.move_date.desc()).first()
+
     def search_movements(
         self,
         account_id: int,
@@ -1009,10 +1037,153 @@ class TokenRepository:
         token = self.get_token(token_uuid)
         if not token:
             return False
-        
+
         self.db.delete(token)
         self.db.commit()
         return True
+
+    # ===== TOKEN PERSONALI PER IL SERVER MCP (task20-0) =====
+    #
+    # Riusano la stessa tabella Token, senza modifiche allo schema:
+    #   type        = 'MCP'
+    #   uuid        = SHA-256 del segreto (il segreto in chiaro NON viene mai salvato)
+    #   status      = 'PENDING' -> token attivo ; 'USED' -> token revocato
+    #   expire_date = creazione + 365 giorni
+    #   payload     = {"user_id": ..., "account_id": ..., "label": ..., "prefix": ...}
+
+    MCP_TOKEN_TYPE = 'MCP'
+    MCP_TOKEN_EXPIRE_DAYS = 365
+
+    @staticmethod
+    def hash_secret(secret: str) -> str:
+        """Calcola l'hash SHA-256 (esadecimale) di un segreto."""
+        return hashlib.sha256(secret.encode('utf-8')).hexdigest()
+
+    def create_mcp_token(
+        self,
+        user_id: Any,
+        account_id: int,
+        label: str,
+        expire_days: int = MCP_TOKEN_EXPIRE_DAYS
+    ) -> Dict[str, Any]:
+        """
+        Crea un token personale per il server MCP.
+
+        In DB finisce solo l'hash del segreto: il valore in chiaro viene restituito
+        qui una volta sola e non è più recuperabile in seguito.
+
+        Returns:
+            dict con 'secret' (in chiaro, da mostrare una sola volta), 'token_hash',
+            'label', 'created_at', 'expires_at', 'prefix'
+        """
+        secret = str(uuid.uuid4())
+        token_hash = self.hash_secret(secret)
+        prefix = secret[:8]
+
+        payload = {
+            'user_id': str(user_id),
+            'account_id': account_id,
+            'label': label,
+            'prefix': prefix
+        }
+
+        create_date = datetime.utcnow()
+        expire_date = create_date + timedelta(days=expire_days)
+
+        token = Token(
+            uuid=token_hash,
+            type=self.MCP_TOKEN_TYPE,
+            create_date=create_date,
+            expire_date=expire_date,
+            status='PENDING',
+            payload=json.dumps(payload)
+        )
+
+        self.db.add(token)
+        self.db.commit()
+
+        return {
+            'secret': secret,
+            'token_hash': token_hash,
+            'prefix': prefix,
+            'label': label,
+            'created_at': create_date.strftime('%d/%m/%Y %H:%M'),
+            'expires_at': expire_date.strftime('%d/%m/%Y %H:%M')
+        }
+
+    def validate_mcp_secret(self, secret: str) -> Optional[Token]:
+        """
+        Valida il segreto presentato da un client MCP.
+
+        Verifica: hash esistente, type = 'MCP', status = 'PENDING', non scaduto.
+
+        Returns:
+            Token se valido, None altrimenti
+        """
+        if not secret:
+            return None
+
+        token_hash = self.hash_secret(secret)
+        token = self.validate_token(token_hash)
+
+        if not token:
+            return None
+
+        if token.type != self.MCP_TOKEN_TYPE:
+            return None
+
+        # Confronto a tempo costante sul valore effettivamente letto dal DB
+        if not hmac.compare_digest(str(token.uuid), token_hash):
+            return None
+
+        return token
+
+    def get_mcp_tokens_for_user(self, user_id: Any) -> List[Dict[str, Any]]:
+        """
+        Recupera i token MCP attivi di un utente.
+
+        Non restituisce mai il segreto (non è nemmeno salvato): solo il prefisso
+        dei primi 8 caratteri, per riconoscere il token nell'elenco.
+        """
+        tokens = self.db.query(Token).filter(
+            Token.type == self.MCP_TOKEN_TYPE,
+            Token.status == 'PENDING'
+        ).order_by(Token.create_date.desc()).all()
+
+        result = []
+        for token in tokens:
+            try:
+                payload = json.loads(token.payload)
+            except (json.JSONDecodeError, TypeError):
+                continue
+
+            if str(payload.get('user_id')) != str(user_id):
+                continue
+
+            result.append({
+                'token_hash': token.uuid,
+                'label': payload.get('label') or 'Token',
+                'prefix': payload.get('prefix', ''),
+                'created_at': token.create_date.strftime('%d/%m/%Y %H:%M'),
+                'expires_at': token.expire_date.strftime('%d/%m/%Y %H:%M'),
+                'expired': datetime.utcnow() > token.expire_date
+            })
+
+        return result
+
+    def get_mcp_token_owner(self, token_hash: str) -> Optional[str]:
+        """Ritorna l'user_id proprietario di un token MCP, o None se non esiste."""
+        token = self.get_token(token_hash)
+        if not token or token.type != self.MCP_TOKEN_TYPE:
+            return None
+
+        try:
+            payload = json.loads(token.payload)
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+        owner = payload.get('user_id')
+        return str(owner) if owner is not None else None
 
 
 class StatsRepository:

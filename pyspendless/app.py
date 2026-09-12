@@ -9,9 +9,11 @@ from flask import Flask, render_template, redirect, url_for, session, request, f
 try:
     from .conf import load_env, SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI, BASE_URL, ADMIN_USER_ID, get_db_session
     from .repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, StatsRepository, AdminRepository, RecurrentMovementRepository, ReportRepository, UnauthorizedError
+    from . import mcp_server
 except ImportError:
     from conf import load_env, SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI, BASE_URL, ADMIN_USER_ID, get_db_session
     from repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, StatsRepository, AdminRepository, RecurrentMovementRepository, ReportRepository, UnauthorizedError
+    import mcp_server
 
 import os
 import logging
@@ -103,6 +105,11 @@ def check_maintenance_mode():
     # per sapere quale build è in esecuzione proprio quando l'app è ferma.
     if request.path in ('/health', '/version'):
         return None
+
+    # L'endpoint MCP parla JSON-RPC: in manutenzione deve rispondere JSON, non HTML,
+    # altrimenti il client riceve una pagina che non sa interpretare.
+    if request.path == '/mcp':
+        return jsonify(mcp_server.maintenance_body()), 503
 
     # Mostra la pagina di manutenzione
     return render_template('ps-maintenance.html'), 503
@@ -2466,6 +2473,182 @@ def api_reports_annual():
         logger.error(f"Errore generazione report PDF: {str(e)}")
         logger.debug(traceback.format_exc())
         return jsonify({'error': f'Errore generazione PDF: {str(e)}'}), 500
+
+
+# ===== PROFILO UTENTE & TOKEN MCP (task20-0) =====
+
+@app.route("/settings/profile")
+def settings_profile():
+    """Pagina profilo utente: dati dell'account e gestione dei token personali MCP"""
+    if not session.get('user_id'):
+        flash('Devi effettuare il login', 'warning')
+        return redirect(url_for('login'))
+
+    user_id = session.get('user_id')
+
+    db = get_db_session()
+    try:
+        user_repo = UserRepository(db)
+        account_repo = AccountRepository(db)
+
+        user = user_repo.get_user_by_id(user_id)
+        account = account_repo.get_account(session.get('account_id'))
+
+        return render_template(
+            "ps-setting-profile.html",
+            user=user,
+            account=account,
+            mcp_url=f"{BASE_URL}/mcp"
+        )
+    finally:
+        db.close()
+
+
+@app.route("/api/mcp-tokens", methods=['GET'])
+def api_list_mcp_tokens():
+    """Elenca i token MCP attivi dell'utente corrente (mai il segreto, solo il prefisso)"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+
+    user_id = session.get('user_id')
+
+    try:
+        db = get_db_session()
+        try:
+            token_repo = TokenRepository(db)
+            tokens = token_repo.get_mcp_tokens_for_user(user_id)
+            return jsonify({'tokens': tokens}), 200
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Errore durante il recupero dei token MCP: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return jsonify({'error': f'Errore interno: {str(e)}'}), 500
+
+
+@app.route("/api/mcp-tokens", methods=['POST'])
+def api_create_mcp_token():
+    """
+    Genera un nuovo token personale per il server MCP.
+
+    Il segreto viene restituito UNA SOLA VOLTA: in database ne resta solo l'hash.
+    """
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+
+    user_id = session.get('user_id')
+    account_id = session.get('account_id')
+
+    try:
+        data = request.get_json(silent=True) or {}
+        label = (data.get('label') or '').strip()
+
+        if not label:
+            label = 'Claude'
+        if len(label) > 60:
+            label = label[:60]
+
+        db = get_db_session()
+        try:
+            token_repo = TokenRepository(db)
+            created = token_repo.create_mcp_token(user_id, account_id, label)
+
+            logger.info(
+                f"Token MCP creato per utente {user_id} "
+                f"(account {account_id}, prefisso {created['prefix']})"
+            )
+
+            return jsonify({
+                'success': True,
+                'message': 'Token creato: copialo ora, non sarà più visibile',
+                'token': created
+            }), 201
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Errore durante la creazione del token MCP: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return jsonify({'error': f'Errore interno: {str(e)}'}), 500
+
+
+@app.route("/api/mcp-tokens/<token_hash>", methods=['DELETE'])
+def api_revoke_mcp_token(token_hash):
+    """Revoca un token MCP dell'utente corrente (status -> USED)"""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+
+    user_id = session.get('user_id')
+
+    try:
+        db = get_db_session()
+        try:
+            token_repo = TokenRepository(db)
+
+            owner = token_repo.get_mcp_token_owner(token_hash)
+            if owner is None:
+                return jsonify({'error': 'Token non trovato'}), 404
+
+            # Un utente può revocare solo i propri token
+            if str(owner) != str(user_id):
+                return jsonify({'error': 'Accesso non autorizzato'}), 403
+
+            success = token_repo.mark_as_used(token_hash)
+            if not success:
+                return jsonify({'error': 'Errore durante la revoca'}), 500
+
+            logger.info(f"Token MCP revocato dall'utente {user_id}")
+            return jsonify({'success': True, 'message': 'Token revocato'}), 200
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Errore durante la revoca del token MCP: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return jsonify({'error': f'Errore interno: {str(e)}'}), 500
+
+
+# ===== MCP SERVER =====
+
+@app.route("/mcp", methods=['POST'])
+def mcp_endpoint():
+    """
+    Endpoint MCP (Model Context Protocol) — trasporto HTTP JSON-RPC 2.0 stateless.
+
+    Non usa la sessione Flask: l'autenticazione avviene con il token personale
+    generato dalla pagina profilo (header Authorization: Bearer <token>).
+    Tutta la logica sta in `mcp_server.py`.
+    """
+    try:
+        body, status = mcp_server.handle_http_request(request, _APP_VERSION)
+
+        if body is None:
+            # Notifica JSON-RPC: nessun corpo di risposta
+            return '', status
+
+        response = jsonify(body)
+        response.status_code = status
+
+        if status == 401:
+            response.headers['WWW-Authenticate'] = 'Bearer'
+
+        return response
+    except Exception as e:
+        logger.error(f"[MCP] errore non gestito sull'endpoint: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return jsonify({
+            'jsonrpc': '2.0',
+            'id': None,
+            'error': {'code': -32603, 'message': 'Errore interno del server.'}
+        }), 500
+
+
+@app.route("/mcp", methods=['GET', 'DELETE'])
+def mcp_endpoint_not_allowed():
+    """
+    Il server è stateless: non espone stream SSE (GET) né chiusura di sessione (DELETE).
+    Si risponde 405 in JSON, non con la pagina HTML di errore di Flask.
+    """
+    return jsonify(mcp_server.method_not_allowed_body()), 405
+
 
 if __name__ == "__main__":
     app.run(debug=True)

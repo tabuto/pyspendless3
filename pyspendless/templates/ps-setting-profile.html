@@ -1,0 +1,277 @@
+{% extends 'ps-nav.html' %}
+
+{% block nav_content %}
+<div class="container-fluid mt-4">
+  <h1 class="mb-4">Profilo</h1>
+
+  <!-- Alert per messaggi -->
+  <div id="alertContainer"></div>
+
+  <div class="row mb-4">
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title">Dati utente</h5>
+          <p class="card-text mb-1"><strong>Nome:</strong> {{ user.name if user else '-' }}</p>
+          <p class="card-text mb-1"><strong>Email:</strong> {{ user.email if user else '-' }}</p>
+          <p class="card-text mb-0"><strong>Account:</strong> {{ account.name if account else '-' }}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start mb-3">
+            <div>
+              <h5 class="card-title mb-1">Token personali (connettore Claude)</h5>
+              <p class="text-muted mb-0">
+                Servono ad autenticare il server MCP di PySpendless, per registrare spese
+                parlando a Claude.
+              </p>
+            </div>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTokenModal">
+              <i class="bi bi-plus-circle"></i> Genera token
+            </button>
+          </div>
+
+          <div class="alert alert-warning">
+            <strong>Attenzione:</strong>
+            <ul class="mb-0">
+              <li>Il token viene mostrato <strong>una sola volta</strong>: in database ne resta solo l'impronta, non è recuperabile in seguito.</li>
+              <li>Ha validità <strong>365 giorni</strong> dalla generazione.</li>
+              <li>Chi possiede il token può <strong>registrare movimenti sull'account di famiglia</strong>: trattalo come una password.</li>
+              <li>Per sostituirlo va rimosso e riaggiunto anche il connettore lato Claude: le sue impostazioni di autenticazione non sono modificabili.</li>
+            </ul>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">URL del server MCP da usare nel connettore</label>
+            <div class="input-group">
+              <input type="text" class="form-control" id="mcpUrl" value="{{ mcp_url }}" readonly>
+              <button class="btn btn-outline-secondary" type="button" onclick="copyValue('mcpUrl')">
+                <i class="bi bi-clipboard"></i> Copia
+              </button>
+            </div>
+            <div class="form-text">
+              In Claude: Connettori &rarr; Aggiungi connettore personalizzato &rarr; questa URL, autenticazione
+              &laquo;nessun accesso&raquo; e header <code>authorization</code> con valore
+              <code>Bearer &lt;token&gt;</code>. In alternativa <code>x-api-token</code>,
+              <code>x-api-key</code> o <code>x-auth-token</code> con il solo token.
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-striped align-middle">
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>Inizia con</th>
+                  <th>Creato</th>
+                  <th>Scade</th>
+                  <th class="text-end">Azioni</th>
+                </tr>
+              </thead>
+              <tbody id="tokensContainer">
+                <!-- Popolato dinamicamente -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Genera Token -->
+<div class="modal fade" id="addTokenModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Genera token</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="addTokenForm">
+          <div class="mb-3">
+            <label for="tokenLabel" class="form-label">Nome descrittivo</label>
+            <input type="text" class="form-control" id="tokenLabel" maxlength="60" placeholder="Es. Claude telefono">
+            <div class="form-text">Serve solo a riconoscerlo nell'elenco.</div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-primary" onclick="createToken()">Genera</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Token generato -->
+<div class="modal fade" id="showTokenModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Token generato</h5>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-danger">
+          Copialo adesso: chiudendo questa finestra non sarà più visibile.
+        </div>
+        <div class="input-group">
+          <input type="text" class="form-control font-monospace" id="newTokenValue" readonly>
+          <button class="btn btn-outline-secondary" type="button" onclick="copyValue('newTokenValue')">
+            <i class="bi bi-clipboard"></i> Copia
+          </button>
+        </div>
+        <div class="form-text mt-2">
+          Nel connettore Claude, con l'header <code>authorization</code>, il valore da inserire è
+          <code>Bearer</code> seguito da uno spazio e dal token.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal" onclick="clearTokenValue()">
+          Ho copiato il token
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  loadTokens();
+});
+
+function showAlert(message, type = 'success') {
+  const alertDiv = document.createElement('div');
+  alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+  alertDiv.innerHTML = `
+    ${message}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  `;
+  document.getElementById('alertContainer').appendChild(alertDiv);
+
+  setTimeout(() => {
+    alertDiv.remove();
+  }, 5000);
+}
+
+function escapeHtml(value) {
+  const div = document.createElement('div');
+  div.textContent = value === null || value === undefined ? '' : value;
+  return div.innerHTML;
+}
+
+function copyValue(elementId) {
+  const input = document.getElementById(elementId);
+  input.select();
+  input.setSelectionRange(0, 99999);
+
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(input.value).then(() => {
+      showAlert('Copiato negli appunti');
+    }).catch(() => {
+      showAlert('Copia non riuscita: selezionalo a mano', 'warning');
+    });
+  } else {
+    document.execCommand('copy');
+    showAlert('Copiato negli appunti');
+  }
+}
+
+function clearTokenValue() {
+  document.getElementById('newTokenValue').value = '';
+}
+
+function loadTokens() {
+  fetch('/api/mcp-tokens')
+    .then(response => response.json())
+    .then(data => {
+      const container = document.getElementById('tokensContainer');
+      container.innerHTML = '';
+
+      const tokens = data.tokens || [];
+
+      if (tokens.length === 0) {
+        container.innerHTML = `
+          <tr>
+            <td colspan="5" class="text-muted text-center">Nessun token attivo</td>
+          </tr>
+        `;
+        return;
+      }
+
+      tokens.forEach(token => {
+        const row = document.createElement('tr');
+        const expiredBadge = token.expired
+          ? ' <span class="badge bg-danger">scaduto</span>'
+          : '';
+        row.innerHTML = `
+          <td>${escapeHtml(token.label)}</td>
+          <td><code>${escapeHtml(token.prefix)}…</code></td>
+          <td>${escapeHtml(token.created_at)}</td>
+          <td>${escapeHtml(token.expires_at)}${expiredBadge}</td>
+          <td class="text-end">
+            <button class="btn btn-sm btn-danger" onclick="revokeToken('${encodeURIComponent(token.token_hash)}')">
+              <i class="bi bi-trash"></i> Revoca
+            </button>
+          </td>
+        `;
+        container.appendChild(row);
+      });
+    })
+    .catch(() => showAlert('Errore nel caricamento dei token', 'danger'));
+}
+
+function createToken() {
+  const label = document.getElementById('tokenLabel').value;
+
+  fetch('/api/mcp-tokens', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({label: label})
+  })
+    .then(response => response.json().then(data => ({ok: response.ok, data})))
+    .then(({ok, data}) => {
+      if (!ok) {
+        showAlert(data.error || 'Errore durante la creazione', 'danger');
+        return;
+      }
+
+      bootstrap.Modal.getInstance(document.getElementById('addTokenModal')).hide();
+      document.getElementById('tokenLabel').value = '';
+
+      document.getElementById('newTokenValue').value = data.token.secret;
+      new bootstrap.Modal(document.getElementById('showTokenModal')).show();
+
+      loadTokens();
+    })
+    .catch(() => showAlert('Errore durante la creazione del token', 'danger'));
+}
+
+function revokeToken(tokenHash) {
+  if (!confirm('Revocare questo token? Il connettore Claude che lo usa smetterà di funzionare.')) {
+    return;
+  }
+
+  fetch(`/api/mcp-tokens/${tokenHash}`, {method: 'DELETE'})
+    .then(response => response.json().then(data => ({ok: response.ok, data})))
+    .then(({ok, data}) => {
+      if (!ok) {
+        showAlert(data.error || 'Errore durante la revoca', 'danger');
+        return;
+      }
+      showAlert('Token revocato');
+      loadTokens();
+    })
+    .catch(() => showAlert('Errore durante la revoca del token', 'danger'));
+}
+</script>
+{% endblock %}

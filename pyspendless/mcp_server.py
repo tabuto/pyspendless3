@@ -275,7 +275,7 @@ TOOL_DEFINITIONS = [
                 },
                 'wallet': {
                     'type': 'string',
-                    'description': "Nome o codice del wallet. Se omesso si usa il wallet predefinito."
+                    'description': "Nome o codice del wallet. Se omesso si usa il wallet preferito dell'account."
                 },
                 'date': {
                     'type': 'string',
@@ -378,10 +378,13 @@ def resolve_category(categories, requested):
     return None, 'not_found'
 
 
-def resolve_wallet(wallets, requested):
+def resolve_wallet(wallets, requested, preferred=None):
     """
-    Risolve il wallet per nome o codice. Se `requested` è vuoto ritorna il primo
-    wallet dell'account (ordinato per order_index), cioè il predefinito.
+    Risolve il wallet per nome o codice.
+
+    Se `requested` è vuoto ritorna il **wallet preferito** dell'account (MB-005),
+    con ripiego sul primo della lista se il preferito non è disponibile.
+    Il wallet indicato esplicitamente nella chiamata ha sempre la precedenza.
 
     Returns:
         (Wallet, None) | (None, 'not_found') | (None, 'no_wallet')
@@ -390,7 +393,7 @@ def resolve_wallet(wallets, requested):
         return None, 'no_wallet'
 
     if not requested:
-        return wallets[0], None
+        return (preferred or wallets[0]), None
 
     wanted = _normalize(requested)
 
@@ -457,8 +460,14 @@ def _tool_list_categories(db, ctx, args):
             "Il tipo '{}' non è valido: usa 'expense' o 'income'.".format(kind)
         )
 
+    wallet_repo = WalletRepository(db)
     categories = _usable_categories(db, account_id, kind)[:MAX_LISTED_ITEMS]
-    wallets = WalletRepository(db).get_wallets_for_account(account_id)[:MAX_LISTED_ITEMS]
+    wallets = wallet_repo.get_wallets_for_account(account_id)[:MAX_LISTED_ITEMS]
+
+    # Il wallet predefinito è quello preferito dell'account (MB-004/MB-005),
+    # non semplicemente il primo della lista.
+    preferred = wallet_repo.get_preferred_wallet(account_id)
+    preferred_id = preferred.id if preferred else None
 
     expenses = [c.name for c in categories if c.type == 'expense']
     incomes = [c.name for c in categories if c.type == 'income']
@@ -473,9 +482,15 @@ def _tool_list_categories(db, ctx, args):
 
     if wallets:
         lines.append('Wallet: ' + ', '.join(
-            '{} ({}){}'.format(w.name, w.code, ' — predefinito' if i == 0 else '')
-            for i, w in enumerate(wallets)
+            '{} ({}){}'.format(w.name, w.code, ' — preferito' if w.id == preferred_id else '')
+            for w in wallets
         ))
+        if preferred_id is None:
+            # Stato legittimo: nessun wallet preferito impostato (MB-004)
+            lines.append(
+                "Nessun wallet preferito impostato: se non ne indichi uno viene usato "
+                "'{}'.".format(wallets[0].name)
+            )
 
     structured = {
         'categories': [{'name': c.name, 'type': c.type} for c in categories],
@@ -484,9 +499,9 @@ def _tool_list_categories(db, ctx, args):
                 'name': w.name,
                 'code': w.code,
                 'currency': w.currency,
-                'is_default': (i == 0)
+                'is_default': (w.id == preferred_id)
             }
-            for i, w in enumerate(wallets)
+            for w in wallets
         ]
     }
 
@@ -539,8 +554,10 @@ def _tool_add_movement(db, ctx, args):
         return _tool_error(message, {'categories': [c.name for c in categories]})
 
     # --- risoluzione wallet ---
-    wallets = WalletRepository(db).get_wallets_for_account(account_id)
-    wallet, wallet_error = resolve_wallet(wallets, args.get('wallet'))
+    wallet_repo = WalletRepository(db)
+    wallets = wallet_repo.get_wallets_for_account(account_id)
+    preferred_wallet = wallet_repo.get_preferred_wallet(account_id)
+    wallet, wallet_error = resolve_wallet(wallets, args.get('wallet'), preferred_wallet)
     if wallet_error == 'no_wallet':
         return _tool_error("Questo account non ha nessun wallet configurato.")
     if wallet_error:

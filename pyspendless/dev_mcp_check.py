@@ -288,8 +288,13 @@ def run(base_url, user_id, keep):
         checker.check('restituisce almeno una categoria', len(categories) > 0)
         checker.check('nessuna categoria di tipo transfer',
                       all(c.get('type') != 'transfer' for c in categories))
-        checker.check('restituisce i wallet con un predefinito',
-                      len(wallets) > 0 and wallets[0].get('is_default') is True)
+        # "Nessun wallet preferito" è uno stato legittimo: il vincolo è che non ce
+        # ne sia MAI più di uno (MB-004).
+        preferred_names = [w.get('name') for w in wallets if w.get('is_default')]
+        checker.check('restituisce i wallet con al massimo un preferito',
+                      len(wallets) > 0 and len(preferred_names) <= 1,
+                      preferred_names)
+        print('     (wallet preferito: {})'.format(preferred_names[0] if preferred_names else 'nessuno'))
 
         response = client.call('tools/call',
                                {'name': 'list_categories', 'arguments': {'kind': 'income'}})

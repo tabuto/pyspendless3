@@ -25,7 +25,7 @@ movimento finisca nel DB di PySpendless.
 | **Prerequisito bloccante** | **Il sistema di "custom auth token nel profilo utente" NON esiste ancora nel repo** → va costruito (Fase 0, dentro questo task — D11) |
 | Nuovi file Python | `pyspendless/mcp_server.py` (logica MCP), registrato in `app.py` |
 | Nuove tabelle | **Nessuna** — si riusa `Token` (`models.py:205`) |
-| Impatto deploy | **Nullo** sul workflow: nessuna nuova dipendenza, nessun file WSGI da toccare |
+| Impatto deploy | **Nullo**: nessuna nuova dipendenza, nessun file WSGI da toccare. Nota: il deploy è **manuale** (`git pull` + Reload su PA), l'automazione GitHub Actions è sospesa — vedi Fase 7 |
 | Test | solo locali (`dev_mcp_check.py`); **nessun end-to-end con Claude prima del tag** — D10 |
 | Fasi | 0 → 7, ciascuna con checkpoint verificabile |
 | Fuori scope (task futuri) | rate limiting sull'endpoint (D9) |
@@ -221,7 +221,7 @@ parlato. Proposta:
 | `amount` | number > 0 | sì | importo sempre **positivo**; il segno lo determina `kind` |
 | `kind` | enum `expense` \| `income` | no (default `expense`) | mappa su colonna `expense`/`income` |
 | `category` | string | sì | **nome** categoria; risoluzione fuzzy lato server |
-| `wallet` | string | no | nome o `code` del wallet; default = primo per `order_index` |
+| `wallet` | string | no | nome o `code` del wallet; default = **wallet preferito** dell'account (MB-004/MB-005), con ripiego sul primo per `order_index` se non è impostato |
 | `date` | string `YYYY-MM-DD` | no (default: oggi in `Europe/Rome`) | il client **deve** inviarla esplicita (D5) |
 | `note` | string | no | testo libero (es. la frase originale) |
 | `force` | boolean | no (default `false`) | bypassa il controllo anti-duplicato (D7) |
@@ -619,6 +619,12 @@ dall'app.
 
 ### Cosa va fatto
 
+> **Il deploy è MANUALE** (accertato il 2026-09-12). La GitHub Action `deploy.yml` è disabilitata:
+> l'account PythonAnywhere è gratuito e non consente l'uso delle API su cui il workflow si basa —
+> è la causa del run fallito sul tag `v0.1.7`. Il tag `vX.Y.Z` resta il marcatore di release ma
+> **non innesca alcun deploy**. Vedi `CLAUDE.md` § "Rilascio / Deploy" e la nota in
+> `backlog/task18-0.md`.
+
 Il flusso esistente copre tutto senza modifiche, **a patto** che valgano queste condizioni (tutte
 verificate in analisi):
 
@@ -641,8 +647,10 @@ Procedura (da eseguire **solo su richiesta esplicita**, come da `CLAUDE.md`):
    **Eseguito il 2026-09-12** su via libera esplicita dell'utente.
 2. `git commit` delle modifiche.
 3. `git tag v0.2.0`.
-4. `git push && git push --tags` → parte la GitHub Action (`deploy.yml`: `git pull` via console PA +
-   reload webapp).
+4. `git push && git push --tags` (il tag **non** avvia nulla: l'automazione è sospesa).
+4-bis. **Aggiornamento manuale del server**: console Bash su PythonAnywhere →
+   `cd /home/tabuto/pyspendless3` → `git pull` (o `git checkout v0.2.0`) → **Reload** della web app
+   dalla tab *Web*.
 5. Verifica post-deploy (**non formale**, vista D10): `GET https://tabuto.pythonanywhere.com/version`
    → `0.2.0`; `GET /mcp` → 405; `POST /mcp` senza auth → 401; `POST /mcp` con `initialize` e token
    valido → 200 con `serverInfo.version = 0.2.0`. Solo dopo si procede con la Fase 6.
@@ -652,11 +660,12 @@ Procedura (da eseguire **solo su richiesta esplicita**, come da `CLAUDE.md`):
 
 ### Rischi
 
-- **Il workflow dipende da una console PA "già avviata"** (`PA_CONSOLE_ID: 45331030`,
-  `deploy.yml:8-13`): se la console è stata chiusa, il deploy fallisce con "not yet started". Da
-  controllare **prima** di taggare.
-- Il deploy fa `git pull` sulla working copy del server: se lì ci sono modifiche locali non
-  committate, il pull fallisce.
+- **Il passo manuale è l'unico punto di fallimento silenzioso**: taggare e pushare non aggiorna
+  nulla. Se il `git pull` sul server viene dimenticato, `/version` continuerà a riportare la
+  versione precedente mentre il connettore Claude fallisce senza spiegazione — è la prima cosa da
+  controllare in caso di comportamenti incoerenti.
+- Il `git pull` sulla working copy del server fallisce se lì ci sono modifiche locali non
+  committate.
 - Esporre un endpoint di scrittura pubblico è un cambio di superficie d'attacco: conviene rilasciare
   prima con `MAINTENANCE_MODE` non attivo ma tenendo il connettore non condiviso, e verificare i log
   PA nelle prime ore. Senza rate limiting (D9, rimandato), questo monitoraggio manuale delle prime

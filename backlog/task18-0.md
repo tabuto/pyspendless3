@@ -1,5 +1,19 @@
 # Task 18-0: Deploy su PythonAnywhere via GitHub Actions (`deploy.yml`)
 
+> ## ⚠️ SOSPESO — il deploy automatico non è attivo (2026-09-12)
+>
+> L'account PythonAnywhere è **gratuito** e non consente l'uso delle API
+> (`consoles/{id}/send_input`, `webapps/{domain}/reload`), su cui questo workflow
+> si basa interamente: senza API token utilizzabile il job fallisce comunque, ed è
+> la causa del run fallito sul tag **`v0.1.7`**.
+>
+> **Il deploy è quindi manuale**: console Bash su PA → `cd /home/tabuto/pyspendless3`
+> → `git pull` (o `git checkout vX.Y.Z`) → **Reload** dalla tab *Web*. Il tag
+> `vX.Y.Z` resta come marcatore di release ma non innesca nulla.
+>
+> Quanto segue resta valido come riferimento per riattivare l'automazione su un
+> piano a pagamento. Vedi anche la sezione "Rilascio / Deploy" di `CLAUDE.md`.
+
 ## Obiettivo
 
 Automatizzare il deploy dell'istanza PythonAnywhere `tabuto.pythonanywhere.com`

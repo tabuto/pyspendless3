@@ -63,6 +63,7 @@
       <div class="modal-body">
         <form id="editWalletForm">
           <input type="hidden" id="editWalletId">
+          <input type="hidden" id="editWalletIsPreferred" value="false">
           <div class="mb-3">
             <label for="editWalletName" class="form-label">Nome</label>
             <input type="text" class="form-control" id="editWalletName" required>
@@ -77,8 +78,15 @@
           </div>
           <div class="mb-3">
             <label for="editWalletOrder" class="form-label">Ordine</label>
-            <input type="number" class="form-control" id="editWalletOrder" min="0" step="1" required>
-            <div class="form-text">Numero intero per ordinare i wallet (0, 1, 2, ...)</div>
+            <input type="number" class="form-control" id="editWalletOrder" min="1" step="1" required>
+            <div class="form-text" id="editWalletOrderHelp">
+              Numero intero per ordinare i wallet (1, 2, 3, ...). Lo <strong>0 è riservato</strong>
+              al wallet preferito e si imposta solo con "Imposta come preferito".
+            </div>
+            <div class="form-text text-primary d-none" id="editWalletOrderPreferredHelp">
+              Questo è il wallet <strong>preferito</strong>: il suo ordine è gestito dalla
+              preferenza e non è modificabile qui. Per liberarlo usa "Rimuovi preferito".
+            </div>
           </div>
         </form>
       </div>
@@ -135,19 +143,33 @@ function loadWallets() {
         const balanceClass = wallet.balance >= 0 ? 'text-success' : 'text-danger';
         const card = document.createElement('div');
         card.className = 'col-md-4 mb-3';
+        const preferredBadge = wallet.is_preferred
+          ? '<span class="badge bg-primary"><i class="bi bi-star-fill"></i> Preferito</span>'
+          : '';
+        const preferredButton = wallet.is_preferred
+          ? `<button class="btn btn-sm btn-outline-secondary" onclick="unsetPreferredWallet(${wallet.id})">
+               <i class="bi bi-star"></i> Rimuovi preferito
+             </button>`
+          : `<button class="btn btn-sm btn-outline-primary" onclick="setPreferredWallet(${wallet.id})">
+               <i class="bi bi-star"></i> Imposta come preferito
+             </button>`;
         card.innerHTML = `
           <div class="card">
             <div class="card-body">
               <div class="d-flex justify-content-between align-items-start mb-3">
                 <h5 class="card-title">${wallet.name}</h5>
-                <span class="badge bg-secondary">Ordine: ${wallet.order_index || 0}</span>
+                <div class="d-flex gap-1 flex-wrap justify-content-end">
+                  ${preferredBadge}
+                  <span class="badge bg-secondary">Ordine: ${wallet.order_index || 0}</span>
+                </div>
               </div>
               <p class="card-text">
-                <strong>Saldo:</strong> 
+                <strong>Saldo:</strong>
                 <span class="${balanceClass}">${wallet.balance.toFixed(2)} ${getCurrencySymbol(wallet.currency)}</span>
               </p>
-              <div class="d-flex gap-2">
-                <button class="btn btn-sm btn-warning" onclick="openEditModal(${wallet.id}, '${wallet.name}', '${wallet.currency}', ${wallet.order_index || 0})">
+              <div class="d-flex gap-2 flex-wrap">
+                ${preferredButton}
+                <button class="btn btn-sm btn-warning" onclick="openEditModal(${wallet.id}, '${wallet.name}', '${wallet.currency}', ${wallet.order_index || 0}, ${wallet.is_preferred ? 'true' : 'false'})">
                   <i class="bi bi-pencil"></i> Modifica
                 </button>
                 <button class="btn btn-sm btn-danger" onclick="deleteWallet(${wallet.id})">
@@ -163,6 +185,44 @@ function loadWallets() {
     .catch(error => {
       console.error('Errore:', error);
       showAlert('Errore durante il caricamento dei wallet', 'danger');
+    });
+}
+
+function setPreferredWallet(walletId) {
+  // Il preferito è il wallet proposto di default nel form di creazione movimento
+  // e usato dal server MCP quando la chiamata non ne specifica uno (MB-004/MB-005).
+  fetch(`/api/wallets/${walletId}/preferred`, {method: 'PUT'})
+    .then(response => response.json().then(data => ({ok: response.ok, data})))
+    .then(({ok, data}) => {
+      if (!ok) {
+        showAlert(data.error || 'Errore durante l\'impostazione del preferito', 'danger');
+        return;
+      }
+      showAlert('Wallet preferito aggiornato');
+      loadWallets();
+    })
+    .catch(error => {
+      console.error('Errore:', error);
+      showAlert('Errore durante l\'impostazione del wallet preferito', 'danger');
+    });
+}
+
+function unsetPreferredWallet(walletId) {
+  // Togliendo la preferenza il wallet passa a ordine 1 e l'account resta senza
+  // preferito: è uno stato legittimo (MB-004).
+  fetch(`/api/wallets/${walletId}/preferred`, {method: 'DELETE'})
+    .then(response => response.json().then(data => ({ok: response.ok, data})))
+    .then(({ok, data}) => {
+      if (!ok) {
+        showAlert(data.error || 'Errore durante la rimozione della preferenza', 'danger');
+        return;
+      }
+      showAlert('Preferenza rimossa: nessun wallet preferito');
+      loadWallets();
+    })
+    .catch(error => {
+      console.error('Errore:', error);
+      showAlert('Errore durante la rimozione della preferenza', 'danger');
     });
 }
 
@@ -211,12 +271,21 @@ function addWallet() {
   });
 }
 
-function openEditModal(id, name, currency, orderIndex) {
+function openEditModal(id, name, currency, orderIndex, isPreferred) {
   document.getElementById('editWalletId').value = id;
   document.getElementById('editWalletName').value = name;
   document.getElementById('editWalletCurrency').value = currency;
-  document.getElementById('editWalletOrder').value = orderIndex || 0;
-  
+  document.getElementById('editWalletIsPreferred').value = isPreferred ? 'true' : 'false';
+
+  // Sul wallet preferito l'ordine (0) è gestito dalla preferenza: campo in sola
+  // lettura, e l'order_index non viene nemmeno inviato (MB-004).
+  const orderInput = document.getElementById('editWalletOrder');
+  orderInput.value = orderIndex || 0;
+  orderInput.disabled = !!isPreferred;
+  orderInput.required = !isPreferred;
+  document.getElementById('editWalletOrderHelp').classList.toggle('d-none', !!isPreferred);
+  document.getElementById('editWalletOrderPreferredHelp').classList.toggle('d-none', !isPreferred);
+
   const modal = new bootstrap.Modal(document.getElementById('editWalletModal'));
   modal.show();
 }
@@ -225,19 +294,25 @@ function updateWallet() {
   const id = document.getElementById('editWalletId').value;
   const name = document.getElementById('editWalletName').value;
   const currency = document.getElementById('editWalletCurrency').value;
+  const isPreferred = document.getElementById('editWalletIsPreferred').value === 'true';
   const orderIndex = parseInt(document.getElementById('editWalletOrder').value);
-  
-  if (orderIndex < 0) {
-    showAlert('L\'ordine deve essere un numero positivo', 'warning');
-    return;
+
+  const payload = { name, currency };
+
+  if (!isPreferred) {
+    if (isNaN(orderIndex) || orderIndex < 1) {
+      showAlert('L\'ordine minimo è 1: lo 0 è riservato al wallet preferito', 'warning');
+      return;
+    }
+    payload.order_index = orderIndex;
   }
-  
+
   fetch(`/api/wallets/${id}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ name, currency, order_index: orderIndex })
+    body: JSON.stringify(payload)
   })
   .then(response => response.json())
   .then(data => {

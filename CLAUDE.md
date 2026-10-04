@@ -68,19 +68,27 @@ Riferimento (letti solo se servono a un vincolo specifico):
 
 ## Rilascio / Deploy
 
-Il deploy su PythonAnywhere è automatico via **GitHub Actions**
-(`.github/workflows/deploy.yml`), trigger: **push di un tag `vX.Y.Z`**
-(`on: push: tags: ['v*']`). Il workflow fa `git pull`/checkout del tag sul
-server PA e reload della web app tramite API token (secrets
-`PA_USER` / `PA_TOKEN` / `PA_DOMAIN` / `PA_REPO_PATH`). Dettagli in
-`backlog/task18-0.md`.
+> **Il deploy è MANUALE.** La GitHub Action `.github/workflows/deploy.yml` è
+> **disabilitata**: l'account PythonAnywhere è gratuito e non consente l'uso delle
+> API (`consoles/send_input`, `webapps/reload`), su cui il workflow si basa
+> interamente. È questa la causa del run fallito sul tag `v0.1.7`. Il file del
+> workflow resta in repo come riferimento per un'eventuale riattivazione su un
+> piano a pagamento; descrizione originale in `backlog/task18-0.md`.
+
+Il tag `vX.Y.Z` resta la convenzione per marcare le release, ma **non innesca
+nulla**: dopo il push va eseguito a mano l'aggiornamento sul server.
 
 **Procedura di rilascio (solo su richiesta esplicita dell'utente):**
 
 1. Bump di `_APP_VERSION` in `pyspendless/app.py` (semver) — vedi voce MB-003.
 2. `git commit` delle modifiche.
 3. `git tag vX.Y.Z` con la stessa versione di `_APP_VERSION`.
-4. `git push && git push --tags`  ← è il push del tag che avvia il deploy.
+4. `git push && git push --tags`.
+5. **Passo manuale sul server** (non automatizzabile da qui): console Bash su
+   PythonAnywhere → `cd /home/tabuto/pyspendless3` → `git pull` (o
+   `git checkout vX.Y.Z`) → poi **Reload** della web app dalla tab *Web*.
+6. Verifica: `GET https://tabuto.pythonanywhere.com/version` deve riportare la
+   versione appena rilasciata.
 
 L'assistente esegue questi passi **solo** se l'utente lo chiede esplicitamente.
 Al termine di un task, se le modifiche sembrano da rilasciare, **proporre** la

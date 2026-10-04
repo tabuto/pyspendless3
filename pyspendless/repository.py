@@ -332,21 +332,138 @@ class WalletRepository:
     def __init__(self, db_session: Session):
         self.db = db_session
     
+    # Indice RISERVATO al wallet preferito dell'account (MB-004).
+    #
+    # Non esiste una colonna dedicata: la preferenza è espressa dalla posizione.
+    # Regole (requisiti del 2026-09-14):
+    #   - `order_index = 0` NON è assegnabile dall'utente: lo imposta solo
+    #     `set_preferred_wallet`. Ogni altra scrittura è rifiutata da
+    #     `validate_order_index` / `update_wallet`.
+    #   - al massimo UN wallet per account può stare a 0 (unicità garantita da
+    #     `set_preferred_wallet`, che prima declassa il preferito uscente).
+    #   - "nessun wallet preferito" è uno stato legittimo: nessun wallet a 0.
+    #   - togliere la preferenza porta il wallet a MIN_USER_ORDER_INDEX (1).
+    #
+    # Questa costante e i metodi qui sotto sono l'UNICO punto del codice che
+    # conosce la convenzione: se un domani si aggiunge `Wallet.is_default`, basta
+    # riscrivere questo blocco.
+    PREFERRED_ORDER_INDEX = 0
+    MIN_USER_ORDER_INDEX = PREFERRED_ORDER_INDEX + 1
+
+    @classmethod
+    def validate_order_index(cls, order_index: Any) -> int:
+        """
+        Valida un `order_index` fornito dall'utente.
+
+        Raises:
+            ValueError: se non è un intero o se è < MIN_USER_ORDER_INDEX, perché
+                lo 0 è riservato al wallet preferito.
+        """
+        try:
+            value = int(order_index)
+        except (TypeError, ValueError):
+            raise ValueError("L'ordine deve essere un numero intero.")
+
+        if value < cls.MIN_USER_ORDER_INDEX:
+            raise ValueError(
+                "L'ordine minimo è {}: lo {} è riservato al wallet preferito e si "
+                "imposta solo con l'azione 'Imposta come preferito'.".format(
+                    cls.MIN_USER_ORDER_INDEX, cls.PREFERRED_ORDER_INDEX
+                )
+            )
+
+        return value
+
     def get_wallets_for_account(self, account_id: int) -> List[Wallet]:
         """Recupera tutti i wallet di un account ordinati per order_index e nome"""
         return self.db.query(Wallet).filter_by(account_id=account_id).order_by(Wallet.order_index.asc(), Wallet.name.asc()).all()
-    
+
+    def get_preferred_wallet(self, account_id: int) -> Optional[Wallet]:
+        """
+        Ritorna il wallet preferito dell'account, oppure **None** se non ce n'è uno.
+
+        È preferito il wallet con `order_index == PREFERRED_ORDER_INDEX`. A
+        differenza della prima stesura non si ripiega sul "primo della lista":
+        "nessun preferito" è uno stato legittimo e va distinguibile.
+
+        Su dati storici che avessero più wallet a 0 il risultato resta
+        deterministico (primo in ordine alfabetico); la condizione si risolve da
+        sola alla prima chiamata di `set_preferred_wallet`.
+        """
+        return (
+            self.db.query(Wallet)
+            .filter_by(account_id=account_id, order_index=self.PREFERRED_ORDER_INDEX)
+            .order_by(Wallet.name.asc())
+            .first()
+        )
+
+    def set_preferred_wallet(self, wallet_id: int, account_id: int) -> Optional[Wallet]:
+        """
+        Imposta un wallet come preferito dell'account (MB-004).
+
+        Garantisce l'unicità: ogni altro wallet dell'account che si trovasse a
+        `PREFERRED_ORDER_INDEX` viene declassato a `MIN_USER_ORDER_INDEX` prima
+        della promozione, quindi non può mai esistere una coppia di preferiti.
+
+        Returns:
+            Il wallet promosso, None se non esiste o non appartiene all'account.
+        """
+        target = self.db.query(Wallet).filter_by(id=wallet_id, account_id=account_id).first()
+        if not target:
+            return None
+
+        # Declassa il preferito uscente (e eventuali duplicati storici a 0)
+        previous = self.db.query(Wallet).filter(
+            Wallet.account_id == account_id,
+            Wallet.order_index == self.PREFERRED_ORDER_INDEX,
+            Wallet.id != target.id
+        ).all()
+        for wallet in previous:
+            wallet.order_index = self.MIN_USER_ORDER_INDEX
+
+        target.order_index = self.PREFERRED_ORDER_INDEX
+        self.db.commit()
+        return target
+
+    def unset_preferred_wallet(self, wallet_id: int, account_id: int) -> Optional[Wallet]:
+        """
+        Toglie la preferenza a un wallet, portandolo a `MIN_USER_ORDER_INDEX` (1).
+
+        L'account resta senza wallet preferito: è uno stato legittimo.
+
+        Returns:
+            Il wallet declassato; None se non esiste, non appartiene all'account
+            o non era il preferito.
+        """
+        target = self.db.query(Wallet).filter_by(id=wallet_id, account_id=account_id).first()
+        if not target or target.order_index != self.PREFERRED_ORDER_INDEX:
+            return None
+
+        target.order_index = self.MIN_USER_ORDER_INDEX
+        self.db.commit()
+        return target
+
+
     def get_wallet(self, wallet_id: int) -> Optional[Wallet]:
         """Recupera un wallet tramite ID"""
         return self.db.query(Wallet).filter_by(id=wallet_id).first()
     
     def create_wallet(self, code: str, name: str, account_id: int, currency: str = 'EUR', order_index: Optional[int] = None) -> Wallet:
-        """Crea un nuovo wallet"""
+        """
+        Crea un nuovo wallet.
+
+        Un wallet appena creato non è mai preferito: l'indice parte da
+        MIN_USER_ORDER_INDEX, perché lo 0 è riservato (MB-004).
+        """
         # Se order_index non è specificato, assegna automaticamente MAX+1
         if order_index is None:
             max_order = self.db.query(func.max(Wallet.order_index)).filter_by(account_id=account_id).scalar()
-            order_index = (max_order + 1) if max_order is not None else 0
-        
+            order_index = (max_order + 1) if max_order is not None else self.MIN_USER_ORDER_INDEX
+        else:
+            order_index = self.validate_order_index(order_index)
+
+        order_index = max(order_index, self.MIN_USER_ORDER_INDEX)
+
         wallet = Wallet(
             code=code,
             name=name,
@@ -360,15 +477,27 @@ class WalletRepository:
         return wallet
     
     def update_wallet(self, wallet_id: int, data: Dict[str, Any]) -> Optional[Wallet]:
-        """Aggiorna un wallet"""
+        """
+        Aggiorna un wallet.
+
+        L'`order_index` passato dall'utente viene validato: lo 0 è riservato al
+        wallet preferito e non è impostabile da qui (MB-004).
+
+        Raises:
+            ValueError: se `order_index` non è valido.
+        """
         wallet = self.get_wallet(wallet_id)
         if not wallet:
             return None
-        
+
+        data = dict(data or {})
+        if 'order_index' in data:
+            data['order_index'] = self.validate_order_index(data['order_index'])
+
         for key, value in data.items():
             if hasattr(wallet, key):
                 setattr(wallet, key, value)
-        
+
         self.db.commit()
         return wallet
     

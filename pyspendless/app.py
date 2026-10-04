@@ -425,7 +425,8 @@ def create():
         # Recupera categorie ordinate per order_index
         categories = category_repo.get_categories_for_account(account_id, order_by_index=True)
         wallets = wallet_repo.get_wallets_for_account(account_id)
-        
+        preferred_wallet = wallet_repo.get_preferred_wallet(account_id)
+
         # Se movement_id è presente, recupera il movimento per la modifica
         movement = None
         if movement_id:
@@ -450,6 +451,7 @@ def create():
             "ps-add-mov.html",
             categories=categories,
             wallets=wallets,
+            preferred_wallet_id=preferred_wallet.id if preferred_wallet else None,
             movement=movement,
             repeat_source=repeat_source,
             today=_date.today(),
@@ -1466,7 +1468,9 @@ def api_get_wallets(account_id):
         movement_repo = MovementRepository(db)
         
         wallets = wallet_repo.get_wallets_for_account(account_id)
-        
+        preferred = wallet_repo.get_preferred_wallet(account_id)
+        preferred_id = preferred.id if preferred else None
+
         result = []
         for wallet in wallets:
             # Calcola saldo
@@ -1474,14 +1478,15 @@ def api_get_wallets(account_id):
             income = sum(float(m.income) if m.income else 0 for m in movements)
             expense = sum(float(m.expense) if m.expense else 0 for m in movements)
             balance = income - expense
-            
+
             result.append({
                 'id': wallet.id,
                 'code': wallet.code,
                 'name': wallet.name,
                 'currency': wallet.currency,
                 'balance': balance,
-                'order_index': wallet.order_index if hasattr(wallet, 'order_index') else 0
+                'order_index': wallet.order_index if hasattr(wallet, 'order_index') else 0,
+                'is_preferred': wallet.id == preferred_id
             })
         
         return jsonify(result), 200
@@ -1506,12 +1511,16 @@ def api_create_wallet(account_id):
     db = get_db_session()
     try:
         wallet_repo = WalletRepository(db)
-        wallet = wallet_repo.create_wallet(
-            code=str(uuid.uuid4())[:8],
-            name=data['name'],
-            account_id=account_id,
-            currency=data.get('currency', 'EUR')
-        )
+        try:
+            wallet = wallet_repo.create_wallet(
+                code=str(uuid.uuid4())[:8],
+                name=data['name'],
+                account_id=account_id,
+                currency=data.get('currency', 'EUR')
+            )
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+
         return jsonify({
             'id': wallet.id,
             'code': wallet.code,
@@ -1542,8 +1551,13 @@ def api_update_wallet(wallet_id):
         
         if wallet.account_id != account_id:
             return jsonify({'error': 'Accesso non autorizzato'}), 403
-        
-        wallet = wallet_repo.update_wallet(wallet_id, data)
+
+        try:
+            wallet = wallet_repo.update_wallet(wallet_id, data)
+        except ValueError as e:
+            # order_index non valido: lo 0 è riservato al wallet preferito (MB-004)
+            return jsonify({'error': str(e)}), 400
+
         return jsonify({
             'id': wallet.id,
             'code': wallet.code,
@@ -1553,6 +1567,83 @@ def api_update_wallet(wallet_id):
         }), 200
     finally:
         db.close()
+
+
+@app.route("/api/wallets/<int:wallet_id>/preferred", methods=['PUT'])
+def api_set_preferred_wallet(wallet_id):
+    """
+    API per impostare un wallet come preferito dell'account (MB-004).
+
+    Il preferito è il wallet proposto di default nel form di creazione movimento e
+    usato dal server MCP quando la chiamata non ne specifica uno. È l'unico modo
+    per portare un wallet a `order_index = 0`, ed è garantita l'unicità: il
+    preferito uscente viene declassato.
+    """
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+
+    account_id = session.get('account_id')
+
+    try:
+        db = get_db_session()
+        try:
+            wallet_repo = WalletRepository(db)
+            wallet = wallet_repo.set_preferred_wallet(wallet_id, account_id)
+
+            if not wallet:
+                return jsonify({'error': 'Wallet non trovato'}), 404
+
+            return jsonify({
+                'success': True,
+                'message': 'Wallet impostato come preferito',
+                'id': wallet.id,
+                'name': wallet.name,
+                'order_index': wallet.order_index
+            }), 200
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Errore durante l'impostazione del wallet preferito: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return jsonify({'error': f'Errore interno: {str(e)}'}), 500
+
+
+@app.route("/api/wallets/<int:wallet_id>/preferred", methods=['DELETE'])
+def api_unset_preferred_wallet(wallet_id):
+    """
+    API per togliere la preferenza a un wallet (MB-004).
+
+    Il wallet passa a `order_index = 1` e l'account resta senza preferito: è uno
+    stato legittimo, in cui il form di creazione movimento torna a proporre
+    l'ultimo wallet usato e il server MCP ripiega sul primo della lista.
+    """
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+
+    account_id = session.get('account_id')
+
+    try:
+        db = get_db_session()
+        try:
+            wallet_repo = WalletRepository(db)
+            wallet = wallet_repo.unset_preferred_wallet(wallet_id, account_id)
+
+            if not wallet:
+                return jsonify({'error': 'Wallet non trovato o non preferito'}), 404
+
+            return jsonify({
+                'success': True,
+                'message': 'Preferenza rimossa',
+                'id': wallet.id,
+                'name': wallet.name,
+                'order_index': wallet.order_index
+            }), 200
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Errore durante la rimozione del wallet preferito: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return jsonify({'error': f'Errore interno: {str(e)}'}), 500
 
 
 @app.route("/api/wallets/<int:wallet_id>", methods=['DELETE'])

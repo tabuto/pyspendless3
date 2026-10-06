@@ -769,6 +769,31 @@ class MovementRepository:
         self.db.commit()
         return movement
     
+    def bulk_update_movements(
+        self,
+        account_id: int,
+        filters: Dict[str, Any],
+        category=None,
+        category_id: Optional[int] = None,
+        note: Optional[str] = None,
+    ) -> int:
+        """
+        Applica categoria e/o nota a tutti i movimenti di account_id che
+        soddisfano i filtri (stessi filtri di get_movements_for_account),
+        in un unico commit. Ritorna il numero di movimenti aggiornati.
+        """
+        movements = self.get_movements_for_account(account_id=account_id, **filters)
+
+        for m in movements:
+            if category_id is not None:
+                m.category_id = category_id
+                m.category = category
+            if note is not None:
+                m.note = note
+
+        self.db.commit()
+        return len(movements)
+
     def delete_movement(self, movement_id: str) -> bool:
         """Elimina un movimento"""
         movement = self.get_movement(movement_id)

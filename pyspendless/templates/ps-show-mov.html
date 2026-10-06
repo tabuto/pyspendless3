@@ -144,10 +144,17 @@
       <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
           <h5 class="card-title mb-0">Elenco Movimenti</h5>
-          <button type="button" id="export-csv-btn" class="btn btn-outline-success btn-sm"
-                  {% if not movements %}disabled{% endif %}>
-            <i class="bi bi-download"></i> Esporta
-          </button>
+          <div>
+            <button type="button" id="bulk-edit-btn" class="btn btn-outline-warning btn-sm"
+                    data-bs-toggle="modal" data-bs-target="#bulkEditModal"
+                    {% if not movements %}disabled{% endif %}>
+              <i class="bi bi-pencil-square"></i> Correzione massiva
+            </button>
+            <button type="button" id="export-csv-btn" class="btn btn-outline-success btn-sm"
+                    {% if not movements %}disabled{% endif %}>
+              <i class="bi bi-download"></i> Esporta
+            </button>
+          </div>
         </div>
         <div class="card-body">
 
@@ -214,6 +221,61 @@
           </div>
 
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Correzione massiva -->
+<div class="modal fade" id="bulkEditModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Correzione massiva</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>
+          Verranno modificati <strong>{{ movements|length }}</strong> movimenti
+          corrispondenti ai filtri attivi.
+        </p>
+
+        {% if filters.category_type %}
+          <div class="mb-3">
+            <label for="bulk-category" class="form-label">Nuova categoria</label>
+            <select class="form-select" id="bulk-category">
+              <option value="">Non modificare</option>
+              {% for cat in categories %}
+                {% if cat.type == filters.category_type %}
+                  <option value="{{ cat.id }}">{{ cat.name }}</option>
+                {% endif %}
+              {% endfor %}
+            </select>
+          </div>
+        {% else %}
+          <div class="alert alert-warning small">
+            Per cambiare la categoria in blocco, filtra prima per
+            <strong>Entrata</strong> o <strong>Uscita</strong> (campo "Tipo"
+            nei filtri sopra).
+          </div>
+        {% endif %}
+
+        <div class="mb-3">
+          <label for="bulk-note" class="form-label">Nuova descrizione</label>
+          <textarea class="form-control" id="bulk-note" rows="2"
+                    placeholder="Lascia vuoto per non modificare la descrizione"></textarea>
+          <div class="form-text">
+            Sostituisce la nota esistente su ogni movimento selezionato.
+          </div>
+        </div>
+
+        <div class="alert alert-danger small mb-0">
+          Operazione non reversibile: non è previsto un annullamento.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-warning" id="bulk-edit-apply-btn" disabled>Applica</button>
       </div>
     </div>
   </div>
@@ -372,6 +434,58 @@ document.addEventListener('DOMContentLoaded', function() {
     const params = new URLSearchParams(window.location.search);
     window.location.href = '/api/movements/export?' + params.toString();
   });
+
+  // ── Correzione massiva ──────────────────────────────────────────────────
+  (function () {
+    const categorySelect = document.getElementById('bulk-category');
+    const noteInput      = document.getElementById('bulk-note');
+    const applyBtn        = document.getElementById('bulk-edit-apply-btn');
+
+    function updateApplyState() {
+      const hasCategory = categorySelect && categorySelect.value !== '';
+      const hasNote      = noteInput.value.trim() !== '';
+      applyBtn.disabled = !(hasCategory || hasNote);
+    }
+
+    if (categorySelect) {
+      categorySelect.addEventListener('change', updateApplyState);
+    }
+    noteInput.addEventListener('input', updateApplyState);
+
+    applyBtn.addEventListener('click', async function () {
+      const categoryId = categorySelect ? categorySelect.value : '';
+      const note        = noteInput.value.trim();
+
+      const count = {{ movements|length }};
+      if (!confirm('Confermi la modifica di ' + count + ' movimenti? L\'operazione non è reversibile.')) {
+        return;
+      }
+
+      const body = {};
+      if (categoryId !== '') body.category_id = parseInt(categoryId, 10);
+      if (note !== '') body.note = note;
+
+      applyBtn.disabled = true;
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const response = await fetch('/api/movements/bulk-update?' + params.toString(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const result = await response.json();
+        if (response.ok) {
+          window.location.reload();
+        } else {
+          alert(result.error || 'Errore durante la correzione massiva');
+          applyBtn.disabled = false;
+        }
+      } catch (error) {
+        alert('Errore di comunicazione con il server: ' + error.message);
+        applyBtn.disabled = false;
+      }
+    });
+  })();
 
   // ── Tom Select — multi-select categorie ────────────────────────────────
   // Il pannello filtri è collassato: inizializzare Tom Select mentre il

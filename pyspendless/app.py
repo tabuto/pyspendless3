@@ -773,6 +773,70 @@ def api_export_movements_filtered():
         db.close()
 
 
+@app.route("/api/movements/bulk-update", methods=['POST'])
+def api_bulk_update_movements():
+    """
+    Correzione massiva: applica una nuova categoria e/o una nuova nota a
+    tutti i movimenti che soddisfano i filtri correnti della pagina
+    /movements (stessi parametri via query string di /api/movements/export),
+    non solo quelli visualizzati/paginati lato client.
+    """
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+
+    account_id = session.get('account_id')
+    data = request.get_json(silent=True) or {}
+    category_id = data.get('category_id')
+    note = data.get('note')
+
+    if category_id is None and note is None:
+        return jsonify({'error': 'Specificare almeno categoria o nota da applicare'}), 400
+
+    f = _parse_movement_filters()
+
+    db = get_db_session()
+    try:
+        category_repo = CategoryRepository(db)
+        movement_repo = MovementRepository(db)
+
+        category = None
+        if category_id is not None:
+            category = category_repo.get_category(category_id)
+            if not category or category.account_id != account_id:
+                return jsonify({'error': 'Categoria non trovata'}), 404
+
+            category_type = f['category_type']
+            if not category_type:
+                return jsonify({
+                    'error': 'Per cambiare categoria in blocco, filtra prima per Entrata o Uscita'
+                }), 400
+            if category.type != category_type:
+                return jsonify({
+                    'error': 'La categoria selezionata non è compatibile con il tipo (entrata/uscita) dei movimenti filtrati'
+                }), 400
+
+        filters = {
+            'wallet_id':     f['wallet_id'],
+            'category_ids':  f['category_ids'],
+            'category_type': f['category_type'],
+            'date_from':     f['date_from'],
+            'date_to':       f['date_to'],
+            'keywords':      f['keywords'],
+        }
+
+        updated = movement_repo.bulk_update_movements(
+            account_id=account_id,
+            filters=filters,
+            category=category.name if category else None,
+            category_id=category_id,
+            note=note,
+        )
+
+        return jsonify({'updated': updated}), 200
+    finally:
+        db.close()
+
+
 @app.route("/api/movements", methods=['POST'])
 def api_create_movement():
     """

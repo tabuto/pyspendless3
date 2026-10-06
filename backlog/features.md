@@ -12,3 +12,4 @@
 | Deploy PythonAnywhere | GitHub Actions (`deploy.yml`, trigger sui tag `v*`) che fa `git pull`/checkout sul server PA e reload della web app via API token; segreti nei GitHub repository secrets (task18-0). **SOSPESO**: l'account PA gratuito non consente le API, il workflow fallisce (run del tag `v0.1.7`) — il deploy resta manuale (`git pull` + Reload da console/tab Web) | SOSPESO |
 | Server MCP | Endpoint `/mcp` (JSON-RPC stateless) con tool `add_movement` e `list_categories`, autenticati via token personale generato dal profilo utente, per registrare spese parlando a Claude (task20-0) | TODO |
 | Rate limiting endpoint MCP | Limite di richieste/401 sull'endpoint `/mcp`, scorporato da task20-0 (decisione D9) | TODO |
+| Correzione massiva movimenti | In `/movements`, filtrare i movimenti e cambiare in blocco categoria e/o descrizione su tutti i movimenti risultanti dai filtri (task21-0) | TODO |

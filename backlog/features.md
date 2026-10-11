@@ -13,3 +13,4 @@
 | Server MCP | Endpoint `/mcp` (JSON-RPC stateless) con tool `add_movement` e `list_categories`, autenticati via token personale generato dal profilo utente, per registrare spese parlando a Claude (task20-0) | TODO |
 | Rate limiting endpoint MCP | Limite di richieste/401 sull'endpoint `/mcp`, scorporato da task20-0 (decisione D9) | TODO |
 | Correzione massiva movimenti | In `/movements`, filtrare i movimenti e cambiare in blocco categoria e/o descrizione su tutti i movimenti risultanti dai filtri (task21-0) | DONE |
+| Wallet preferito per singolo utente | Bugfix: il wallet preferito (MB-004/MB-005) era condiviso da tutti gli utenti dello stesso account; diventa un'impostazione per singolo utente (`User.preferred_wallet_id`), con migrazione di backfill (task22-0) | DONE |

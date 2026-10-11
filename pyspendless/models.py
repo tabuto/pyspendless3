@@ -40,7 +40,11 @@ class User(Base):
     account_id = Column(Integer, ForeignKey('Account.id'), nullable=False)
     role = Column(Text, nullable=False)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    
+    # Wallet preferito dell'utente (task22-0): None è uno stato legittimo
+    # ("nessun preferito"). Sostituisce la vecchia convenzione per cui il
+    # preferito era un attributo dell'account (Wallet.order_index == 0).
+    preferred_wallet_id = Column(Integer, ForeignKey('Wallet.id'), nullable=True)
+
     # Relationships
     account = relationship('Account', back_populates='users')
     movements = relationship('Movement', back_populates='user_obj', foreign_keys='Movement.user_id')

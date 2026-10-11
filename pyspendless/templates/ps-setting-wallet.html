@@ -3,7 +3,11 @@
 {% block nav_content %}
 <div class="container-fluid mt-4">
   <h1 class="mb-4">Gestione Wallet</h1>
-  
+  <p class="text-muted">
+    Il wallet "preferito" è personale: riguarda solo te, gli altri utenti
+    dell'account possono avere un preferito diverso.
+  </p>
+
   <!-- Alert per messaggi -->
   <div id="alertContainer"></div>
   
@@ -63,7 +67,6 @@
       <div class="modal-body">
         <form id="editWalletForm">
           <input type="hidden" id="editWalletId">
-          <input type="hidden" id="editWalletIsPreferred" value="false">
           <div class="mb-3">
             <label for="editWalletName" class="form-label">Nome</label>
             <input type="text" class="form-control" id="editWalletName" required>
@@ -78,14 +81,9 @@
           </div>
           <div class="mb-3">
             <label for="editWalletOrder" class="form-label">Ordine</label>
-            <input type="number" class="form-control" id="editWalletOrder" min="1" step="1" required>
-            <div class="form-text" id="editWalletOrderHelp">
-              Numero intero per ordinare i wallet (1, 2, 3, ...). Lo <strong>0 è riservato</strong>
-              al wallet preferito e si imposta solo con "Imposta come preferito".
-            </div>
-            <div class="form-text text-primary d-none" id="editWalletOrderPreferredHelp">
-              Questo è il wallet <strong>preferito</strong>: il suo ordine è gestito dalla
-              preferenza e non è modificabile qui. Per liberarlo usa "Rimuovi preferito".
+            <input type="number" class="form-control" id="editWalletOrder" min="0" step="1" required>
+            <div class="form-text">
+              Numero intero per ordinare i wallet (0, 1, 2, ...).
             </div>
           </div>
         </form>
@@ -169,7 +167,7 @@ function loadWallets() {
               </p>
               <div class="d-flex gap-2 flex-wrap">
                 ${preferredButton}
-                <button class="btn btn-sm btn-warning" onclick="openEditModal(${wallet.id}, '${wallet.name}', '${wallet.currency}', ${wallet.order_index || 0}, ${wallet.is_preferred ? 'true' : 'false'})">
+                <button class="btn btn-sm btn-warning" onclick="openEditModal(${wallet.id}, '${wallet.name}', '${wallet.currency}', ${wallet.order_index || 0})">
                   <i class="bi bi-pencil"></i> Modifica
                 </button>
                 <button class="btn btn-sm btn-danger" onclick="deleteWallet(${wallet.id})">
@@ -189,8 +187,9 @@ function loadWallets() {
 }
 
 function setPreferredWallet(walletId) {
-  // Il preferito è il wallet proposto di default nel form di creazione movimento
-  // e usato dal server MCP quando la chiamata non ne specifica uno (MB-004/MB-005).
+  // Il preferito è personale: il wallet proposto di default nel form di creazione
+  // movimento per te e usato dal server MCP per le tue chiamate che non ne
+  // specificano uno (task22-0, prima MB-004/MB-005 era condiviso dall'account).
   fetch(`/api/wallets/${walletId}/preferred`, {method: 'PUT'})
     .then(response => response.json().then(data => ({ok: response.ok, data})))
     .then(({ok, data}) => {
@@ -208,8 +207,8 @@ function setPreferredWallet(walletId) {
 }
 
 function unsetPreferredWallet(walletId) {
-  // Togliendo la preferenza il wallet passa a ordine 1 e l'account resta senza
-  // preferito: è uno stato legittimo (MB-004).
+  // Togliendo la preferenza resti senza wallet preferito: è uno stato legittimo
+  // (task22-0). Non tocca l'ordine di visualizzazione del wallet.
   fetch(`/api/wallets/${walletId}/preferred`, {method: 'DELETE'})
     .then(response => response.json().then(data => ({ok: response.ok, data})))
     .then(({ok, data}) => {
@@ -271,20 +270,13 @@ function addWallet() {
   });
 }
 
-function openEditModal(id, name, currency, orderIndex, isPreferred) {
+function openEditModal(id, name, currency, orderIndex) {
   document.getElementById('editWalletId').value = id;
   document.getElementById('editWalletName').value = name;
   document.getElementById('editWalletCurrency').value = currency;
-  document.getElementById('editWalletIsPreferred').value = isPreferred ? 'true' : 'false';
 
-  // Sul wallet preferito l'ordine (0) è gestito dalla preferenza: campo in sola
-  // lettura, e l'order_index non viene nemmeno inviato (MB-004).
   const orderInput = document.getElementById('editWalletOrder');
   orderInput.value = orderIndex || 0;
-  orderInput.disabled = !!isPreferred;
-  orderInput.required = !isPreferred;
-  document.getElementById('editWalletOrderHelp').classList.toggle('d-none', !!isPreferred);
-  document.getElementById('editWalletOrderPreferredHelp').classList.toggle('d-none', !isPreferred);
 
   const modal = new bootstrap.Modal(document.getElementById('editWalletModal'));
   modal.show();
@@ -294,18 +286,15 @@ function updateWallet() {
   const id = document.getElementById('editWalletId').value;
   const name = document.getElementById('editWalletName').value;
   const currency = document.getElementById('editWalletCurrency').value;
-  const isPreferred = document.getElementById('editWalletIsPreferred').value === 'true';
   const orderIndex = parseInt(document.getElementById('editWalletOrder').value);
 
   const payload = { name, currency };
 
-  if (!isPreferred) {
-    if (isNaN(orderIndex) || orderIndex < 1) {
-      showAlert('L\'ordine minimo è 1: lo 0 è riservato al wallet preferito', 'warning');
-      return;
-    }
-    payload.order_index = orderIndex;
+  if (isNaN(orderIndex) || orderIndex < 0) {
+    showAlert('L\'ordine minimo è 0', 'warning');
+    return;
   }
+  payload.order_index = orderIndex;
 
   fetch(`/api/wallets/${id}`, {
     method: 'PUT',

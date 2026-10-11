@@ -419,13 +419,15 @@ def create():
 
         category_repo = CategoryRepository(db)
         wallet_repo = WalletRepository(db)
+        user_repo = UserRepository(db)
         movement_repo = MovementRepository(db)
         recurrent_repo = RecurrentMovementRepository(db)
-        
+
         # Recupera categorie ordinate per order_index
         categories = category_repo.get_categories_for_account(account_id, order_by_index=True)
         wallets = wallet_repo.get_wallets_for_account(account_id)
-        preferred_wallet = wallet_repo.get_preferred_wallet(account_id)
+        # Il preferito è dell'utente che sta compilando il form, non dell'account (task22-0)
+        preferred_wallet = user_repo.get_preferred_wallet(session.get('user_id'))
 
         # Se movement_id è presente, recupera il movimento per la modifica
         movement = None
@@ -1530,9 +1532,11 @@ def api_get_wallets(account_id):
     try:
         wallet_repo = WalletRepository(db)
         movement_repo = MovementRepository(db)
-        
+        user_repo = UserRepository(db)
+
         wallets = wallet_repo.get_wallets_for_account(account_id)
-        preferred = wallet_repo.get_preferred_wallet(account_id)
+        # Il preferito è dell'utente che sta guardando, non dell'account (task22-0)
+        preferred = user_repo.get_preferred_wallet(session.get('user_id'))
         preferred_id = preferred.id if preferred else None
 
         result = []
@@ -1619,7 +1623,7 @@ def api_update_wallet(wallet_id):
         try:
             wallet = wallet_repo.update_wallet(wallet_id, data)
         except ValueError as e:
-            # order_index non valido: lo 0 è riservato al wallet preferito (MB-004)
+            # order_index non valido (intero >= 0)
             return jsonify({'error': str(e)}), 400
 
         return jsonify({
@@ -1636,14 +1640,16 @@ def api_update_wallet(wallet_id):
 @app.route("/api/wallets/<int:wallet_id>/preferred", methods=['PUT'])
 def api_set_preferred_wallet(wallet_id):
     """
-    API per impostare un wallet come preferito dell'account (MB-004).
+    API per impostare un wallet come preferito dell'utente corrente (task22-0).
 
     Il preferito è il wallet proposto di default nel form di creazione movimento e
-    usato dal server MCP quando la chiamata non ne specifica uno. È l'unico modo
-    per portare un wallet a `order_index = 0`, ed è garantita l'unicità: il
-    preferito uscente viene declassato.
+    usato dal server MCP quando la chiamata non ne specifica uno. È per singolo
+    utente: utenti diversi dello stesso account possono avere preferiti diversi
+    (prima del task22-0 era un'unica preferenza condivisa dall'intero account,
+    che è il bug corretto da questo task).
     """
-    if not session.get('user_id'):
+    user_id = session.get('user_id')
+    if not user_id:
         return jsonify({'error': 'Non autenticato'}), 401
 
     account_id = session.get('account_id')
@@ -1651,8 +1657,8 @@ def api_set_preferred_wallet(wallet_id):
     try:
         db = get_db_session()
         try:
-            wallet_repo = WalletRepository(db)
-            wallet = wallet_repo.set_preferred_wallet(wallet_id, account_id)
+            user_repo = UserRepository(db)
+            wallet = user_repo.set_preferred_wallet(user_id, wallet_id, account_id)
 
             if not wallet:
                 return jsonify({'error': 'Wallet non trovato'}), 404
@@ -1661,8 +1667,7 @@ def api_set_preferred_wallet(wallet_id):
                 'success': True,
                 'message': 'Wallet impostato come preferito',
                 'id': wallet.id,
-                'name': wallet.name,
-                'order_index': wallet.order_index
+                'name': wallet.name
             }), 200
         finally:
             db.close()
@@ -1675,22 +1680,21 @@ def api_set_preferred_wallet(wallet_id):
 @app.route("/api/wallets/<int:wallet_id>/preferred", methods=['DELETE'])
 def api_unset_preferred_wallet(wallet_id):
     """
-    API per togliere la preferenza a un wallet (MB-004).
+    API per togliere la preferenza a un wallet per l'utente corrente (task22-0).
 
-    Il wallet passa a `order_index = 1` e l'account resta senza preferito: è uno
-    stato legittimo, in cui il form di creazione movimento torna a proporre
-    l'ultimo wallet usato e il server MCP ripiega sul primo della lista.
+    L'utente resta senza wallet preferito: è uno stato legittimo, in cui il
+    form di creazione movimento torna a proporre l'ultimo wallet usato e il
+    server MCP ripiega sul primo della lista.
     """
-    if not session.get('user_id'):
+    user_id = session.get('user_id')
+    if not user_id:
         return jsonify({'error': 'Non autenticato'}), 401
-
-    account_id = session.get('account_id')
 
     try:
         db = get_db_session()
         try:
-            wallet_repo = WalletRepository(db)
-            wallet = wallet_repo.unset_preferred_wallet(wallet_id, account_id)
+            user_repo = UserRepository(db)
+            wallet = user_repo.unset_preferred_wallet(user_id, wallet_id)
 
             if not wallet:
                 return jsonify({'error': 'Wallet non trovato o non preferito'}), 404
@@ -1699,8 +1703,7 @@ def api_unset_preferred_wallet(wallet_id):
                 'success': True,
                 'message': 'Preferenza rimossa',
                 'id': wallet.id,
-                'name': wallet.name,
-                'order_index': wallet.order_index
+                'name': wallet.name
             }), 200
         finally:
             db.close()

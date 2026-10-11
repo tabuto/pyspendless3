@@ -275,7 +275,7 @@ TOOL_DEFINITIONS = [
                 },
                 'wallet': {
                     'type': 'string',
-                    'description': "Nome o codice del wallet. Se omesso si usa il wallet preferito dell'account."
+                    'description': "Nome o codice del wallet. Se omesso si usa il wallet preferito dell'utente che chiama."
                 },
                 'date': {
                     'type': 'string',
@@ -382,9 +382,10 @@ def resolve_wallet(wallets, requested, preferred=None):
     """
     Risolve il wallet per nome o codice.
 
-    Se `requested` è vuoto ritorna il **wallet preferito** dell'account (MB-005),
-    con ripiego sul primo della lista se il preferito non è disponibile.
-    Il wallet indicato esplicitamente nella chiamata ha sempre la precedenza.
+    Se `requested` è vuoto ritorna il **wallet preferito** dell'utente che chiama
+    (MB-005, per singolo utente da task22-0), con ripiego sul primo della lista
+    se il preferito non è disponibile. Il wallet indicato esplicitamente nella
+    chiamata ha sempre la precedenza.
 
     Returns:
         (Wallet, None) | (None, 'not_found') | (None, 'no_wallet')
@@ -453,6 +454,7 @@ def _movement_row_fingerprint(movement):
 def _tool_list_categories(db, ctx, args):
     """Tool di sola lettura: categorie e wallet dell'account."""
     account_id = ctx['account_id']
+    user_id = ctx['user_id']
     kind = args.get('kind')
 
     if kind and kind not in ALLOWED_CATEGORY_TYPES:
@@ -461,12 +463,14 @@ def _tool_list_categories(db, ctx, args):
         )
 
     wallet_repo = WalletRepository(db)
+    user_repo = UserRepository(db)
     categories = _usable_categories(db, account_id, kind)[:MAX_LISTED_ITEMS]
     wallets = wallet_repo.get_wallets_for_account(account_id)[:MAX_LISTED_ITEMS]
 
-    # Il wallet predefinito è quello preferito dell'account (MB-004/MB-005),
-    # non semplicemente il primo della lista.
-    preferred = wallet_repo.get_preferred_wallet(account_id)
+    # Il wallet predefinito è quello preferito dall'utente che chiama (task22-0,
+    # prima MB-004/MB-005 lo legava all'account), non semplicemente il primo
+    # della lista.
+    preferred = user_repo.get_preferred_wallet(user_id)
     preferred_id = preferred.id if preferred else None
 
     expenses = [c.name for c in categories if c.type == 'expense']
@@ -486,7 +490,7 @@ def _tool_list_categories(db, ctx, args):
             for w in wallets
         ))
         if preferred_id is None:
-            # Stato legittimo: nessun wallet preferito impostato (MB-004)
+            # Stato legittimo: nessun wallet preferito impostato per questo utente (task22-0)
             lines.append(
                 "Nessun wallet preferito impostato: se non ne indichi uno viene usato "
                 "'{}'.".format(wallets[0].name)
@@ -555,8 +559,10 @@ def _tool_add_movement(db, ctx, args):
 
     # --- risoluzione wallet ---
     wallet_repo = WalletRepository(db)
+    user_repo = UserRepository(db)
     wallets = wallet_repo.get_wallets_for_account(account_id)
-    preferred_wallet = wallet_repo.get_preferred_wallet(account_id)
+    # Preferito dell'utente che chiama, non dell'account (task22-0)
+    preferred_wallet = user_repo.get_preferred_wallet(user_id)
     wallet, wallet_error = resolve_wallet(wallets, args.get('wallet'), preferred_wallet)
     if wallet_error == 'no_wallet':
         return _tool_error("Questo account non ha nessun wallet configurato.")
@@ -578,7 +584,6 @@ def _tool_add_movement(db, ctx, args):
         return _tool_error("Categoria o wallet non appartengono a questo account.")
 
     # --- utente (campo legacy 'user' = email) ---
-    user_repo = UserRepository(db)
     lookup_id = int(user_id) if str(user_id).isdigit() else user_id
     user = user_repo.get_user_by_id(lookup_id)
     if not user:

@@ -289,7 +289,7 @@ def run(base_url, user_id, keep):
         checker.check('nessuna categoria di tipo transfer',
                       all(c.get('type') != 'transfer' for c in categories))
         # "Nessun wallet preferito" è uno stato legittimo: il vincolo è che non ce
-        # ne sia MAI più di uno (MB-004).
+        # ne sia MAI più di uno per l'utente che chiama (task22-0, prima MB-004).
         preferred_names = [w.get('name') for w in wallets if w.get('is_default')]
         checker.check('restituisce i wallet con al massimo un preferito',
                       len(wallets) > 0 and len(preferred_names) <= 1,

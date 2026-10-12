@@ -16,3 +16,4 @@ pyspendless/migrations/mapping_conf.json
 migration_mapping.json
 migrations/*.csv
 migrations/*.sql
+prompt.md

@@ -1,14 +1,53 @@
-# Task 23.0: OAuth 2.x per il server MCP — integrazione con Alexa+ (retrocompatibile con Claude)
+# Task 23.0: OAuth 2.x per il server MCP (endpoint `/mcp-oauth2`) — integrazione con Alexa+ (retrocompatibile con Claude)
 
-**Stato**: da pianificare — nessun file di codice toccato.
-**Repo**: `tabuto/pyspendless3`, branch `master` (file da creare: `backlog/task23-0.md`).
+**Stato**: implementato lato server + test automatici (vedi sotto). Non ancora
+rilasciato (manuale, su richiesta esplicita) né collegato ad Alexa+ (fase
+"Lato Alexa", successiva al deploy).
+**Repo**: `tabuto/pyspendless3`, branch `main`.
 **Dipende da**: task20-0 (server MCP), task22-0 (wallet preferito per utente).
+
+## Stato implementazione (aggiornato da questa sessione)
+- `pyspendless/mcp_server.py`: `auth_mode` (`static`|`oauth`) su
+  `handle_http_request`/`_dispatch`/`_handle_tools_call`; `/mcp` invariato,
+  `authenticate_oauth` + 401/403 con `WWW-Authenticate` solo in modalità `oauth`.
+- `pyspendless/repository.py`: `TokenRepository` generalizzata con helper
+  privati condivisi (`_create_hashed_secret_token`/`_validate_hashed_secret_token`)
+  e nuovi metodi `create_oauth_code`/`redeem_oauth_code`/`create_oauth_access_token`/
+  `validate_oauth_access_token`/`create_oauth_refresh_token`/`redeem_oauth_refresh_token`/
+  `get_oauth_connections_for_user`/`revoke_oauth_connection`. Nessuna migrazione
+  di schema (riuso dello status `EXPIRED` per le revoche).
+- `pyspendless/oauth_server.py` (nuovo): blueprint `oauth` con
+  `/oauth/authorize`, `/oauth/authorize/confirm`, `/oauth/token`
+  (authorization_code+PKCE, client_credentials, refresh_token), metadata di
+  discovery dedicati. Scritto a mano, nessuna dipendenza nuova.
+- `pyspendless/app.py`: rotte `/mcp-oauth2`, blueprint registrato, eccezioni di
+  manutenzione, redirect post-login verso `/oauth/authorize` pendente,
+  API `/api/oauth-connections` (elenco/revoca).
+- `pyspendless/conf.py`: `OAUTH_ALEXA_CLIENT_ID/SECRET/REDIRECT_URIS`,
+  `OAUTH_MAX_MOVEMENT_AMOUNT` (solo lettura, nessuna logica di blocco ancora).
+- `pyspendless/templates/ps-oauth-consent.html` (nuovo) + sezione
+  "Connessioni" in `ps-setting-profile.html`.
+- Test: `pyspendless/test/test_task23_0.py` (56 controlli, SQLite in-memory:
+  `TokenRepository` OAuth, `mcp_server` nei due `auth_mode`, flusso end-to-end
+  via Flask test client) e `pyspendless/dev_mcp_check.py` esteso con i
+  controlli su `/mcp-oauth2` e i metadata dedicati (richiede server locale
+  reale + DB `.env`: **non eseguito in questa sessione** per un problema
+  preesistente e indipendente dal task — il DB locale di sviluppo non ha
+  ancora la colonna `preferred_wallet_id` del task22-0, da migrare a parte).
+- Variabili d'ambiente OAuth (`OAUTH_ALEXA_*`) non ancora impostate in
+  `.env`/`.env_pa`: da fare prima del test dal vivo e del deploy.
 
 ## Obiettivo
 Rendere il server MCP di PySpendless collegabile ad **Alexa+** (add-on MCP), che richiede
 OAuth 2.x con PKCE, **senza alterare in alcun modo** il funzionamento attuale con il
 connettore claude.ai (token statico personale in header, errori di autenticazione come
 `200 + isError`, mai 401).
+
+Il nuovo endpoint OAuth2 si chiama **`/mcp-oauth2`** (non `/mcp-alexa`): il nome non lo lega
+ad Alexa in modo esplicito, così in futuro può essere riusato da altri client MCP che
+richiedono OAuth2 standard, senza dover introdurre un terzo endpoint (vedi "Punti aperti" §7).
+Alexa+ resta però il motivo per cui il task nasce ora e l'unico client pre-registrato al
+momento del rilascio.
 
 ## Vincoli di Alexa+ (da documentazione Amazon, da riverificare prima di implementare)
 Fonti: [QuickStart](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-quickstart.html),
@@ -47,17 +86,17 @@ dalla sonda) sul percorso usato da Claude fa partire il suo flusso OAuth/Dynamic
 Registration e il connettore fallisce con «impossibile registrarsi con il servizio di accesso».
 Quindi **nessuna modifica deve essere osservabile da Claude** sull'origine e su `/mcp`.
 
-## Soluzione proposta: risorsa separata `/mcp-alexa`, `/mcp` invariato
+## Soluzione proposta: risorsa separata `/mcp-oauth2`, `/mcp` invariato
 
 ### Principio
 Due porte d'ingresso allo **stesso codice dei tool** (`TOOL_DEFINITIONS`, `_dispatch`,
 `_tool_*`), con autenticazione diversa:
 
-| | `/mcp` (Claude, invariato) | `/mcp-alexa` (nuovo) |
+| | `/mcp` (Claude, invariato) | `/mcp-oauth2` (nuovo) |
 |---|---|---|
 | Credenziale | token statico (invariato) | access token OAuth |
 | Auth mancante/errata | `200 + isError`, mai 401 | **`401` + `WWW-Authenticate`** (`resource_metadata=...`) |
-| Metadata discovery | nessuno (404 JSON invariato) | `/.well-known/oauth-protected-resource/mcp-alexa` |
+| Metadata discovery | nessuno (404 JSON invariato) | `/.well-known/oauth-protected-resource/mcp-oauth2` |
 | Metodi pubblici | `initialize`, `tools/list`, `ping` | `initialize`, `tools/list`, `ping` (come oggi) |
 
 ### Metadata OAuth senza toccare l'origine
@@ -65,7 +104,7 @@ Due porte d'ingresso allo **stesso codice dei tool** (`TOOL_DEFINITIONS`, `_disp
   `/.well-known/oauth-authorization-server` **restano 404 JSON** (comportamento attuale,
   quello che la sonda di Claude si aspetta).
 - Il Protected Resource Metadata va **solo** sul path della nuova risorsa:
-  `/.well-known/oauth-protected-resource/mcp-alexa`.
+  `/.well-known/oauth-protected-resource/mcp-oauth2`.
 - L'authorization server usa un **issuer con path** (RFC 8414, path insertion):
   `issuer = {BASE_URL}/oauth` → metadata in
   `/.well-known/oauth-authorization-server/oauth`. Non occupa il path root.
@@ -81,7 +120,7 @@ Due porte d'ingresso allo **stesso codice dei tool** (`TOOL_DEFINITIONS`, `_disp
 - `POST /oauth/token` — `grant_type=authorization_code` (con `code_verifier`) e
   `grant_type=client_credentials`; client auth via HTTP Basic (accettare anche
   `client_secret_post` solo se Alexa lo richiede). Access token max 3600 s. Validazione
-  `resource` == URI di `/mcp-alexa`.
+  `resource` == URI di `/mcp-oauth2`.
 - `GET /.well-known/oauth-authorization-server/oauth` — metadata (`issuer`,
   `authorization_endpoint`, `token_endpoint`, `grant_types_supported` con
   `authorization_code` e `client_credentials`, `code_challenge_methods_supported=["S256"]`,
@@ -114,7 +153,7 @@ Due porte d'ingresso allo **stesso codice dei tool** (`TOOL_DEFINITIONS`, `_disp
   il comportamento resta **identico byte per byte**.
 - Aggiungere `2025-11-25` a `SUPPORTED_PROTOCOL_VERSIONS` (per `/mcp` la versione
   dichiarata di default non cambia, per non alterare la negoziazione di Claude).
-- Rotte in `app.py`: `POST /mcp-alexa` (stessa gestione manutenzione/405 di `/mcp`).
+- Rotte in `app.py`: `POST /mcp-oauth2` (stessa gestione manutenzione/405 di `/mcp`).
 - Verificare che il parser accetti `Accept: application/json, text/event-stream` e risponda in
   JSON semplice (Streamable HTTP consente la risposta JSON singola).
 
@@ -131,9 +170,9 @@ come task22-0):
 6. Confronto di una batteria di risposte `/mcp` salvate prima della modifica (golden file)
    con quelle dopo: devono coincidere.
 7. Nuovi test OAuth: authorize/token con PKCE corretto e errato, codice riusato, `redirect_uri`
-   non in whitelist, `resource` errato, token scaduto (→ 401 su `/mcp-alexa`),
+   non in whitelist, `resource` errato, token scaduto (→ 401 su `/mcp-oauth2`),
    `client_credentials` che non può chiamare `tools/call`, token Alexa **rifiutato** su `/mcp` e
-   token statico **rifiutato** su `/mcp-alexa`.
+   token statico **rifiutato** su `/mcp-oauth2`.
 8. Prima del tag: provare dal vivo che il connettore claude.ai esistente continua a funzionare
    (chiamata a `list_categories`) **e** che l'aggiunta di un connettore nuovo con la stessa URL
    `/mcp` non apra alcun flusso OAuth.
@@ -142,7 +181,7 @@ come task22-0):
 1. Account sviluppatore Amazon, installazione `alexa-ai` CLI, `alexa-ai configure` (Login with
    Amazon).
 2. `alexa-ai new mcp --name "PySpendless" --locale it-IT --mcp-server-url
-   https://tabuto.pythonanywhere.com/mcp-alexa`.
+   https://tabuto.pythonanywhere.com/mcp-oauth2`.
 3. Compilare `addon-package/addon.json`: descrizioni, 3-4 frasi di esempio, URL privacy/termini
    (pagina statica HTTPS), 6 icone, 1 carousel 600x900, configurazione OAuth (endpoint,
    client id/secret).
@@ -161,7 +200,7 @@ come task22-0):
 - `pyspendless/oauth_server.py` — nuovo (authorize, token, metadata).
 - `pyspendless/mcp_server.py` — modalità di autenticazione, 401 solo in modalità `oauth`,
   versione di protocollo.
-- `pyspendless/app.py` — rotte `/mcp-alexa`, blueprint OAuth, metadata sotto path dedicati,
+- `pyspendless/app.py` — rotte `/mcp-oauth2`, blueprint OAuth, metadata sotto path dedicati,
   eccezioni per la modalità manutenzione.
 - `pyspendless/repository.py` — `TokenRepository`: creazione e validazione di codici e access
   token OAuth.

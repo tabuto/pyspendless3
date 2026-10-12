@@ -16,6 +16,14 @@ tabella `Token` esistente (type='MCP', segreto hashato SHA-256). Vedi
 
 Il modulo non conosce Flask se non per l'oggetto `request` che riceve in ingresso:
 tutta la logica è in funzioni pure testabili.
+
+Task23-0: tutte le funzioni di dispatch accettano un parametro `auth_mode`
+('static' | 'oauth'). In modalità 'static' (default, usata da `/mcp`) il
+comportamento è identico a prima del task23-0: nessun 401, nessun header
+WWW-Authenticate. In modalità 'oauth' (usata solo da `/mcp-oauth2`) l'autenticazione
+valida un access token OAuth (`TokenRepository.validate_oauth_access_token`) e un
+token assente/non valido su un metodo autenticato produce un 401 (o 403 per i
+token client_credentials che tentano `tools/call`) con `WWW-Authenticate`.
 """
 
 import json
@@ -28,13 +36,13 @@ from decimal import Decimal, InvalidOperation
 
 # Support both relative and absolute imports (stesso pattern di app.py)
 try:
-    from .conf import get_db_session
+    from .conf import get_db_session, BASE_URL
     from .repository import (
         UserRepository, CategoryRepository, WalletRepository,
         MovementRepository, TokenRepository
     )
 except ImportError:
-    from conf import get_db_session
+    from conf import get_db_session, BASE_URL
     from repository import (
         UserRepository, CategoryRepository, WalletRepository,
         MovementRepository, TokenRepository
@@ -51,6 +59,17 @@ SERVER_NAME = 'pyspendless'
 # senza fallire (la negoziazione la chiude il client).
 PROTOCOL_VERSION = '2025-06-18'
 SUPPORTED_PROTOCOL_VERSIONS = ('2024-11-05', '2025-03-26', '2025-06-18')
+
+# Task23-0: versioni accettate SOLO su /mcp-oauth2 (Alexa+ richiede 2025-11-25).
+# /mcp continua a usare esclusivamente SUPPORTED_PROTOCOL_VERSIONS.
+SUPPORTED_PROTOCOL_VERSIONS_OAUTH = SUPPORTED_PROTOCOL_VERSIONS + ('2025-11-25',)
+
+# Modalità di autenticazione per handle_http_request/_dispatch/_handle_tools_call.
+AUTH_MODE_STATIC = 'static'
+AUTH_MODE_OAUTH = 'oauth'
+
+# Path della risorsa protetta OAuth (task23-0), montato in app.py come /mcp-oauth2.
+OAUTH_RESOURCE_PATH = '/mcp-oauth2'
 
 # Codici di errore JSON-RPC 2.0
 ERR_PARSE = -32700
@@ -236,6 +255,60 @@ def authenticate(db, secret):
         'account_id': account_id,
         'label': payload.get('label'),
         'prefix': payload.get('prefix', '')
+    }
+
+
+def _oauth_resource_uri():
+    """URI della risorsa protetta OAuth (task23-0): quella validata nel parametro `resource`."""
+    return '{}{}'.format(BASE_URL, OAUTH_RESOURCE_PATH)
+
+
+def _oauth_resource_metadata_uri():
+    """URI dei metadata di discovery (task23-0), usata nell'header WWW-Authenticate."""
+    return '{}/.well-known/oauth-protected-resource{}'.format(BASE_URL, OAUTH_RESOURCE_PATH)
+
+
+def authenticate_oauth(db, secret, resource_uri):
+    """
+    Valida un access token OAuth (task23-0) e ritorna il contesto della chiamata.
+
+    A differenza di `authenticate` (token statico MCP), qui il token è di tipo
+    OAUTH_ACCESS (TokenRepository.validate_oauth_access_token) e deve essere stato
+    emesso per la `resource_uri` indicata. `user_id`/`account_id` sono `None` per i
+    token ottenuti con grant_type=client_credentials (nessun utente associato).
+
+    Returns:
+        dict {'user_id', 'account_id', 'label', 'prefix', 'client_id', 'scope'}
+        se il token è valido, altrimenti None.
+    """
+    if not secret:
+        return None
+
+    token_repo = TokenRepository(db)
+    token = token_repo.validate_oauth_access_token(secret)
+
+    if not token:
+        return None
+
+    try:
+        payload = json.loads(token.payload)
+    except (json.JSONDecodeError, TypeError):
+        logger.error("[MCP-OAUTH] payload del token non deserializzabile (hash %s...)", str(token.uuid)[:8])
+        return None
+
+    if payload.get('resource') != resource_uri:
+        logger.warning('[MCP-OAUTH] token emesso per un\'altra resource, rifiutato')
+        return None
+
+    client_id = payload.get('client_id')
+
+    return {
+        'user_id': payload.get('user_id'),
+        'account_id': payload.get('account_id'),
+        'label': client_id,
+        'prefix': client_id or '',
+        'client_id': client_id,
+        'scope': payload.get('scope')
     }
 
 
@@ -732,9 +805,9 @@ def _error_response(request_id, code, message, data=None):
 
 # ===== DISPATCH JSON-RPC =====
 
-def _handle_initialize(params, app_version):
+def _handle_initialize(params, app_version, supported_versions=SUPPORTED_PROTOCOL_VERSIONS):
     requested = params.get('protocolVersion')
-    version = requested if requested in SUPPORTED_PROTOCOL_VERSIONS else PROTOCOL_VERSION
+    version = requested if requested in supported_versions else PROTOCOL_VERSION
 
     return {
         'protocolVersion': version,
@@ -748,7 +821,7 @@ def _handle_initialize(params, app_version):
     }
 
 
-def _handle_tools_call(params, secret, app_version):
+def _handle_tools_call(params, secret, app_version, auth_mode=AUTH_MODE_STATIC):
     """Esegue un tool. È l'unico metodo che richiede autenticazione e tocca il DB."""
     name = params.get('name')
     arguments = params.get('arguments') or {}
@@ -762,10 +835,21 @@ def _handle_tools_call(params, secret, app_version):
 
     db = get_db_session()
     try:
-        ctx = authenticate(db, secret)
-        if ctx is None:
-            logger.warning('[MCP] tool=%s rifiutato: token assente o non valido', name)
-            return _auth_error_result(), None
+        if auth_mode == AUTH_MODE_OAUTH:
+            ctx = authenticate_oauth(db, secret, _oauth_resource_uri())
+            if ctx is None:
+                logger.warning('[MCP-OAUTH] tool=%s rifiutato: token assente o non valido', name)
+                return None, ('auth_401', None)
+            if ctx.get('user_id') is None:
+                # Token client_credentials (service-level): niente dati utente,
+                # non può chiamare tools/call (vincolo esplicito Alexa+).
+                logger.warning('[MCP-OAUTH] tool=%s rifiutato: token client_credentials senza utente', name)
+                return None, ('auth_403', 'insufficient_scope')
+        else:
+            ctx = authenticate(db, secret)
+            if ctx is None:
+                logger.warning('[MCP] tool=%s rifiutato: token assente o non valido', name)
+                return _auth_error_result(), None
 
         started = datetime.utcnow()
         result = handler(db, ctx, arguments)
@@ -785,15 +869,17 @@ def _invalid_params(message):
     return ('invalid_params', message)
 
 
-def _dispatch(message, secret, app_version):
+def _dispatch(message, secret, app_version, auth_mode=AUTH_MODE_STATIC):
     """
     Esegue un singolo messaggio JSON-RPC.
 
     Returns:
         (risposta_dict | None, stato_speciale | None)
         `None` come risposta significa notifica (nessun corpo da restituire).
-        Il secondo elemento è riservato a usi futuri: oggi è sempre None, perché
-        nessun esito di questo server richiede uno status HTTP diverso da 200/202.
+        In modalità 'static' il secondo elemento resta sempre None (nessun esito
+        richiede uno status HTTP diverso da 200/202, come prima del task23-0). In
+        modalità 'oauth' può valere ('auth_401', None) o ('auth_403', 'insufficient_scope')
+        quando manca/non basta un access token su un metodo autenticato.
     """
     if not isinstance(message, dict):
         return _error_response(None, ERR_INVALID_REQUEST, 'Messaggio JSON-RPC non valido.'), None
@@ -813,9 +899,12 @@ def _dispatch(message, secret, app_version):
     # Notifiche: nessun 'id' -> nessuna risposta
     is_notification = 'id' not in message
 
-    # Token assente: si risponde comunque 200 con un errore di tool (mai 401,
-    # che innescherebbe il flusso OAuth lato client)
     if method in AUTH_REQUIRED_METHODS and not secret:
+        if auth_mode == AUTH_MODE_OAUTH:
+            logger.warning('[MCP-OAUTH] %s senza token: 401', method)
+            return None, ('auth_401', None)
+        # Token assente: si risponde comunque 200 con un errore di tool (mai 401,
+        # che innescherebbe il flusso OAuth lato client) — INVARIATO.
         logger.warning('[MCP] %s senza token: rifiutato come errore di tool', method)
         if is_notification:
             return None, None
@@ -823,7 +912,11 @@ def _dispatch(message, secret, app_version):
 
     try:
         if method == 'initialize':
-            result = _handle_initialize(params, app_version)
+            supported_versions = (
+                SUPPORTED_PROTOCOL_VERSIONS_OAUTH if auth_mode == AUTH_MODE_OAUTH
+                else SUPPORTED_PROTOCOL_VERSIONS
+            )
+            result = _handle_initialize(params, app_version, supported_versions)
             return (None, None) if is_notification else (_success_response(request_id, result), None)
 
         if method == 'ping':
@@ -838,10 +931,13 @@ def _dispatch(message, secret, app_version):
             return (None, None) if is_notification else (_success_response(request_id, result), None)
 
         if method == 'tools/call':
-            result, special = _handle_tools_call(params, secret, app_version)
+            result, special = _handle_tools_call(params, secret, app_version, auth_mode)
 
             if isinstance(special, tuple) and special[0] == 'invalid_params':
                 return _error_response(request_id, ERR_INVALID_PARAMS, special[1]), None
+
+            if isinstance(special, tuple) and special[0] in ('auth_401', 'auth_403'):
+                return None, special
 
             return (None, None) if is_notification else (_success_response(request_id, result), None)
 
@@ -858,15 +954,40 @@ def _dispatch(message, secret, app_version):
 
 # ===== ENTRY POINT HTTP =====
 
-def handle_http_request(flask_request, app_version):
+def _auth_failure_http_response(special):
     """
-    Punto d'ingresso chiamato dalla rotta Flask `/mcp`.
+    Traduce un marcatore ('auth_401'|'auth_403', extra) in (body, status, headers)
+    per `handle_http_request`. Usata SOLO in auth_mode='oauth' (task23-0): in
+    'static' questo marcatore non viene mai prodotto da `_dispatch`.
+    """
+    kind, extra = special
+    status = 401 if kind == 'auth_401' else 403
+    resource_metadata = _oauth_resource_metadata_uri()
+
+    if kind == 'auth_401':
+        www_authenticate = 'Bearer resource_metadata="{}"'.format(resource_metadata)
+    else:
+        www_authenticate = 'Bearer error="{}", resource_metadata="{}"'.format(
+            extra or 'insufficient_scope', resource_metadata
+        )
+
+    return None, status, {'WWW-Authenticate': www_authenticate}
+
+
+def handle_http_request(flask_request, app_version, auth_mode=AUTH_MODE_STATIC):
+    """
+    Punto d'ingresso chiamato dalle rotte Flask `/mcp` e `/mcp-oauth2`.
 
     Returns:
-        (body, status_code) — `body` è None quando non c'è corpo da restituire (202).
+        (body, status_code, headers) — `body` è None quando non c'è corpo da
+        restituire (202, o 401/403 in modalità 'oauth'). `headers` è un dict,
+        SEMPRE {} in modalità 'static' (nessuna differenza osservabile su `/mcp`).
 
-    Nota: questo endpoint non restituisce mai 401. Un errore di autenticazione
-    viaggia come esito di tool dentro una risposta 200 (vedi AUTH_ERROR_TEXT).
+    Nota: in modalità 'static' (default, usata da `/mcp`) questo endpoint non
+    restituisce mai 401. Un errore di autenticazione viaggia come esito di tool
+    dentro una risposta 200 (vedi AUTH_ERROR_TEXT). Solo in modalità 'oauth'
+    (usata da `/mcp-oauth2`, task23-0) un token assente/non valido produce un
+    401/403 con header WWW-Authenticate.
     """
     secret = extract_token(flask_request.headers)
 
@@ -876,29 +997,34 @@ def handle_http_request(flask_request, app_version):
         message = json.loads(raw)
     except (ValueError, TypeError):
         logger.warning('[MCP] corpo della richiesta non deserializzabile')
-        return _error_response(None, ERR_PARSE, 'Corpo della richiesta non è JSON valido.'), 400
+        return _error_response(None, ERR_PARSE, 'Corpo della richiesta non è JSON valido.'), 400, {}
 
     # Batch JSON-RPC (rimosso dalle revisioni recenti della spec, gestito per tolleranza)
     if isinstance(message, list):
         if not message:
-            return _error_response(None, ERR_INVALID_REQUEST, 'Batch vuoto.'), 400
+            return _error_response(None, ERR_INVALID_REQUEST, 'Batch vuoto.'), 400, {}
 
         responses = []
         for item in message:
-            response, _ = _dispatch(item, secret, app_version)
+            response, special = _dispatch(item, secret, app_version, auth_mode)
+            if isinstance(special, tuple) and special[0] in ('auth_401', 'auth_403'):
+                return _auth_failure_http_response(special)
             if response is not None:
                 responses.append(response)
 
         if not responses:
-            return None, 202
-        return responses, 200
+            return None, 202, {}
+        return responses, 200, {}
 
-    response, _ = _dispatch(message, secret, app_version)
+    response, special = _dispatch(message, secret, app_version, auth_mode)
+
+    if isinstance(special, tuple) and special[0] in ('auth_401', 'auth_403'):
+        return _auth_failure_http_response(special)
 
     if response is None:
-        return None, 202
+        return None, 202, {}
 
-    return response, 200
+    return response, 200, {}
 
 
 def not_found_body(path):

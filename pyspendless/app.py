@@ -3,17 +3,19 @@
 # oppure
 # python pyspendless/app.py
 
-from flask import Flask, render_template, redirect, url_for, session, request, flash, jsonify, abort
+from flask import Flask, render_template, redirect, url_for, session, request, flash, jsonify, abort, make_response
 
 # Support both relative and absolute imports
 try:
     from .conf import load_env, SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI, BASE_URL, ADMIN_USER_ID, get_db_session
     from .repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, StatsRepository, AdminRepository, RecurrentMovementRepository, ReportRepository, UnauthorizedError
     from . import mcp_server
+    from . import oauth_server
 except ImportError:
     from conf import load_env, SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI, BASE_URL, ADMIN_USER_ID, get_db_session
     from repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, StatsRepository, AdminRepository, RecurrentMovementRepository, ReportRepository, UnauthorizedError
     import mcp_server
+    import oauth_server
 
 import os
 import logging
@@ -31,7 +33,7 @@ logger = logging.getLogger(__name__)
 # Versione dell'applicazione (semver): unica fonte di verità, esposta
 # dall'endpoint /version e dal footer via context processor.
 # Bump manuale prima di creare il tag vX.Y.Z usato dal deploy.
-_APP_VERSION = "0.2.1"
+_APP_VERSION = "0.2.2"
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
@@ -57,6 +59,10 @@ google = oauth.register(
     client_kwargs={'scope': 'openid email profile'}
 )
 
+# Blueprint OAuth2 per /mcp-oauth2 (task23-0): /oauth/authorize, /oauth/token,
+# metadata di discovery dedicati. Non registra nulla sulla radice /.well-known/.
+app.register_blueprint(oauth_server.oauth_bp)
+
 # ===== ADMIN DECORATOR =====
 def admin_required(f):
     """Decoratore per proteggere le rotte amministrative"""
@@ -72,6 +78,15 @@ def admin_required(f):
 def is_admin():
     """Helper per verificare se l'utente corrente è admin"""
     return str(session.get('user_id')) == str(ADMIN_USER_ID)
+
+def _pop_pending_oauth_redirect():
+    """
+    Se /oauth/authorize (task23-0) ha salvato un redirect pendente prima di
+    rimandare al login, lo consuma e ci riporta l'utente. Ritorna None (quindi
+    nessun effetto) per ogni login non originato da /oauth/authorize.
+    """
+    target = session.pop('oauth_authorize_redirect', None)
+    return redirect(target) if target else None
 
 # ===== CONTEXT PROCESSOR =====
 @app.context_processor
@@ -106,13 +121,19 @@ def check_maintenance_mode():
     if request.path in ('/health', '/version'):
         return None
 
-    # L'endpoint MCP parla JSON-RPC: in manutenzione deve rispondere JSON, non HTML,
-    # altrimenti il client riceve una pagina che non sa interpretare.
-    if request.path == '/mcp':
+    # Gli endpoint MCP parlano JSON-RPC: in manutenzione devono rispondere JSON,
+    # non HTML, altrimenti il client riceve una pagina che non sa interpretare.
+    if request.path in ('/mcp', '/mcp-oauth2'):
         return jsonify(mcp_server.maintenance_body()), 503
 
-    # I path di discovery OAuth devono restare 404 JSON anche in manutenzione:
-    # una pagina HTML 503 al loro posto confonde i client MCP.
+    # Il token endpoint OAuth è un'API, non una pagina: stessa logica.
+    if request.path == '/oauth/token':
+        return jsonify({'error': 'temporarily_unavailable'}), 503
+
+    # I path di discovery OAuth devono restare 404 JSON (radice) o i metadata
+    # reali (/mcp-oauth2) anche in manutenzione: una pagina HTML 503 al loro
+    # posto confonde i client MCP. /oauth/authorize resta sulla pagina HTML di
+    # manutenzione standard: è raggiunta da un browser umano via redirect Alexa.
     if request.path.startswith('/.well-known/'):
         return None
 
@@ -205,7 +226,7 @@ def auth_callback():
                 session['account_id'] = existing_user.account_id
                 
                 flash(f'Benvenuto, {existing_user.name}!', 'success')
-                return redirect(url_for('home'))
+                return _pop_pending_oauth_redirect() or redirect(url_for('home'))
             
             # Utente nuovo - verifica whitelist prima
             if not user_repo.is_email_whitelisted(user_info.get('email')):
@@ -258,9 +279,9 @@ def auth_callback():
                 # Marca il token come usato
                 token_repo.mark_as_used(pending_token)
                 flash(f'Benvenuto, {user.name}! Hai accettato l\'invito con successo.', 'success')
-                
+
                 # Crea la response
-                response = redirect(url_for('home'))
+                response = _pop_pending_oauth_redirect() or redirect(url_for('home'))
                 
                 # Rimuovi il cookie del pending_invite_token se esiste
                 if invite_token_from_cookie:
@@ -370,7 +391,7 @@ def onboarding_submit():
         session.pop('oauth_user_info', None)
         
         flash(f'Benvenuto, {user.name}! Il tuo account è stato configurato con successo.', 'success')
-        return redirect(url_for('home'))
+        return _pop_pending_oauth_redirect() or redirect(url_for('home'))
         
     except Exception as e:
         logger.error(f"Errore durante l'onboarding: {str(e)}")
@@ -2769,6 +2790,57 @@ def api_revoke_mcp_token(token_hash):
         return jsonify({'error': f'Errore interno: {str(e)}'}), 500
 
 
+@app.route("/api/oauth-connections", methods=['GET'])
+def api_list_oauth_connections():
+    """Elenca le connessioni OAuth2 attive (es. Alexa+) dell'utente corrente (task23-0)."""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+
+    user_id = session.get('user_id')
+
+    try:
+        db = get_db_session()
+        try:
+            token_repo = TokenRepository(db)
+            connections = token_repo.get_oauth_connections_for_user(user_id)
+            for connection in connections:
+                client = oauth_server.OAUTH_CLIENTS.get(connection['client_id'], {})
+                connection['name'] = client.get('name', connection['client_id'])
+            return jsonify({'connections': connections}), 200
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Errore durante il recupero delle connessioni OAuth: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return jsonify({'error': f'Errore interno: {str(e)}'}), 500
+
+
+@app.route("/api/oauth-connections/<client_id>", methods=['DELETE'])
+def api_revoke_oauth_connection(client_id):
+    """Revoca una connessione OAuth2 (task23-0). Non tocca i token MCP personali."""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+
+    user_id = session.get('user_id')
+
+    try:
+        db = get_db_session()
+        try:
+            token_repo = TokenRepository(db)
+            revoked = token_repo.revoke_oauth_connection(user_id, client_id)
+            if not revoked:
+                return jsonify({'error': 'Connessione non trovata'}), 404
+
+            logger.info(f"Connessione OAuth {client_id} revocata dall'utente {user_id}")
+            return jsonify({'success': True, 'message': 'Connessione revocata'}), 200
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Errore durante la revoca della connessione OAuth: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return jsonify({'error': f'Errore interno: {str(e)}'}), 500
+
+
 # ===== MCP SERVER =====
 
 @app.route("/mcp", methods=['POST'])
@@ -2787,7 +2859,7 @@ def mcp_endpoint():
     tool dentro una risposta 200.
     """
     try:
-        body, status = mcp_server.handle_http_request(request, _APP_VERSION)
+        body, status, _headers = mcp_server.handle_http_request(request, _APP_VERSION)
 
         if body is None:
             # Notifica JSON-RPC: nessun corpo di risposta
@@ -2812,6 +2884,48 @@ def mcp_endpoint_not_allowed():
     Il server è stateless: non espone stream SSE (GET) né chiusura di sessione (DELETE).
     Si risponde 405 in JSON, non con la pagina HTML di errore di Flask.
     """
+    return jsonify(mcp_server.method_not_allowed_body()), 405
+
+
+@app.route("/mcp-oauth2", methods=['POST'])
+def mcp_oauth2_endpoint():
+    """
+    Endpoint MCP (task23-0) per client OAuth2 (Alexa+): stessi tool di `/mcp`,
+    autenticazione con access token OAuth invece del token statico personale.
+
+    A differenza di `/mcp`, qui un token assente/non valido su un metodo
+    autenticato risponde 401 (o 403 per client_credentials su tools/call) con
+    header WWW-Authenticate: è lo standard OAuth, e nessun client Claude parla
+    con questo endpoint.
+    """
+    try:
+        body, status, headers = mcp_server.handle_http_request(
+            request, _APP_VERSION, auth_mode='oauth'
+        )
+
+        if body is None:
+            response = make_response('', status)
+        else:
+            response = jsonify(body)
+            response.status_code = status
+
+        for header_name, header_value in (headers or {}).items():
+            response.headers[header_name] = header_value
+
+        return response
+    except Exception as e:
+        logger.error(f"[MCP-OAUTH] errore non gestito sull'endpoint: {str(e)}")
+        logger.debug(traceback.format_exc())
+        return jsonify({
+            'jsonrpc': '2.0',
+            'id': None,
+            'error': {'code': -32603, 'message': 'Errore interno del server.'}
+        }), 500
+
+
+@app.route("/mcp-oauth2", methods=['GET', 'DELETE'])
+def mcp_oauth2_endpoint_not_allowed():
+    """Stesso vincolo di /mcp: nessuno stream SSE, nessuna sessione da chiudere."""
     return jsonify(mcp_server.method_not_allowed_body()), 405
 
 

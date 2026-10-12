@@ -66,6 +66,18 @@ GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
 OAUTH_REDIRECT_URI = os.getenv('OAUTH_REDIRECT_URI', 'http://localhost:5000/auth/callback')
 
+# ===== CONFIGURAZIONI OAUTH2 /mcp-oauth2 (task23-0, Alexa+) =====
+# Client pre-registrato via env var: niente Dynamic Client Registration.
+OAUTH_ALEXA_CLIENT_ID = os.getenv('OAUTH_ALEXA_CLIENT_ID')
+OAUTH_ALEXA_CLIENT_SECRET = os.getenv('OAUTH_ALEXA_CLIENT_SECRET')
+OAUTH_ALEXA_REDIRECT_URIS = [
+    uri.strip() for uri in os.getenv('OAUTH_ALEXA_REDIRECT_URIS', '').split(',') if uri.strip()
+]
+
+# Tetto opzionale sull'importo di add_movement via OAuth (riduce l'impatto di un
+# riconoscimento vocale errato). None/non impostata = nessun limite (default).
+OAUTH_MAX_MOVEMENT_AMOUNT = os.getenv('OAUTH_MAX_MOVEMENT_AMOUNT')
+
 # ===== CONFIGURAZIONI APPLICAZIONE =====
 SECRET_KEY = os.getenv('SECRET_KEY', 'changeme')
 FLASK_ENV = os.getenv('FLASK_ENV', 'development')

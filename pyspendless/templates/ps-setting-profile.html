@@ -83,6 +83,35 @@
       </div>
     </div>
   </div>
+
+  <div class="row mt-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title mb-1">Connessioni</h5>
+          <p class="text-muted mb-3">
+            App esterne (es. Alexa+) autorizzate ad accedere al tuo account PySpendless
+            tramite OAuth2. Revocare una connessione non tocca i token personali qui sopra.
+          </p>
+          <div class="table-responsive">
+            <table class="table table-striped align-middle">
+              <thead>
+                <tr>
+                  <th>App</th>
+                  <th>Connesso dal</th>
+                  <th>Scade</th>
+                  <th class="text-end">Azioni</th>
+                </tr>
+              </thead>
+              <tbody id="oauthConnectionsContainer">
+                <!-- Popolato dinamicamente -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Modal Genera Token -->
@@ -147,6 +176,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   loadTokens();
+  loadOauthConnections();
 });
 
 function showAlert(message, type = 'success') {
@@ -272,6 +302,60 @@ function revokeToken(tokenHash) {
       loadTokens();
     })
     .catch(() => showAlert('Errore durante la revoca del token', 'danger'));
+}
+
+function loadOauthConnections() {
+  fetch('/api/oauth-connections')
+    .then(response => response.json())
+    .then(data => {
+      const container = document.getElementById('oauthConnectionsContainer');
+      container.innerHTML = '';
+
+      const connections = data.connections || [];
+
+      if (connections.length === 0) {
+        container.innerHTML = `
+          <tr>
+            <td colspan="4" class="text-muted text-center">Nessuna connessione attiva</td>
+          </tr>
+        `;
+        return;
+      }
+
+      connections.forEach(connection => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${escapeHtml(connection.name)}</td>
+          <td>${escapeHtml(connection.connected_since)}</td>
+          <td>${escapeHtml(connection.expires_at)}</td>
+          <td class="text-end">
+            <button class="btn btn-sm btn-danger" onclick="revokeOauthConnection('${encodeURIComponent(connection.client_id)}')">
+              <i class="bi bi-trash"></i> Revoca
+            </button>
+          </td>
+        `;
+        container.appendChild(row);
+      });
+    })
+    .catch(() => showAlert('Errore nel caricamento delle connessioni', 'danger'));
+}
+
+function revokeOauthConnection(clientId) {
+  if (!confirm('Revocare questa connessione? L\'app smetterà di poter accedere al tuo account.')) {
+    return;
+  }
+
+  fetch(`/api/oauth-connections/${clientId}`, {method: 'DELETE'})
+    .then(response => response.json().then(data => ({ok: response.ok, data})))
+    .then(({ok, data}) => {
+      if (!ok) {
+        showAlert(data.error || 'Errore durante la revoca', 'danger');
+        return;
+      }
+      showAlert('Connessione revocata');
+      loadOauthConnections();
+    })
+    .catch(() => showAlert('Errore durante la revoca della connessione', 'danger'));
 }
 </script>
 {% endblock %}

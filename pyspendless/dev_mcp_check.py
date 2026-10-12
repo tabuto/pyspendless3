@@ -277,6 +277,53 @@ def run(base_url, user_id, keep):
             checker.check('fallback header {} accettato'.format(header),
                           response.status_code == 200, response.status_code)
 
+        # --- /mcp-oauth2 (task23-0): invarianza di /mcp confermata sopra, qui si
+        # verifica che il nuovo endpoint OAuth2 esista e si comporti diversamente
+        # (401, non 200+isError) senza intaccare quanto appena controllato su /mcp.
+        # Il giro PKCE completo (authorize+token) resta manuale: richiede un login
+        # Google via browser, non automatizzabile in questo script headless.
+        checker.section('Endpoint OAuth2 /mcp-oauth2 (task23-0)')
+
+        oauth_url = base_url.rstrip('/') + '/mcp-oauth2'
+
+        probe = requests.post(
+            oauth_url, timeout=30,
+            data=json.dumps({
+                'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
+                'params': {'name': 'list_categories', 'arguments': {}}
+            }),
+            headers={'Content-Type': 'application/json'}
+        )
+        checker.check('/mcp-oauth2 senza token -> 401 (non 200+isError come /mcp)',
+                      probe.status_code == 401, probe.status_code)
+        checker.check('/mcp-oauth2 senza token porta WWW-Authenticate',
+                      'WWW-Authenticate' in probe.headers, dict(probe.headers))
+
+        probe = requests.post(
+            oauth_url, timeout=30,
+            data=json.dumps({
+                'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
+                'params': {'name': 'list_categories', 'arguments': {}}
+            }),
+            headers={'Content-Type': 'application/json', 'Authorization': 'Bearer {}'.format(secret)}
+        )
+        checker.check('token statico MCP rifiutato su /mcp-oauth2 -> 401',
+                      probe.status_code == 401, probe.status_code)
+
+        probe = requests.get(oauth_url, timeout=30)
+        checker.check('GET /mcp-oauth2 -> 405 JSON (stesso vincolo di /mcp)',
+                      probe.status_code == 405, probe.status_code)
+
+        probe = requests.get(base_url.rstrip('/') + '/.well-known/oauth-protected-resource/mcp-oauth2', timeout=30)
+        checker.check('metadata reali su /.well-known/oauth-protected-resource/mcp-oauth2 (non il 404 generico)',
+                      probe.status_code == 200 and 'json' in probe.headers.get('Content-Type', ''),
+                      '{} {}'.format(probe.status_code, probe.headers.get('Content-Type')))
+
+        probe = requests.get(base_url.rstrip('/') + '/.well-known/oauth-authorization-server/oauth', timeout=30)
+        checker.check('metadata authorization server su /.well-known/oauth-authorization-server/oauth',
+                      probe.status_code == 200 and 'json' in probe.headers.get('Content-Type', ''),
+                      '{} {}'.format(probe.status_code, probe.headers.get('Content-Type')))
+
         # --- list_categories ---
         checker.section('Tool list_categories')
 

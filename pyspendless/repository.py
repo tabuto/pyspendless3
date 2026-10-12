@@ -7,6 +7,7 @@ import uuid
 import json
 import hashlib
 import hmac
+import base64
 from datetime import datetime, timedelta, date
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
@@ -1197,6 +1198,89 @@ class TokenRepository:
         """Calcola l'hash SHA-256 (esadecimale) di un segreto."""
         return hashlib.sha256(secret.encode('utf-8')).hexdigest()
 
+    def _create_hashed_secret_token(
+        self,
+        token_type: str,
+        build_payload,
+        expire_days: Optional[int] = None,
+        expire_seconds: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Fattorizza la creazione di un token 'a segreto hashato': genera un secret
+        casuale, salva in DB solo il suo hash SHA-256 come `uuid` (PK), il segreto
+        in chiaro viene restituito una volta sola e non è più recuperabile.
+
+        Usata sia da `create_mcp_token` (type='MCP', task20-0) sia dai nuovi
+        metodi OAuth (task23-0): esattamente uno fra `expire_days`/`expire_seconds`
+        va passato (i codici/token OAuth hanno TTL in secondi, non in giorni).
+        `build_payload(secret, prefix)` costruisce il payload JSON del token: lo
+        riceve come callable (non come dict già pronto) perché alcuni payload
+        includono il `prefix` del secret, generato solo dentro questo helper.
+
+        Returns:
+            dict con 'secret' (in chiaro), 'token_hash', 'prefix', 'create_date',
+            'expire_date' (i due oggetti datetime, oltre alle stringhe formattate)
+        """
+        secret = str(uuid.uuid4())
+        token_hash = self.hash_secret(secret)
+        prefix = secret[:8]
+        payload = build_payload(secret, prefix)
+
+        create_date = datetime.utcnow()
+        if expire_seconds is not None:
+            expire_date = create_date + timedelta(seconds=expire_seconds)
+        else:
+            expire_date = create_date + timedelta(days=expire_days or 0)
+
+        token = Token(
+            uuid=token_hash,
+            type=token_type,
+            create_date=create_date,
+            expire_date=expire_date,
+            status='PENDING',
+            payload=json.dumps(payload)
+        )
+
+        self.db.add(token)
+        self.db.commit()
+
+        return {
+            'secret': secret,
+            'token_hash': token_hash,
+            'prefix': prefix,
+            'create_date': create_date,
+            'expire_date': expire_date,
+            'created_at': create_date.strftime('%d/%m/%Y %H:%M'),
+            'expires_at': expire_date.strftime('%d/%m/%Y %H:%M')
+        }
+
+    def _validate_hashed_secret_token(self, secret: str, token_type: str) -> Optional[Token]:
+        """
+        Fattorizza la validazione di un token 'a segreto hashato': hash del
+        segreto presentato, `validate_token` (status/scadenza), controllo del
+        `type` e confronto a tempo costante sul valore letto dal DB.
+
+        Usata sia da `validate_mcp_secret` (type='MCP') sia dai nuovi metodi
+        OAuth (task23-0).
+        """
+        if not secret:
+            return None
+
+        token_hash = self.hash_secret(secret)
+        token = self.validate_token(token_hash)
+
+        if not token:
+            return None
+
+        if token.type != token_type:
+            return None
+
+        # Confronto a tempo costante sul valore effettivamente letto dal DB
+        if not hmac.compare_digest(str(token.uuid), token_hash):
+            return None
+
+        return token
+
     def create_mcp_token(
         self,
         user_id: Any,
@@ -1214,39 +1298,24 @@ class TokenRepository:
             dict con 'secret' (in chiaro, da mostrare una sola volta), 'token_hash',
             'label', 'created_at', 'expires_at', 'prefix'
         """
-        secret = str(uuid.uuid4())
-        token_hash = self.hash_secret(secret)
-        prefix = secret[:8]
-
-        payload = {
-            'user_id': str(user_id),
-            'account_id': account_id,
-            'label': label,
-            'prefix': prefix
-        }
-
-        create_date = datetime.utcnow()
-        expire_date = create_date + timedelta(days=expire_days)
-
-        token = Token(
-            uuid=token_hash,
-            type=self.MCP_TOKEN_TYPE,
-            create_date=create_date,
-            expire_date=expire_date,
-            status='PENDING',
-            payload=json.dumps(payload)
+        created = self._create_hashed_secret_token(
+            self.MCP_TOKEN_TYPE,
+            build_payload=lambda secret, prefix: {
+                'user_id': str(user_id),
+                'account_id': account_id,
+                'label': label,
+                'prefix': prefix
+            },
+            expire_days=expire_days
         )
 
-        self.db.add(token)
-        self.db.commit()
-
         return {
-            'secret': secret,
-            'token_hash': token_hash,
-            'prefix': prefix,
+            'secret': created['secret'],
+            'token_hash': created['token_hash'],
+            'prefix': created['prefix'],
             'label': label,
-            'created_at': create_date.strftime('%d/%m/%Y %H:%M'),
-            'expires_at': expire_date.strftime('%d/%m/%Y %H:%M')
+            'created_at': created['created_at'],
+            'expires_at': created['expires_at']
         }
 
     def validate_mcp_secret(self, secret: str) -> Optional[Token]:
@@ -1258,23 +1327,7 @@ class TokenRepository:
         Returns:
             Token se valido, None altrimenti
         """
-        if not secret:
-            return None
-
-        token_hash = self.hash_secret(secret)
-        token = self.validate_token(token_hash)
-
-        if not token:
-            return None
-
-        if token.type != self.MCP_TOKEN_TYPE:
-            return None
-
-        # Confronto a tempo costante sul valore effettivamente letto dal DB
-        if not hmac.compare_digest(str(token.uuid), token_hash):
-            return None
-
-        return token
+        return self._validate_hashed_secret_token(secret, self.MCP_TOKEN_TYPE)
 
     def get_mcp_tokens_for_user(self, user_id: Any) -> List[Dict[str, Any]]:
         """
@@ -1322,6 +1375,283 @@ class TokenRepository:
 
         owner = payload.get('user_id')
         return str(owner) if owner is not None else None
+
+    # ===== TOKEN OAUTH2 PER /mcp-oauth2 (task23-0) =====
+    #
+    # Riusano la stessa tabella Token, senza modifiche allo schema, con tre nuovi
+    # `type` paralleli a 'MCP':
+    #   OAUTH_CODE    = authorization code (PKCE), monouso, TTL 60s
+    #   OAUTH_ACCESS  = access token, TTL 3600s (max richiesto da Alexa+)
+    #   OAUTH_REFRESH = refresh token (solo per authorization_code, mai per
+    #                   client_credentials), monouso con rotazione, TTL 60 giorni
+    #
+    # payload comune a tutti e tre: user_id (None per client_credentials),
+    # account_id, client_id, scope, resource. OAUTH_CODE porta in più
+    # redirect_uri e code_challenge, per la verifica in `redeem_oauth_code`.
+    #
+    # Revoca (manuale o di una connessione): si riusa lo status 'EXPIRED'
+    # (mark_as_expired, già generico) invece di introdurre un nuovo status
+    # 'REVOKED', che richiederebbe di toccare il CheckConstraint su Token.status
+    # in models.py — non necessario per i criteri di accettazione del task.
+
+    OAUTH_CODE_TYPE = 'OAUTH_CODE'
+    OAUTH_ACCESS_TYPE = 'OAUTH_ACCESS'
+    OAUTH_REFRESH_TYPE = 'OAUTH_REFRESH'
+
+    OAUTH_CODE_TTL_SECONDS = 60
+    OAUTH_ACCESS_TTL_SECONDS = 3600
+    OAUTH_REFRESH_TTL_DAYS = 60
+
+    @staticmethod
+    def _pkce_challenge_from_verifier(code_verifier: str) -> str:
+        """code_challenge attesto da un code_verifier, per PKCE S256 (RFC 7636)."""
+        digest = hashlib.sha256(code_verifier.encode('ascii')).digest()
+        return base64.urlsafe_b64encode(digest).rstrip(b'=').decode('ascii')
+
+    def create_oauth_code(
+        self,
+        user_id: Any,
+        account_id: Optional[int],
+        client_id: str,
+        redirect_uri: str,
+        code_challenge: str,
+        resource: str,
+        scope: Optional[str] = None
+    ) -> str:
+        """
+        Crea un OAUTH_CODE: monouso, TTL breve (60s). Lega insieme user_id/
+        account_id, client_id, redirect_uri, code_challenge (PKCE) e resource,
+        così `redeem_oauth_code` può verificarli tutti alla redenzione.
+
+        Returns:
+            Il codice in chiaro (da passare nel redirect verso redirect_uri).
+        """
+        created = self._create_hashed_secret_token(
+            self.OAUTH_CODE_TYPE,
+            build_payload=lambda secret, prefix: {
+                'user_id': str(user_id) if user_id is not None else None,
+                'account_id': account_id,
+                'client_id': client_id,
+                'redirect_uri': redirect_uri,
+                'code_challenge': code_challenge,
+                'resource': resource,
+                'scope': scope
+            },
+            expire_seconds=self.OAUTH_CODE_TTL_SECONDS
+        )
+        return created['secret']
+
+    def redeem_oauth_code(
+        self,
+        code: str,
+        client_id: str,
+        redirect_uri: str,
+        code_verifier: str,
+        resource: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Riscatta un OAUTH_CODE: valida hash/type/status/scadenza (via
+        `_validate_hashed_secret_token`), poi che client_id/redirect_uri/resource
+        coincidano con quelli dell'authorize originale e che il PKCE sia corretto.
+        Monouso: lo marca USED (mark_as_used, generico) solo alla redenzione
+        riuscita.
+
+        Returns:
+            Il payload del codice (user_id, account_id, scope, ...) se tutto è
+            valido, altrimenti None. Il motivo del fallimento non è nel valore di
+            ritorno (anti-enumerazione): resta nel log applicativo del chiamante.
+        """
+        token = self._validate_hashed_secret_token(code, self.OAUTH_CODE_TYPE)
+        if not token:
+            return None
+
+        try:
+            payload = json.loads(token.payload)
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+        if payload.get('client_id') != client_id:
+            return None
+        if payload.get('redirect_uri') != redirect_uri:
+            return None
+        if payload.get('resource') != resource:
+            return None
+
+        expected_challenge = payload.get('code_challenge')
+        if not code_verifier or not expected_challenge:
+            return None
+        if not hmac.compare_digest(
+            self._pkce_challenge_from_verifier(code_verifier), expected_challenge
+        ):
+            return None
+
+        self.mark_as_used(token.uuid)
+        return payload
+
+    def create_oauth_access_token(
+        self,
+        user_id: Any,
+        account_id: Optional[int],
+        client_id: str,
+        scope: Optional[str],
+        resource: str
+    ) -> Dict[str, Any]:
+        """
+        Crea un access token OAuth. `user_id`/`account_id` sono None per i token
+        client_credentials (service-level, nessun dato utente — vincolo Alexa+).
+        """
+        created = self._create_hashed_secret_token(
+            self.OAUTH_ACCESS_TYPE,
+            build_payload=lambda secret, prefix: {
+                'user_id': str(user_id) if user_id is not None else None,
+                'account_id': account_id,
+                'client_id': client_id,
+                'scope': scope,
+                'resource': resource
+            },
+            expire_seconds=self.OAUTH_ACCESS_TTL_SECONDS
+        )
+        return {
+            'access_token': created['secret'],
+            'token_hash': created['token_hash'],
+            'expires_in': self.OAUTH_ACCESS_TTL_SECONDS,
+            'expires_at': created['expires_at']
+        }
+
+    def validate_oauth_access_token(self, secret: str) -> Optional[Token]:
+        """Valida un access token OAuth. Stesso schema di `validate_mcp_secret`."""
+        return self._validate_hashed_secret_token(secret, self.OAUTH_ACCESS_TYPE)
+
+    def create_oauth_refresh_token(
+        self,
+        user_id: Any,
+        account_id: Optional[int],
+        client_id: str,
+        scope: Optional[str],
+        resource: str
+    ) -> Dict[str, Any]:
+        """
+        Crea un refresh token OAuth. SOLO per authorization_code: non va mai
+        chiamato per client_credentials (vincolo esplicito Alexa+, verificato dal
+        chiamante in oauth_server.py).
+        """
+        created = self._create_hashed_secret_token(
+            self.OAUTH_REFRESH_TYPE,
+            build_payload=lambda secret, prefix: {
+                'user_id': str(user_id) if user_id is not None else None,
+                'account_id': account_id,
+                'client_id': client_id,
+                'scope': scope,
+                'resource': resource
+            },
+            expire_days=self.OAUTH_REFRESH_TTL_DAYS
+        )
+        return {
+            'refresh_token': created['secret'],
+            'token_hash': created['token_hash'],
+            'expires_at': created['expires_at']
+        }
+
+    def redeem_oauth_refresh_token(self, refresh_secret: str, client_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Riscatta un refresh token per la rotazione: valida, verifica il
+        client_id, lo marca USED (monouso). Il chiamante usa il payload
+        restituito per creare la nuova coppia access+refresh.
+        """
+        token = self._validate_hashed_secret_token(refresh_secret, self.OAUTH_REFRESH_TYPE)
+        if not token:
+            return None
+
+        try:
+            payload = json.loads(token.payload)
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+        if payload.get('client_id') != client_id:
+            return None
+
+        self.mark_as_used(token.uuid)
+        return payload
+
+    def get_oauth_connections_for_user(self, user_id: Any) -> List[Dict[str, Any]]:
+        """
+        Connessioni OAuth attive dell'utente: un elemento per client_id con
+        almeno un OAUTH_ACCESS/OAUTH_REFRESH non scaduto e non revocato. Ritorna
+        solo `client_id` (la UI lo risolve in un nome leggibile tramite il
+        registro client di `oauth_server.OAUTH_CLIENTS`).
+        """
+        tokens = self.db.query(Token).filter(
+            Token.type.in_((self.OAUTH_ACCESS_TYPE, self.OAUTH_REFRESH_TYPE)),
+            Token.status == 'PENDING',
+            Token.expire_date > datetime.utcnow()
+        ).order_by(Token.create_date.desc()).all()
+
+        by_client: Dict[str, Dict[str, Any]] = {}
+        for token in tokens:
+            try:
+                payload = json.loads(token.payload)
+            except (json.JSONDecodeError, TypeError):
+                continue
+
+            if str(payload.get('user_id')) != str(user_id):
+                continue
+
+            client_id = payload.get('client_id')
+            if not client_id:
+                continue
+
+            entry = by_client.setdefault(client_id, {
+                'client_id': client_id,
+                'scope': payload.get('scope'),
+                'connected_since': token.create_date,
+                'expires_at': token.expire_date
+            })
+            entry['connected_since'] = min(entry['connected_since'], token.create_date)
+            entry['expires_at'] = max(entry['expires_at'], token.expire_date)
+
+        return [
+            {
+                'client_id': entry['client_id'],
+                'scope': entry['scope'],
+                'connected_since': entry['connected_since'].strftime('%d/%m/%Y %H:%M'),
+                'expires_at': entry['expires_at'].strftime('%d/%m/%Y %H:%M')
+            }
+            for entry in sorted(by_client.values(), key=lambda e: e['client_id'])
+        ]
+
+    def revoke_oauth_connection(self, user_id: Any, client_id: str) -> int:
+        """
+        Revoca (status -> EXPIRED, come `mark_as_expired`) tutti gli OAUTH_ACCESS/
+        OAUTH_REFRESH di user_id per client_id. Non tocca i token MCP personali
+        (type diverso, stessa tabella Token): le due revoche sono indipendenti.
+
+        Returns:
+            Numero di token revocati.
+        """
+        tokens = self.db.query(Token).filter(
+            Token.type.in_((self.OAUTH_ACCESS_TYPE, self.OAUTH_REFRESH_TYPE)),
+            Token.status == 'PENDING'
+        ).all()
+
+        revoked = 0
+        for token in tokens:
+            try:
+                payload = json.loads(token.payload)
+            except (json.JSONDecodeError, TypeError):
+                continue
+
+            if payload.get('client_id') != client_id:
+                continue
+            if str(payload.get('user_id')) != str(user_id):
+                continue
+
+            token.status = 'EXPIRED'
+            revoked += 1
+
+        if revoked:
+            self.db.commit()
+
+        return revoked
 
 
 class StatsRepository:

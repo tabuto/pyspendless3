@@ -1,0 +1,20 @@
+{% extends 'ps-auth.html' %}
+
+{% block title %}Autorizza {{ client_name }} - PySpendless{% endblock %}
+
+{% block auth_content %}
+<div class="text-center" style="max-width: 420px; margin: 0 auto;">
+    <h2 class="mb-3">Autorizza {{ client_name }}</h2>
+    <p class="mb-4">
+        <strong>{{ client_name }}</strong> vuole collegarsi al tuo account PySpendless per
+        registrare spese/entrate e leggere le tue categorie e i tuoi wallet, per tuo conto.
+    </p>
+    <form method="POST" action="{{ url_for('oauth.authorize_confirm') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="d-flex justify-content-center gap-2">
+            <button type="submit" name="decision" value="deny" class="btn btn-outline-secondary">Annulla</button>
+            <button type="submit" name="decision" value="allow" class="btn btn-primary">Consenti</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

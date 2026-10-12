@@ -5,7 +5,7 @@
 ![SQLite](https://img.shields.io/badge/Database-SQLite-blue?logo=sqlite)
 ![Auth](https://img.shields.io/badge/Auth-Google_OAuth_2.0-red?logo=google)
 
-**PySpendless** è un'applicazione web per la gestione di spese personali e condivise: registrazione di entrate/uscite, organizzazione per wallet e categoria, dashboard aggregate e condivisione dei dati con altri utenti tramite gruppi. Login tramite Google OAuth 2.0, accesso limitato a una whitelist di email.
+**PySpendless** è un'applicazione web per la gestione di spese personali e condivise: registrazione di entrate/uscite, organizzazione per wallet e categoria, dashboard aggregate e condivisione dei dati con altri utenti tramite gruppi. Login tramite Google OAuth 2.0, accesso limitato a una whitelist di email. Espone inoltre un **server MCP** (`/mcp`) che permette di registrare spese parlando con un LLM/assistente AI (es. Claude), autenticato tramite token personale generato dal profilo utente.
 
 ## Funzionalità principali
 

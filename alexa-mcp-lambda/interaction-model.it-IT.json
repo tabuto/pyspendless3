@@ -1,0 +1,91 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "spese di famiglia",
+      "intents": [
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.FallbackIntent",
+          "samples": []
+        },
+        {
+          "name": "AddMovementIntent",
+          "slots": [
+            {
+              "name": "amount",
+              "type": "AMAZON.NUMBER"
+            },
+            {
+              "name": "category",
+              "type": "AMAZON.SearchQuery"
+            },
+            {
+              "name": "wallet",
+              "type": "AMAZON.SearchQuery"
+            },
+            {
+              "name": "note",
+              "type": "AMAZON.SearchQuery"
+            },
+            {
+              "name": "kind",
+              "type": "KindType"
+            }
+          ],
+          "samples": [
+            "registra {amount} euro per {category}",
+            "registra una spesa di {amount} euro per {category}",
+            "registra una {kind} di {amount} euro per {category}",
+            "aggiungi {amount} euro di {category}",
+            "segna {amount} euro per {category} sul wallet {wallet}",
+            "registra {amount} euro per {category} con nota {note}"
+          ]
+        },
+        {
+          "name": "ListCategoriesIntent",
+          "slots": [
+            {
+              "name": "kind",
+              "type": "KindType"
+            }
+          ],
+          "samples": [
+            "elenca le categorie",
+            "che categorie ho",
+            "quali categorie di {kind} ho disponibili",
+            "elenca i wallet",
+            "che categorie e wallet ho"
+          ]
+        }
+      ],
+      "types": [
+        {
+          "name": "KindType",
+          "values": [
+            {
+              "name": {
+                "value": "spesa"
+              }
+            },
+            {
+              "name": {
+                "value": "entrata"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

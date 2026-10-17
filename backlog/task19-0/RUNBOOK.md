@@ -137,21 +137,86 @@ criterio è "sembra giusto", serve un modello più grande, o un umano.
 
 ## 4. Regole di orchestrazione
 
-### 4.1 Worktree e browser non si mescolano
+### 4.1 Worktree sì, ma solo per i subagent
 
-I subagent `ps-markup` girano in `isolation: "worktree"`: ognuno ha la sua copia
-del repo, quindi quattro pagine indipendenti si fanno in parallelo senza
-conflitti di merge.
+⛔ **La sessione principale NON va avviata in un worktree.** Niente
+`claude --worktree`, niente opzione equivalente nell'app.
 
-⚠️ **Ma Flask gira dal checkout principale.** Un subagent che aprisse il browser
-verificherebbe il codice sbagliato. Da cui:
+Il motivo è concreto: Flask gira dal checkout principale
+(`/Users/fradidio/Sviluppo/pyspendless3`) e Chrome punta a `localhost:5000`.
+Se la sessione girasse in un worktree, l'agente modificherebbe file in
+un'altra directory mentre il browser continua a mostrare il checkout
+principale — verificherebbe codice che non ha scritto, e non se ne
+accorgerebbe.
 
-- i subagent **non aprono mai il browser** — si fermano ai criteri verificabili
-  da test e grep;
+✅ **I subagent `ps-markup`, invece, sì.** `isolation: worktree` sta nel
+frontmatter della loro definizione, quindi vale sempre e l'orchestratore non
+se ne deve ricordare:
+
+```yaml
+---
+name: ps-markup
+model: haiku
+isolation: worktree
+---
+```
+
+Così quattro pagine indipendenti si convertono in parallelo senza conflitti, e
+un agente su haiku non può toccare il checkout principale mentre l'agente
+principale sta verificando qualcosa in Chrome.
+
+`ps-component` e `ps-contract` **non** usano worktree: il primo lavora in
+sequenza su fasi che vanno verificate subito nel browser, il secondo non scrive
+niente.
+
+Da cui la regola che genera le due tabelle di criteri in ogni file di fase:
+
+- i subagent **non aprono mai il browser** — si fermano a ciò che si verifica
+  con test e grep;
 - la verifica visiva la fa **l'agente principale, dopo il merge**, sul checkout
   principale.
 
-È il motivo per cui ogni file di fase ha i criteri divisi in due tabelle.
+#### ⚠️ Un worktree non ha i file ignorati da git
+
+Un `git worktree` contiene solo i file **tracciati**. Restano fuori proprio i
+due che servono a far girare l'app:
+
+- **`.venv/`** → dentro il worktree `.venv/bin/python` non esiste;
+- **`pyspendless/.env`** → senza, `conf.py` non trova `DATABASE_URL` né
+  `SECRET_KEY`, e l'import dell'app fallisce.
+
+Quindi il criterio di rilascio dei subagent (`exit code 0` sul test di
+contratto) in un worktree **non funzionerebbe affatto**.
+
+La soluzione non è un passo manuale: **`tools/worktree-bootstrap.sh` è
+versionato**, quindi esiste già dentro ogni worktree appena creato. Il subagent
+lo esegue come primo comando:
+
+```bash
+./tools/worktree-bootstrap.sh          # prepara
+./tools/worktree-bootstrap.sh --test   # prepara ed esegue il contratto
+```
+
+Cosa fa:
+
+1. trova il checkout principale con `git rev-parse --git-common-dir`, che
+   funziona anche da dentro un worktree secondario — niente percorsi scritti a
+   mano;
+2. collega `pyspendless/.env` al file del checkout principale, se manca;
+3. sceglie fra i **due** virtualenv del repo (`.venv/` e `pyspendless/.venv/`)
+   quello che ha davvero Flask installato, risolvendo l'ambiguità segnalata
+   al §5;
+4. avvisa se `DATABASE_URL` è ancora un percorso relativo (da un worktree
+   punterebbe a un file inesistente);
+5. stampa il comando esatto del test — interprete dal checkout principale,
+   codice dal worktree, perché Python mette la cwd in `sys.path`.
+
+Nel checkout principale è un **no-op**: non crea symlink e usa il proprio venv.
+Si può quindi eseguire sempre, senza doversi chiedere dove si è. Eseguirlo due
+volte non fa danni.
+
+Perché valga davvero, va scritto nella definizione di `ps-markup` come primo
+comando della sequenza di lavoro.
 
 ### 4.2 Un solo Chrome
 

@@ -191,7 +191,10 @@
               <tbody>
                 {% for mov in movements %}
                 <tr>
-                  <td>{{ mov.move_date.strftime('%d/%m/%Y') }}</td>
+                  {# MB-006: `data-order` da l'ordinamento cronologico a DataTables.
+                     Senza, la colonna ricade sul tipo 'string' e 'gg/mm/aaaa' viene
+                     confrontato lessicograficamente, cioe' per giorno del mese. #}
+                  <td data-order="{{ mov.move_date.isoformat() }}">{{ mov.move_date.strftime('%d/%m/%Y') }}</td>
                   <td>{{ mov.category }}</td>
                   <td>{{ mov.wallet_obj.name if mov.wallet_obj else mov.wallet }}</td>
                   <td>{{ mov.note if mov.note else '-' }}</td>

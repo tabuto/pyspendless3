@@ -3,6 +3,7 @@ name: ps-markup
 description: Converte il markup di UN template Jinja da Bootstrap/AdminLTE a Tailwind, in modo meccanico e isofunzionale. Usare per le pagine delle Fasi 3, 4, 5 e 7 del task19-0, una pagina per invocazione. NON usare per ps-show-mov.html (Fase 6), per ps-ui.js o per le dashboard con Chart.js.
 tools: Read, Edit, Write, Grep, Glob, Bash
 model: haiku
+isolation: worktree      ← manca questa
 ---
 
 Sei un convertitore di markup. Il tuo lavoro è **meccanico e conservativo**:
@@ -76,7 +77,7 @@ e documentata: riguarda solo la sidebar. Non compensarla con valori arbitrari.
 Prima di dichiarare il task completo esegui, dalla root del repo:
 
 ```bash
-.venv/bin/python -m pyspendless.test.test_task19_0
+./tools/worktree-bootstrap.sh --test
 ```
 
 Deve uscire con codice 0. Se fallisce, hai rotto il contratto: leggi quale id

@@ -17,3 +17,24 @@ migration_mapping.json
 migrations/*.csv
 migrations/*.sql
 prompt.md
+
+# Task 19-0: binario Tailwind CLI standalone (~50 MB, riscaricabile
+# con tools/build-css.sh). Il CSS COMPILATO invece va versionato: il deploy
+# è un git pull e sul server non gira nessuna build.
+tools/tailwindcss
+tools/tailwindcss.tmp
+
+# Styleguide resa per la verifica locale (tools/ui-styleguide.py).
+# La sorgente versionata è pyspendless/templates/_styleguide.html.
+pyspendless/static/_styleguide.rendered.html
+pyspendless/static/_preview.*.html
+
+# Screenshot di verifica del task19-0: artefatti locali, rigenerabili con
+# tools/ui-shots.py / ui-styleguide.py. Fuori da git perché il deploy è un
+# `git pull` su un account PythonAnywhere gratuito: ~10 MB di PNG finirebbero
+# sul server senza servire a niente. I README delle cartelle invece sono
+# versionati, e spiegano come rigenerarli.
+docs/ui-baseline/*.png
+docs/ui-after/*.png
+docs/ui-shell/*.png
+docs/ui-styleguide/*.png

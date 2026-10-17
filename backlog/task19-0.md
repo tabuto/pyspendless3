@@ -44,6 +44,7 @@ morti mai referenziati da `render_template`.
 | D6 | Font **Source Sans 3 self-hosted** |
 | D8 | Tema persistito in **`localStorage`**, nessuna modifica a DB o sessione |
 | D9 | **Bootstrap Icons self-hosted**: le classi `bi bi-*` restano identiche |
+| D10 | Difetti preesistenti P1-P6: le icone **Font Awesome si rimuovono** (non sono mai state visibili, FA non è caricato — la rimozione è la scelta isofunzionale). P6 è risultato **inesistente**: Bootstrap JS è caricato una volta sola, vedi "Verifiche empiriche" |
 | D12 | Sidebar mobile: **drawer off-canvas**, come oggi |
 | D14 | Versione di rilascio: **`0.2.0`** |
 
@@ -154,6 +155,8 @@ conversione sta sconfinando dalla presentazione al comportamento.
   definizioni dei subagent ✅ *già create, da spostare in `.claude/agents/`
   con il comando in RUNBOOK §1.1*
 - `tools/build-css.sh` — wrapper della build
+- `tools/worktree-bootstrap.sh` — prepara un worktree (collega `.env`, trova il
+  venv giusto) ✅ *già creato*
 - `docs/ui-baseline/`, `docs/ui-after/` — screenshot
 
 **Modificati**
@@ -192,18 +195,66 @@ trasversali:
 - **Nessun flash di tema** al caricamento, in light e in dark.
 - **Nessun overflow orizzontale** a 375 px su nessuna pagina.
 
-### Verifiche empiriche aperte (Fase 0)
+### Verifiche empiriche (Fase 0) — chiuse il 2026-10-17
 
-- **Ordinamento per data della tabella movimenti.** Il server ordina già per
-  `move_date DESC` (`repository.py:611`), poi DataTables riordina client-side
-  la colonna 0 renderizzata `gg/mm/aaaa` (`ps-show-mov.html:187`). Il plugin
-  `date-eu` non è caricato e `Date.parse("13/09/2026")` dà `NaN`, quindi il tipo
-  ricade su stringa e l'ordinamento diventa lessicografico — per giorno del
-  mese. Da confermare con un mese che abbia movimenti dopo il giorno 12.
-  Se confermato → voce `MB-NNN` **separata**, corretta subito con `data-order`
-  sul `<td>`. Non va nascosto dentro il restyling.
-- **Peso reale degli asset** su `/movements`, per sostituire le stime del piano
-  con misure (`read_network_requests`).
+**Ordinamento per data della tabella movimenti: CONFERMATO.** Il server ordina
+per `move_date DESC` (`repository.py:611`), poi DataTables riordina
+client-side la colonna 0 renderizzata `gg/mm/aaaa`. Il plugin `date-eu` non e'
+caricato, `Date.parse("13/09/2026")` da' `NaN`, il tipo ricade su `string` e
+`order: [[0, 'desc']]` (`ps-show-mov.html:323`) produce un confronto
+lessicografico: per giorno del mese, poi mese, poi anno.
+
+> **Il test proposto in `fasi/fase-0.md` §0.4 non lo avrebbe rivelato.**
+> Dentro un singolo mese l'ordine per giorno coincide con quello cronologico,
+> e la vista di default filtra proprio il mese corrente. Serve un intervallo
+> su **piu' mesi**. E' il motivo per cui il difetto e' rimasto invisibile.
+
+Misurato sul DataTables reale (Playwright, `tools/ui-shots.py` e sonde):
+
+| Intervallo | tipo rilevato | prime righe a video | corretto |
+|---|---|---|---|
+| settembre 2026 (67 righe) | `string` | 30/09, 30/09, 29/09, 29/09, 28/09 | si', per caso |
+| ago-ott 2026 (257 righe) | `string` | **31/08**, 31/08, 31/08, 30/09, **30/08** | no |
+| 2025-2026 (1.395 righe) | `string` | **31/10/2025**, 31/10/2025, **31/08/2026** | no |
+
+Corretto con `data-order` sulla cella — voce **MB-006**, chiusa lo stesso
+giorno, separata dal restyling. Dopo la correzione il tipo rilevato e' `date`
+e l'ordine coincide con quello del server su tutti e tre gli intervalli.
+Le colonne importo **non** hanno il problema: sono rilevate `num-fmt,` e
+ordinano bene (verificato contro `ORDER BY expense DESC`).
+
+**Peso reale degli asset su `/movements`** — cache fredda, 1440x900, utente
+autenticato. Nessuna risposta >= 400, **nessuna risorsa richiesta due volte**.
+Rimisurabile con `tools/ui-measure.py [rotta]`.
+
+**Totale: 22 richieste, 882,7 KB**
+
+| Origine | Richieste | KB | % |
+|---|---|---|---|
+| `localhost:5000` | 3 | 515,2 | 58,4% |
+| `cdn.jsdelivr.net` | 11 | 295,5 | 33,5% |
+| `cdn.datatables.net` | 7 | 42,0 | 4,8% |
+| `code.jquery.com` | 1 | 30,0 | 3,4% |
+
+| Tipo | Richieste | KB | % |
+|---|---|---|---|
+| stylesheet | 7 | 379,8 | 43,0% |
+| script | 11 | 239,3 | 27,1% |
+| font | 2 | 146,8 | 16,6% |
+| document | 1 | 114,1 | 12,9% |
+| xhr | 1 | 2,8 | 0,3% |
+
+Le voci che dominano: **`adminlte.css` 354,1 KB** (40% della pagina, sparisce
+in Fase 9), **`bootstrap-icons.woff2` 131,6 KB** (set completo per una dozzina
+di glifi: con il self-hosting di D9 c'e' spazio per un subset), il documento
+114,1 KB, `chart.umd.min.js` 69,5 KB, `adminlte.js` 47,0 KB.
+
+**P6 e' smentito.** Il piano elencava fra i difetti preesistenti "Bootstrap JS
+caricato due volte": non risulta. Bootstrap e' caricato una volta sola
+(`ps-base.html:98`); le due righe di `ps-show-mov.html` che lo fanno sospettare
+sono gli adattatori DataTables (`dataTables.bootstrap5.min.js:312` e
+`responsive.bootstrap5.min.js:314`), che sono file diversi. Il controllo sui
+duplicati di rete lo conferma.
 
 ## Note
 

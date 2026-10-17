@@ -48,12 +48,65 @@ il rimando.
 | MB-003 | evolutiva | Versione applicativa: variabile privata in `app.py`, API `/version`, visibile nel footer | bassa | RISOLTA |
 | MB-004 | evolutiva | Gestione del wallet preferito (`order_index = 0` riservato, unico, impostabile solo dall'azione dedicata) | media | RISOLTA |
 | MB-005 | evolutiva | Il server MCP usa il wallet preferito quando la chiamata non ne specifica uno (dipende da MB-004) | bassa | RISOLTA |
+| MB-006 | bug | La tabella movimenti ordina le date per giorno del mese: DataTables confronta `gg/mm/aaaa` come stringa | media | RISOLTA |
 
 ## Aperte
 
 _Nessuna voce aperta._
 
 ## Risolte
+
+### MB-006 — Ordinamento per data della tabella movimenti · risolta il 2026-10-17
+
+- **Tipo**: bug
+- **Priorità**: media
+- **Dove**: `pyspendless/templates/ps-show-mov.html:194` (cella della colonna
+  "Data"); configurazione DataTables alla riga 323 dello stesso file.
+- **Trovata**: verifica empirica 0.4 della Fase 0 del task19-0.
+
+**Problema** — la colonna "Data" è renderizzata `gg/mm/aaaa`. DataTables ne
+rileva il tipo automaticamente, il plugin `date-eu` non è caricato e
+`Date.parse("13/09/2026")` dà `NaN`: il tipo ricade quindi su `string` e
+`order: [[0, 'desc']]` produce un **confronto lessicografico**, cioè un
+ordinamento per giorno del mese, poi mese, poi anno.
+
+Il difetto è rimasto invisibile perché la vista di default filtra il **mese
+corrente**, e dentro un singolo mese l'ordine per giorno coincide con quello
+cronologico. Si manifesta appena si allarga l'intervallo:
+
+| Intervallo | Prime righe a video | Corretto? |
+|---|---|---|
+| solo settembre 2026 | 30/09, 30/09, 29/09, 29/09, 28/09 … | sì, per caso |
+| ago-ott 2026 | **31/08**, 31/08, 31/08, 30/09, 30/09, **30/08**, 29/09 … | no |
+| 2025-2026 | **31/10/2025**, 31/10/2025, **31/08/2026**, 31/08/2025 … | no |
+
+Su due anni di dati 247 righe su 257 risultavano fuori posto. Il server
+ordina già correttamente (`move_date DESC`, `repository.py:611`): il
+riordino sbagliato è interamente client-side, quindi la card-list mobile —
+renderizzata da Jinja senza DataTables — non ne era affetta.
+
+**Soluzione applicata** — attributo `data-order` con la data in formato ISO
+sulla cella, che DataTables usa come dato di ordinamento al posto del testo
+visualizzato:
+
+```jinja
+<td data-order="{{ mov.move_date.isoformat() }}">{{ mov.move_date.strftime('%d/%m/%Y') }}</td>
+```
+
+Una riga, nessuna dipendenza aggiunta, nessun plugin da caricare. Dopo la
+modifica il tipo rilevato da DataTables passa da `string` a `date` e l'ordine
+a video coincide esattamente con quello del server su tutti e tre gli
+intervalli di prova.
+
+**Note / casi limite**
+
+- Le colonne "Entrata" e "Uscita" rendono `€ 1234.56` e **non** hanno il
+  problema: DataTables le rileva come `num-fmt,` e le ordina correttamente.
+  Verificato ordinando per "Uscita" e confrontando con `ORDER BY expense DESC`.
+- Il formato visualizzato non cambia: resta `gg/mm/aaaa`.
+- `data-order` va conservato dalla Fase 6 del task19-0, che riscrive questa
+  tabella. È il motivo per cui la correzione è stata tenuta **separata** dal
+  restyling invece di esserne assorbita.
 
 ### MB-004 — Gestione del wallet preferito · risolta il 2026-09-12, integrata il 2026-09-14
 

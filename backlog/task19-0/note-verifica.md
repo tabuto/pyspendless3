@@ -169,3 +169,15 @@ Un test che lo ignora produce un falso fallimento.
 cambiata nel JS faceva fallire il confronto; e nel codice del diff avevo
 chiamato `a` sia il namespace di argparse sia una lista, facendo esplodere il
 controllo successivo. Gli strumenti di verifica vanno verificati.
+
+## Correzione importante (Fase 5)
+
+**P6 era vero, e l'avevo dichiarato falso.** In Fase 1 avevo misurato gli asset
+di `/movements`, trovato un solo Bootstrap, e concluso che il difetto "caricato
+due volte" non esisteva. Sbagliato: **sei pagine di impostazioni** caricano in
+fondo un secondo bundle (`bootstrap@5.3.0`) sopra quello della shell
+(`bootstrap@5.3.2`), e a runtime **vince il secondo**, il più vecchio.
+
+Una misura su una pagina sola non dimostra niente su diciassette. Quando si
+smentisce un difetto, va smentito **sull'insieme dei file**, non su un campione
+scelto perché comodo.

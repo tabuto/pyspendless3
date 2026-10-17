@@ -1,15 +1,26 @@
 # Fase 5 — Pagine impostazioni con modal
 
-**Agente**: `ps-markup`, una invocazione per pagina (5 subagent)
+**Agente**: `ps-markup`, una invocazione per pagina (6 subagent)
 **Stima**: 4-5 gg
 **Dipende da**: Fase 4 verde.
 
 Ordine per complessità crescente: `ps-setting-wallet` →
-`ps-setting-import-export` → `ps-setting-admin` → `ps-setting-categories` →
-`ps-setting-group`.
+`ps-setting-import-export` → `ps-setting-profile` → `ps-setting-admin` →
+`ps-setting-categories` → `ps-setting-group`.
 
-È la fase che mette alla prova `ps-ui.js`: **10 modal**, tutti qui tranne quello
+È la fase che mette alla prova `ps-ui.js`: **12 modal**, tutti qui tranne quello
 delle ricorrenti.
+
+> **Correzione al piano (2026-10-17): le pagine sono SEI, non cinque.**
+> `ps-setting-profile.html` — token MCP e connessioni OAuth — non era assegnata
+> a **nessuna** fase: compariva solo di sfuggita nella tabella di conversione.
+> È una pagina di impostazioni come le altre, ha 2 modal (`addTokenModal`,
+> `showTokenModal`) e carica il bundle Bootstrap duplicato di A5.9. Lasciarla
+> fuori significherebbe arrivare in Fase 9 con una pagina ancora su Bootstrap e
+> non poterlo rimuovere. Entra qui.
+>
+> Da cui anche: i modal diventano **12**, e le sei interazioni A5.10-A5.15 si
+> applicano a tutti e dodici.
 
 ## Il vincolo che governa la fase
 
@@ -49,6 +60,16 @@ dell'app) e il toggle di ordinamento alfabetico.
 11 `innerHTML`: regola sulle classi dinamiche.
 Il modal di eliminazione ha una meccanica a sé: se la categoria ha movimenti,
 chiede la categoria di destinazione prima di cancellare.
+
+### `ps-setting-profile.html`
+
+2 modal (`addTokenModal`, `showTokenModal`). Mostra l'URL del server MCP in un
+campo readonly (`#mcpUrl`, classe `font-monospace` → `font-mono`) con un
+bottone che chiama `copyValue('mcpUrl')`: la **forma della chiamata inline** va
+preservata. Due tbody popolati da JS — `#tokensContainer` e
+`#oauthConnectionsContainer` — quindi vale la regola sulle classi dinamiche.
+`#newTokenValue` mostra il token appena creato: è l'unico momento in cui è
+visibile, quindi il markup di quel modal non va semplificato.
 
 ### `ps-setting-group.html` — la più complessa
 3 modal, 24 `innerHTML`, list-group per membri e inviti, Web Share API,

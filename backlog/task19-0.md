@@ -44,7 +44,7 @@ morti mai referenziati da `render_template`.
 | D6 | Font **Source Sans 3 self-hosted** |
 | D8 | Tema persistito in **`localStorage`**, nessuna modifica a DB o sessione |
 | D9 | **Bootstrap Icons self-hosted**: le classi `bi bi-*` restano identiche |
-| D10 | Difetti preesistenti P1-P6: le icone **Font Awesome si rimuovono** (non sono mai state visibili, FA non è caricato — la rimozione è la scelta isofunzionale). P6 è risultato **inesistente**: Bootstrap JS è caricato una volta sola, vedi "Verifiche empiriche" |
+| D10 | Difetti preesistenti P1-P6: le icone **Font Awesome si rimuovono** (non sono mai state visibili, FA non è caricato — la rimozione è la scelta isofunzionale). P6 è **reale**: vedi "Verifiche empiriche" |
 | D12 | Sidebar mobile: **drawer off-canvas**, come oggi |
 | D14 | Versione di rilascio: **`0.2.0`** |
 
@@ -249,12 +249,29 @@ in Fase 9), **`bootstrap-icons.woff2` 131,6 KB** (set completo per una dozzina
 di glifi: con il self-hosting di D9 c'e' spazio per un subset), il documento
 114,1 KB, `chart.umd.min.js` 69,5 KB, `adminlte.js` 47,0 KB.
 
-**P6 e' smentito.** Il piano elencava fra i difetti preesistenti "Bootstrap JS
-caricato due volte": non risulta. Bootstrap e' caricato una volta sola
-(`ps-base.html:98`); le due righe di `ps-show-mov.html` che lo fanno sospettare
-sono gli adattatori DataTables (`dataTables.bootstrap5.min.js:312` e
-`responsive.bootstrap5.min.js:314`), che sono file diversi. Il controllo sui
-duplicati di rete lo conferma.
+**P6: smentito su `/movements`, CONFERMATO sulle impostazioni.**
+
+La prima misura era stata fatta solo su `/movements`, dove Bootstrap è davvero
+caricato una volta sola: le due righe sospette di `ps-show-mov.html` sono gli
+adattatori DataTables (`dataTables.bootstrap5.min.js:312` e
+`responsive.bootstrap5.min.js:314`), che sono file diversi.
+
+**Sei pagine di impostazioni**, però, caricano in fondo un secondo Bootstrap, in
+una versione diversa da quella della shell — `wallet`, `import-export`,
+`admin`, `categories`, `group`, `profile`:
+
+```
+ps-base.html:98   bootstrap@5.3.2/dist/js/bootstrap.min.js
+<pagina>:NNN      bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js
+```
+
+A runtime vince il **secondo**, cioè il più vecchio, che sovrascrive il primo:
+su `/settings/wallets` `bootstrap.Modal.VERSION` risponde `5.3.0`. Il difetto è
+reale e si chiude in Fase 5 (criterio A5.9).
+
+Lezione di metodo: una misura su una pagina sola non dimostra niente su
+diciassette. Un difetto si smentisce sull'insieme dei file, non su un campione
+scelto perché comodo.
 
 ## Note
 

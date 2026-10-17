@@ -52,31 +52,196 @@ positivo/negativo. Cambiare la tinta è ammesso, scambiare i ruoli no.
 
 ### 1.3 — Tabella di conversione
 
-Questa sezione è l'input di `ps-markup` per tutte le fasi successive. Va
-compilata **qui**, perché la qualità delle conversioni dipende da quanto è
-completa. Ogni riga: pattern Bootstrap → classe `.ps-*` o utility Tailwind.
+**Questa sezione è l'input di `ps-markup` per tutte le fasi successive.** Non è
+una bozza: è stata compilata estraendo tutti gli `class="…"` dai 18 template
+renderizzati più i 3 layout — **1.022 attributi, 295 classi distinte** — e
+classificandoli uno per uno. Se `ps-markup` incontra un pattern che non è qui,
+si ferma e segnala, come prescrive la sua definizione.
+
+> Copertura: ogni classe Bootstrap/AdminLTE trovata nei template appartiene a
+> una delle famiglie qui sotto. I conteggi fra parentesi sono le occorrenze
+> reali, e servono a dare la scala: `btn` compare 89 volte, `btn-info` una.
+
+#### Componenti — diventano classi `.ps-*` in `@layer components`
 
 | Bootstrap | Target | Note |
 |---|---|---|
-| `card` / `card-header` / `card-body` / `card-footer` | `ps-card` / `ps-card-header` / `ps-card-body` / `ps-card-footer` | |
-| `btn btn-primary` | `ps-btn-primary` | idem per secondary, success, danger, info, warning |
-| `btn-outline-*` | `ps-btn-outline-*` | |
-| `btn-sm` / `btn-lg` | `ps-btn-sm` / `ps-btn-lg` | touch target ≥44px su mobile |
-| `form-control` / `form-select` | `ps-input` / `ps-select` | |
-| `form-label` / `form-text` | `ps-label` / `ps-help` | |
-| `table table-striped table-hover` | `ps-table` | |
-| `badge bg-success` | `ps-badge-income` | semantica, non colore |
-| `alert alert-danger` | `ps-alert-danger` | |
-| `spinner-border` | `ps-spinner` | |
-| `d-md-none` | `md:hidden` | **768px, non negoziabile** |
-| `d-none d-md-block` | `hidden md:block` | idem |
-| `row` / `col-md-6` | `grid` / `md:col-span-6` o flex | valutare caso per caso |
-| `visually-hidden` | `sr-only` | |
-| `text-muted` | `ps-muted` | |
+| `card` (42) | `ps-card` | |
+| `card-header` (32) / `card-body` (44) / `card-footer` (2) | `ps-card-header` / `ps-card-body` / `ps-card-footer` | |
+| `card-title` (39) | `ps-card-title` | |
+| `card-text` (4) | nessuna classe, è solo un paragrafo | |
+| `card-primary` (3) / `card-outline` (1) | `ps-card-accent` | header colorato di marca |
+| `card-header-tabs` (1) | `ps-card-header-tabs` | solo `ps-setting-categories.html` |
+| `btn` (89) | `ps-btn` | base, mai da sola nel markup finale |
+| `btn-primary` (28) | `ps-btn-primary` | |
+| `btn-secondary` (16) | `ps-btn-secondary` | |
+| `btn-danger` (13) | `ps-btn-danger` | |
+| `btn-warning` (3) | `ps-btn-warning` | |
+| `btn-success` (1) | `ps-btn-success` | |
+| `btn-info` (1) | `ps-btn-info` | |
+| `btn-light` (1) | `ps-btn-light` | |
+| `btn-outline-secondary` (13) | `ps-btn-outline-secondary` | |
+| `btn-outline-primary` (5) | `ps-btn-outline-primary` | |
+| `btn-outline-danger` (5) | `ps-btn-outline-danger` | |
+| `btn-outline-warning` (1) | `ps-btn-outline-warning` | |
+| `btn-outline-success` (1) | `ps-btn-outline-success` | |
+| `btn-link` (1) | `ps-btn-link` | |
+| `btn-sm` (36) / `btn-lg` (2) | `ps-btn-sm` / `ps-btn-lg` | **target touch ≥ 44 px su mobile** |
+| `btn-close` (22) / `btn-close-white` (2) | `ps-btn-close` / `ps-btn-close-light` | la X dei modal e degli alert |
+| `btn-group-vertical` (1) | `flex flex-col` | caso unico, `ps-home.html` |
+| `form-control` (31) / `form-control-sm` (1) | `ps-input` / `ps-input-sm` | |
+| `form-select` (19) | `ps-select` | |
+| `form-label` (46) | `ps-label` | la classe più frequente dei form |
+| `form-text` (12) | `ps-help` | |
+| `form-group` (1) | `mb-3` → `ps-field` | residuo Bootstrap 4, una sola occorrenza |
+| `input-group` (3) | `ps-input-group` | |
+| `table` (9) + `table-striped` (9) + `table-hover` (3) | `ps-table` | le tre insieme sono il pattern reale |
+| `table-bordered` (1) | `ps-table-bordered` | |
+| `table-responsive` (5) | `overflow-x-auto` | |
+| `modal` (13) / `modal-dialog` / `modal-content` | `<dialog class="ps-modal">` + `ps-modal-panel` | vedi 1.4: il markup cambia struttura |
+| `modal-header` / `modal-title` / `modal-body` / `modal-footer` (13 ciascuna) | `ps-modal-header` / `-title` / `-body` / `-footer` | |
+| `alert` (15) | `ps-alert` | |
+| `alert-success` (4) | `ps-alert-success` | |
+| `alert-danger` (4) | `ps-alert-danger` | |
+| `alert-info` (3) | `ps-alert-info` | |
+| `alert-warning` (3) | `ps-alert-warning` | |
+| `alert-dismissible` (1) / `alert-heading` (1) | `ps-alert-dismissible` / `ps-alert-heading` | |
+| `badge` (9) | `ps-badge` + modificatore semantico | **mai `bg-*`**, vedi sotto |
+| `spinner-border` (7) / `spinner-border-sm` (5) | `ps-spinner` / `ps-spinner-sm` | |
+| `progress` / `progress-bar` / `progress-bar-striped` / `progress-bar-animated` (1 ciascuna) | `ps-progress` / `ps-progress-bar` / `ps-progress-striped` / `ps-progress-animated` | solo import/export |
+| `list-group` (3) / `list-group-flush` (3) / `list-group-item` (11) | `ps-list` / `ps-list-flush` / `ps-list-item` | membri e inviti in `ps-setting-group.html` |
+| `nav-tabs` (1) / `nav-item` (21) / `nav-link` (21) | `ps-tabs` / `ps-tab` / `ps-tab-btn` | |
+| `nav` (4) | contesto: `ps-tabs` sui tab, struttura della sidebar altrove | da sola non ha stile proprio |
+| `tab-content` (1) / `tab-pane` (2) | `ps-tabpanels` / `ps-tabpanel` | |
+| `pagination` / `page-item` (5) / `page-link` (5) | `ps-pagination` / `ps-page-item` / `ps-page-link` | solo `ps-search-mov.html` |
 
-Completala leggendo i template: 775 occorrenze su 26 file, i pattern ricorrenti
-sono una trentina. **Se un pattern non è in tabella, `ps-markup` deve fermarsi
-e chiedere** — è scritto nella sua definizione.
+#### Utility — diventano utility Tailwind, nessuna classe nuova
+
+| Bootstrap | Tailwind | Note |
+|---|---|---|
+| `row` (33) | `grid grid-cols-12 gap-4` o `flex` | caso per caso |
+| `col-md-6` (18) / `col-md-4` (8) / `col-md-3` (5) / `col-md-8` (3) / `col-md-2` (3) / `col-md-12` (2) / `col-md-10` (1) / `col-md-5` (1) | `md:col-span-6` … | |
+| `col-12` (15) / `col-6` (2) / `col` (3) | `col-span-12` / `col-span-6` / `flex-1` | |
+| `col-sm-6` (3) / `col-lg-6` (1) / `col-lg-8` (1) | `sm:col-span-6` / `lg:col-span-6` / `lg:col-span-8` | |
+| `row-cols-1` (1) / `row-cols-md-3` (1) | `grid-cols-1` / `md:grid-cols-3` | |
+| `container` (4) / `container-fluid` (17) | `mx-auto max-w-7xl px-4` / `w-full px-4` | |
+| `g-3` (4) | `gap-4` | |
+| `mb-3` (45) / `mb-4` (24) / `mb-0` (30) / `mt-4` (18) / `mt-3` (9) / `me-2` (19) / `me-1` (11) … | `mb-3` / `mb-4` / `mb-0` / `mt-4` / `mt-3` / `mr-2` / `mr-1` | **attenzione**: `me-*`/`ms-*` sono logici → `mr-*`/`ml-*` (Tailwind ha `me-*`/`ms-*`, ma con semantica RTL: qui l'app è solo in italiano, usare `mr`/`ml` evita ambiguità) |
+| `p-0` (5) / `py-3` (8) / `py-2` (4) / `py-0` (6) / `px-3` (4) / `px-2` (6) | identici | |
+| `mt-auto` (4) / `ms-auto` (1) | `mt-auto` / `ml-auto` | |
+| `d-flex` (28) | `flex` | |
+| `flex-column` (6) / `flex-wrap` (4) / `flex-sm-row` (2) | `flex-col` / `flex-wrap` / `sm:flex-row` | |
+| `align-items-center` (14) | `items-center` | |
+| `align-items-start` (4) | `items-start` | |
+| `align-items-end` (4) | `items-end` | |
+| `align-items-sm-center` (2) | `sm:items-center` | |
+| `justify-content-between` (14) | `justify-between` | |
+| `justify-content-center` (6) | `justify-center` | |
+| `justify-content-end` (1) | `justify-end` | |
+| `align-middle` (2) | `align-middle` | |
+| `gap-2` (8) / `gap-1` (1) | `gap-2` / `gap-1` | |
+| `d-none` (11) | `hidden` | |
+| `d-md-none` (2) | `md:hidden` | **768 px, non negoziabile** |
+| `d-md-block` (2) | `md:block` | idem (nel pattern `d-none d-md-block` → `hidden md:block`) |
+| `d-grid` (1) | `grid` | |
+| `w-100` (6) / `h-100` (3) | `w-full` / `h-full` | |
+| `text-center` (25) / `text-end` (16) / `text-start` (3) | `text-center` / `text-right` / `text-left` | |
+| `text-truncate` (4) | `truncate` | |
+| `text-nowrap` (4) | `whitespace-nowrap` | |
+| `text-decoration-none` (1) | `no-underline` | |
+| `small` (11) | `text-sm` | |
+| `fs-5` (2) | `text-lg` | |
+| `h5` (1) | `text-xl font-medium` | usata come **classe** su uno `<span>`, `ps-show-mov.html:16` |
+| `fw-bold` (2) / `fw-semibold` (5) / `fw-light` (1) | `font-bold` / `font-semibold` / `font-light` | |
+| `fst-italic` (2) | `italic` | |
+| `font-monospace` (1) | `font-mono` | token MCP in `ps-setting-profile.html` |
+| `border-0` (2) / `shadow-sm` (2) / `shadow` (1) / `opacity-75` (1) | `border-0` / `shadow-sm` / `shadow` / `opacity-75` | |
+| `bg-transparent` (2) | `bg-transparent` | |
+| `visually-hidden` (2) | `sr-only` | |
+| `fade` (16) / `show` (2) / `collapse` | gestite da `ps-ui.js` | non sono stile: sono stato |
+
+#### Colori — qui si passa dal colore alla semantica
+
+Il vincolo del §3.1 del piano: **verde = entrate, rosso = uscite**. Le classi
+di colore Bootstrap vanno tradotte nel **ruolo**, non nella tinta.
+
+| Bootstrap | Target | Ruolo |
+|---|---|---|
+| `text-success` (3) / `bg-success` (3) | `ps-amount-income` / `ps-badge-income` | entrata |
+| `text-danger` (13) / `bg-danger` (6) | `ps-amount-expense` / `ps-badge-expense` | uscita |
+| `text-primary` (13) / `bg-primary` (5) | `text-[var(--ps-brand)]` / `ps-badge-brand` | marca |
+| `bg-info` (2) | `ps-balance-positive` | bilancio ≥ 0 (`ps-show-mov.html:110`) |
+| `bg-warning` (1) | `ps-balance-negative` | bilancio < 0 (stessa riga) |
+| `text-muted` (34) | `ps-muted` | |
+| `text-secondary` (2) / `bg-secondary` (1) | `ps-muted` / `ps-badge-neutral` | |
+| `text-white` (11) | `text-white` | solo su fondi pieni |
+| `text-info` (1) / `text-warning` (1) | `text-[var(--ps-info)]` / `text-[var(--ps-warning)]` | |
+| `bg-light` (2) / `bg-body` (1) / `bg-body-secondary` (2) / `bg-body-tertiary` (1) | `bg-[var(--ps-surface-2)]` | **non** grigi fissi: devono seguire il tema |
+| `border-danger` (2) | `border-[var(--ps-expense)]` | zona pericolosa |
+
+#### Icone
+
+| Oggi | Target | Note |
+|---|---|---|
+| `bi bi-*` (220 occorrenze, 56 glifi) | **invariate** | decisione D9: Bootstrap Icons self-hosted, le classi non cambiano |
+| `fas fa-*` (23 occorrenze, 10 classi) | **rimuovere** (D10) | vedi sotto |
+
+> **Font Awesome non è caricato da nessuna parte**, quindi queste 23
+> occorrenze — tutte in `ps-maintenance.html` (`fa-tools`, `fa-sync-alt`,
+> `fa-4x`) e `ps-search-mov.html` (`fa-edit`, `fa-trash`, `fa-redo`, `fa-undo`,
+> `fa-search`, `fa-info-circle`) — **oggi non mostrano nulla**: è il difetto
+> preesistente P1.
+>
+> **Decisione D10, presa il 2026-10-17: si rimuovono.** Niente glifo
+> sostitutivo. Oggi al loro posto non c'è niente, e dopo la conversione non ci
+> sarà niente: è la scelta isofunzionale. Tradurle in `bi-*` avrebbe fatto
+> comparire icone che l'utente non ha mai visto — un miglioramento, ma un
+> cambiamento visibile introdotto di straforo dentro un restyling che si
+> impegna a non cambiare comportamento.
+>
+> Operativamente, per `ps-markup`: **cancellare l'intero elemento** che porta
+> `fas fa-*` (di norma un `<i class="fas fa-xxx"></i>`), non solo le classi —
+> un `<i>` vuoto resterebbe nel DOM senza scopo. Se l'icona è dentro un
+> bottone o un titolo, il testo accanto resta invariato. Attenzione a
+> `ps-maintenance.html`, dove `fa-4x` è l'icona grande al centro della pagina:
+> rimuovendola il blocco si accorcia, ed è l'unico punto in cui la rimozione
+> si nota nel layout. È accettabile — quello spazio oggi è vuoto comunque.
+
+#### Shell AdminLTE — non si traduce, si riscrive
+
+`app-wrapper`, `app-header`, `app-sidebar`, `app-main`, `app-content`,
+`app-content-header`, `layout-fixed`, `sidebar-*`, `brand-*`, `navbar-*`,
+`nav-icon`, `nav-arrow`, `nav-treeview` (circa 40 occorrenze) non hanno un
+corrispettivo uno-a-uno: sono la struttura di AdminLTE. Vengono **ricostruite**
+in Fase 2 dentro `ps-base-tw.html` / `ps-nav-tw.html` / `ps-auth-tw.html`,
+drawer off-canvas compreso (D12). `ps-markup` non le incontra mai, perché le
+pagine ereditano la shell.
+
+Stessa sorte per `login-box`, `login-page`, `login-card-body`, `login-box-msg`
+(`ps-auth.html`, `ps-maintenance.html`), che appartengono al layout di
+autenticazione.
+
+#### ⚠️ Classi assemblate: due casi da correggere durante la conversione
+
+Lo scanner di Tailwind vede solo **stringhe letterali complete**. Questi due
+punti costruiscono il nome della classe a pezzi, quindi la classe finirebbe
+**assente dal CSS compilato** (rischio R1):
+
+| Dove | Oggi | Da fare |
+|---|---|---|
+| `ps-onboarding.html:17` | `class="alert alert-{{ category }} …"` | mappare `category` a una classe intera con un `{% if %}` per ramo, o una macro |
+| `ps-setting-admin.html:72` | `class="badge bg-{{ 'primary' if user.role == 'owner' else 'secondary' }}"` | `{% if %}ps-badge-brand{% else %}ps-badge-neutral{% endif %}` |
+
+Gli altri quattro usi di Jinja dentro `class="…"` (`ps-search-mov.html:117,138`,
+`ps-show-mov.html:25,110`) sono **sicuri**: ogni ramo produce già la classe
+intera. Non vanno "corretti".
+
+Sul lato JavaScript il problema esiste in 4 punti vivi
+(`ps-show-mov.html:580`, `ps-search-mov.html:282`, `ps-setting-group.html:384`,
+`ps-setting-wallet.html:166`): lì la regola è usare `ps-amount-income` /
+`ps-amount-expense` e simili, dichiarate in `@layer components`, così la classe
+esiste nel CSS a prescindere da cosa fa il JS. Il test di contratto sorveglia
+entrambe le forme (vedi `DYNAMIC_CLASS_PATTERNS`).
 
 ### 1.4 — `ps-ui.js`
 

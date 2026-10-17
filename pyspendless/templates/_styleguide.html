@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<!--
+  pyspendless/templates/_styleguide.html
+  ============================================================================
+  Task 19-0 (Fase 1, attività 1.7) — Vetrina dei componenti del design system.
+
+  NB: in questo commento i delimitatori Jinja non si scrivono per esteso.
+  Jinja analizza anche i commenti HTML, quindi un '{' + '%'` citato dentro un
+  commento rende il file un template NON COMPILABILE.
+
+  NON instradata: nessuna route in app.py (il gate sul diff del task vieta di
+  toccarlo). Per vederla nel browser serve un percorso preparato a parte
+  (debug route temporanea o apertura diretta del file) — non è compito di chi
+  ha scritto questo file deciderlo.
+
+  Per questo è un documento HTML AUTONOMO, non estende (`extends`) nessun
+  layout: ps-base-tw.html (la nuova base, Fase 2) non esiste ancora, ed
+  estendere ps-base.html avrebbe significato caricare Bootstrap+AdminLTE
+  insieme a Tailwind sulla stessa pagina — esattamente la coesistenza che il
+  piano vieta (piano-restyling-tailwind.md §5.1). Quando ps-base-tw.html
+  esisterà, in Fase 2, questo file potrà estenderlo
+  senza perdere nulla: la testa (meta, script anti-FOUC, link CSS) è scritta
+  già nella stessa forma che ps-base-tw.html dovrà avere.
+
+  Non usa variabili Jinja che dipendono dal contesto di richiesta
+  (session, url_for, app_version, is_admin): non essendo instradato, nulla
+  garantisce che un context processor le popoli. I link statici sono
+  root-relative (/static/...), risolti da Flask indipendentemente dalla route
+  con cui questo file viene eventualmente servito.
+-->
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PySpendless — Styleguide (task19-0)</title>
+
+  <!-- ========================================================================
+       Script anti-FOUC — DEVE girare prima del primo paint, quindi inline,
+       prima del <link> al CSS, non async né defer (piano §4.2). In Fase 2
+       va copiato *esattamente così* nel <head> di ps-base-tw.html: la fonte
+       di verità è PS_FOUC_SNIPPET in ps-theme.js, questo è il suo incollato.
+       ==================================================================== -->
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('ps_theme') || 'system';
+        var dark = t === 'dark' ||
+                   (t === 'system' &&
+                    window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.classList.toggle('dark', dark);
+        document.documentElement.dataset.psTheme = t;
+      } catch (e) { /* localStorage negato: resta light */ }
+    })();
+  </script>
+
+  <link rel="stylesheet" href="/static/css/ps-tailwind.css" />
+</head>
+<body class="min-h-screen">
+  <div class="mx-auto max-w-6xl px-4 py-8 space-y-12">
+
+    <!-- ===================================================================
+         Intestazione + toggle tema + log eventi
+         =================================================================== -->
+    <header class="flex flex-wrap items-start justify-between gap-4 border-b pb-6" style="border-color: var(--ps-border);">
+      <div>
+        <h1 class="ps-h1">PySpendless — Styleguide</h1>
+        <p class="ps-muted mt-1">
+          Task 19-0 · Fase 1. Ogni componente della tabella §1.3 di
+          <code>backlog/task19-0/fasi/fase-1.md</code>, in light e dark.
+        </p>
+      </div>
+      <div class="flex items-center gap-2" role="group" aria-label="Selettore tema">
+        <span class="ps-muted mr-1">Tema:</span>
+        <button type="button" class="ps-btn-outline-secondary ps-btn-sm" onclick="psTheme.set('light')">
+          <i class="bi bi-sun"></i> Light
+        </button>
+        <button type="button" class="ps-btn-outline-secondary ps-btn-sm" onclick="psTheme.set('dark')">
+          <i class="bi bi-moon"></i> Dark
+        </button>
+        <button type="button" class="ps-btn-outline-secondary ps-btn-sm" onclick="psTheme.set('system')">
+          <i class="bi bi-circle-half"></i> System
+        </button>
+      </div>
+    </header>
+
+    <!-- A1.6 — verifica "nessun flash": ricaricare la pagina nei 3 stati e
+         osservare che non c'è mai un salto di colore dopo il primo paint. -->
+    <section aria-label="Log eventi componenti">
+      <h2 class="ps-h2 mb-2">Log eventi (verifica timing modal/collapse)</h2>
+      <p class="ps-muted mb-2">
+        I due punti critici del task: <code>show.bs.modal</code> deve comparire
+        <strong>prima</strong> della riga "modal visibile", e
+        <code>shown.bs.collapse</code> deve comparire <strong>dopo</strong> la
+        fine della transizione del pannello filtri (non al click).
+      </p>
+      <pre id="event-log" class="ps-card ps-card-body text-xs overflow-auto" style="height: 10rem; background-color: var(--ps-surface-2);"></pre>
+      <button type="button" class="ps-btn-outline-secondary ps-btn-sm mt-2" onclick="document.getElementById('event-log').textContent=''">
+        Svuota log
+      </button>
+    </section>
+
+    <!-- ===================================================================
+         Tipografia
+         =================================================================== -->
+    <section>
+      <h2 class="ps-h2 mb-3">Tipografia</h2>
+      <div class="ps-card ps-card-body space-y-2">
+        <p class="ps-h1">Titolo pagina — .ps-h1</p>
+        <p class="ps-h2">Titolo sezione — .ps-h2</p>
+        <p class="ps-h3">Titolo card — .ps-h3</p>
+        <p>Testo normale (body)</p>
+        <p class="ps-muted">Testo secondario — .ps-muted</p>
+        <p class="ps-kpi">€ 1.234,56 <span class="ps-muted text-sm font-normal">— .ps-kpi</span></p>
+        <p>
+          <span class="ps-amount ps-amount-income">+€ 120,00</span> ·
+          <span class="ps-amount ps-amount-expense">-€ 45,30</span>
+          <span class="ps-muted text-sm">— .ps-amount-income / .ps-amount-expense</span>
+        </p>
+      </div>
+    </section>
+
+    <!-- ===================================================================
+         Bottoni
+         =================================================================== -->
+    <section>
+      <h2 class="ps-h2 mb-3">Bottoni</h2>
+      <div class="ps-card ps-card-body space-y-4">
+        <div class="flex flex-wrap items-center gap-2">
+          <button class="ps-btn-primary">Primary</button>
+          <button class="ps-btn-secondary">Secondary</button>
+          <button class="ps-btn-danger">Danger</button>
+          <button class="ps-btn-warning">Warning</button>
+          <button class="ps-btn-success">Success</button>
+          <button class="ps-btn-info">Info</button>
+          <button class="ps-btn-light">Light</button>
+          <button class="ps-btn-link">Link</button>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button class="ps-btn-outline-primary">Outline primary</button>
+          <button class="ps-btn-outline-secondary">Outline secondary</button>
+          <button class="ps-btn-outline-danger">Outline danger</button>
+          <button class="ps-btn-outline-warning">Outline warning</button>
+          <button class="ps-btn-outline-success">Outline success</button>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button class="ps-btn-primary ps-btn-sm">Small (44px solo &lt;768px)</button>
+          <button class="ps-btn-primary">Default</button>
+          <button class="ps-btn-primary ps-btn-lg">Large</button>
+          <button class="ps-btn-primary" disabled>Disabled</button>
+        </div>
+        <div class="flex flex-wrap items-center gap-4">
+          <span class="ps-muted">Close (su sfondo chiaro):</span>
+          <button type="button" class="ps-btn-close" aria-label="Close"></button>
+          <span class="ps-muted">Close light (su sfondo scuro):</span>
+          <span class="inline-flex items-center justify-center rounded px-3 py-2" style="background-color: var(--ps-expense);">
+            <button type="button" class="ps-btn-close ps-btn-close-light" aria-label="Close"></button>
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================
+         Card (+ accent, header-tabs)
+         =================================================================== -->
+    <section>
+      <h2 class="ps-h2 mb-3">Card</h2>
+      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div class="ps-card">
+          <div class="ps-card-header"><span class="ps-card-title">Card semplice</span></div>
+          <div class="ps-card-body">
+            <p>.ps-card / .ps-card-header / .ps-card-body / .ps-card-footer</p>
+          </div>
+          <div class="ps-card-footer ps-muted">Footer della card</div>
+        </div>
+        <div class="ps-card">
+          <div class="ps-card-header ps-card-accent"><span class="ps-card-title">Card "di marca" — .ps-card-accent</span></div>
+          <div class="ps-card-body">
+            <p>Sostituisce <code>card-primary</code> / <code>card-outline</code>: header tinted, leggibile anche in dark (D11).</p>
+          </div>
+        </div>
+      </div>
+      <div class="ps-card mt-4">
+        <div class="ps-card-header">
+          <ul class="ps-card-header-tabs" role="tablist" id="demoCategoryTabs">
+            <li class="ps-tab" role="presentation">
+              <button class="ps-tab-btn active" id="expense-tab" data-bs-toggle="tab" data-bs-target="#demo-expense" type="button" role="tab" aria-selected="true">
+                <i class="bi bi-arrow-down-circle"></i> Uscite
+              </button>
+            </li>
+            <li class="ps-tab" role="presentation">
+              <button class="ps-tab-btn" id="income-tab" data-bs-toggle="tab" data-bs-target="#demo-income" type="button" role="tab" aria-selected="false">
+                <i class="bi bi-arrow-up-circle"></i> Entrate
+              </button>
+            </li>
+          </ul>
+        </div>
+        <div class="ps-card-body">
+          <div class="ps-tabpanels" id="demoCategoryTabContent">
+            <div class="ps-tabpanel active" id="demo-expense" role="tabpanel">Pannello Uscite — .ps-tabpanels / .ps-tabpanel</div>
+            <div class="ps-tabpanel" id="demo-income" role="tabpanel">Pannello Entrate</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================
+         Form
+         =================================================================== -->
+    <section>
+      <h2 class="ps-h2 mb-3">Form</h2>
+      <div class="ps-card ps-card-body">
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div class="ps-field">
+            <label class="ps-label" for="demoInput">Campo di testo — .ps-input</label>
+            <input class="ps-input" id="demoInput" type="text" placeholder="Placeholder" />
+            <div class="ps-help">.ps-help — testo di aiuto</div>
+          </div>
+          <div class="ps-field">
+            <label class="ps-label" for="demoInputSm">Campo piccolo — .ps-input-sm</label>
+            <input class="ps-input ps-input-sm" id="demoInputSm" type="text" />
+          </div>
+          <div class="ps-field">
+            <label class="ps-label" for="demoSelect">Select — .ps-select</label>
+            <select class="ps-select" id="demoSelect">
+              <option>Opzione 1</option>
+              <option>Opzione 2</option>
+            </select>
+          </div>
+          <div class="ps-field">
+            <label class="ps-label" for="demoDisabled">Disabled</label>
+            <input class="ps-input" id="demoDisabled" type="text" value="non modificabile" disabled />
+          </div>
+          <div class="ps-field md:col-span-2">
+            <label class="ps-label">Input group — .ps-input-group</label>
+            <div class="ps-input-group">
+              <input class="ps-input" type="text" readonly value="https://esempio/invito/abc123" />
+              <button class="ps-btn-outline-secondary" type="button"><i class="bi bi-clipboard"></i> Copia</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================
+         Tabella
+         =================================================================== -->
+    <section>
+      <h2 class="ps-h2 mb-3">Tabella</h2>
+      <div class="ps-card ps-card-body overflow-x-auto">
+        <table class="ps-table ps-table-bordered">
+          <thead>
+            <tr><th>Data</th><th>Categoria</th><th>Wallet</th><th class="text-right">Importo</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>12/10/2026</td><td>Spesa</td><td>Contanti</td>
+              <td class="ps-amount ps-amount-expense">-€ 45,30</td>
+            </tr>
+            <tr>
+              <td>10/10/2026</td><td>Stipendio</td><td>Conto</td>
+              <td class="ps-amount ps-amount-income">+€ 1.500,00</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===================================================================
+         Alert
+         =================================================================== -->
+    <section>
+      <h2 class="ps-h2 mb-3">Alert</h2>
+      <div class="space-y-3" id="alertDemoContainer">
+        <div class="ps-alert ps-alert-success fade show">Operazione completata — .ps-alert-success</div>
+        <div class="ps-alert ps-alert-danger fade show ps-alert-dismissible" role="alert">
+          <strong class="ps-alert-heading">Attenzione!</strong>
+          Questa azione è irreversibile. (.ps-alert-dismissible, chiudibile)
+          <button type="button" class="ps-btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        <div class="ps-alert ps-alert-info fade show">Informazione — .ps-alert-info</div>
+        <div class="ps-alert ps-alert-warning fade show">Avviso — .ps-alert-warning</div>
+      </div>
+      <button type="button" class="ps-btn-outline-secondary ps-btn-sm mt-3" onclick="addDemoAlert()">
+        Aggiungi alert dismissibile (prova data-bs-dismiss)
+      </button>
+    </section>
+
+    <!-- ===================================================================
+         Badge
+         =================================================================== -->
+    <section>
+      <h2 class="ps-h2 mb-3">Badge</h2>
+      <div class="ps-card ps-card-body flex flex-wrap items-center gap-2">
+        <span class="ps-badge-income">+€ 120,00</span>
+        <span class="ps-badge-expense">-€ 45,30</span>
+        <span class="ps-badge-brand">Owner</span>
+        <span class="ps-badge-neutral">Membro</span>
+        <span class="ps-balance-positive">Bilancio ≥ 0</span>
+        <span class="ps-balance-negative">Bilancio &lt; 0</span>
+      </div>
+    </section>
+
+    <!-- ===================================================================
+         Spinner / Progress
+         =================================================================== -->
+    <section>
+      <h2 class="ps-h2 mb-3">Spinner &amp; Progress</h2>
+      <div class="ps-card ps-card-body space-y-4">
+        <div class="flex items-center gap-4">
+          <div class="ps-spinner" role="status"><span class="sr-only">Caricamento…</span></div>
+          <div class="ps-spinner ps-spinner-sm" role="status"><span class="sr-only">Caricamento…</span></div>
+        </div>
+        <div class="ps-progress">
+          <div class="ps-progress-bar ps-progress-striped ps-progress-animated" style="width: 60%" role="progressbar"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================
+         List group
+         =================================================================== -->
+    <section>
+      <h2 class="ps-h2 mb-3">List group</h2>
+      <div class="ps-card">
+        <ul class="ps-list ps-list-flush">
+          <li class="ps-list-item"><span>mario@esempio.it</span><span class="ps-badge-brand">Owner</span></li>
+          <li class="ps-list-item"><span>giulia@esempio.it</span><span class="ps-badge-neutral">Membro</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ===================================================================
+         Paginazione
+         =================================================================== -->
+    <section>
+      <h2 class="ps-h2 mb-3">Paginazione</h2>
+      <ul class="ps-pagination">
+        <li class="ps-page-item disabled"><a class="ps-page-link" href="#">«</a></li>
+        <li class="ps-page-item active"><a class="ps-page-link" href="#">1</a></li>
+        <li class="ps-page-item"><a class="ps-page-link" href="#">2</a></li>
+        <li class="ps-page-item"><a class="ps-page-link" href="#">3</a></li>
+        <li class="ps-page-item"><a class="ps-page-link" href="#">»</a></li>
+      </ul>
+    </section>
+
+    <!-- ===================================================================
+         Collapse — replica del pannello filtri di ps-show-mov.html
+         =================================================================== -->
+    <section>
+      <h2 class="ps-h2 mb-3">Collapse (pannello filtri)</h2>
+      <p class="ps-muted mb-2">
+        Punto critico n.2: <code>shown.bs.collapse</code> deve apparire nel log
+        SOLO dopo la fine dell'animazione, non al click (altrimenti Tom Select
+        si inizializzerebbe su un contenitore ancora a larghezza zero —
+        commento a ps-show-mov.html:377-379).
+      </p>
+      <div class="ps-card">
+        <div class="ps-card-header p-0">
+          <button class="ps-btn-link w-full justify-between px-3 py-2" type="button"
+                  data-bs-toggle="collapse" data-bs-target="#demo-filters-collapse"
+                  aria-expanded="false" aria-controls="demo-filters-collapse">
+            <span>Filtri <span class="ps-badge-brand">2</span></span>
+            <i class="bi bi-chevron-down"></i>
+          </button>
+        </div>
+        <div class="collapse" id="demo-filters-collapse">
+          <div class="ps-card-body">
+            <p>Contenuto del pannello filtri (demo). Se questo testo è visibile
+            correttamente dimensionato appena apri il pannello, il timing è giusto.</p>
+            <div id="demo-tomselect-placeholder" class="ps-input" style="display:none;">
+              init Tom Select simulata — avvenuta a shown.bs.collapse
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================
+         Modal — su <dialog> nativo
+         =================================================================== -->
+    <section>
+      <h2 class="ps-h2 mb-3">Modal</h2>
+      <p class="ps-muted mb-2">
+        Verifiche A1.8: apre da trigger dichiarativo e da JS imperativo;
+        chiude con X / Annulla / Esc / click sul backdrop; il focus torna al
+        bottone che ha aperto il modal.
+      </p>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" class="ps-btn-primary" data-bs-toggle="modal" data-bs-target="#demoModal">
+          Apri (dichiarativo, data-bs-toggle)
+        </button>
+        <button type="button" class="ps-btn-secondary" onclick="openDemoModalImperative()">
+          Apri (imperativo, new bootstrap.Modal().show())
+        </button>
+        <button type="button" class="ps-btn-danger" onclick="openDeleteAccountDemo()">
+          Apri "Elimina Account" (replica show.bs.modal → fetch)
+        </button>
+      </div>
+
+      <dialog class="ps-modal" id="demoModal" aria-labelledby="demoModalTitle">
+        <div class="ps-modal-panel">
+          <div class="ps-modal-header">
+            <h3 class="ps-modal-title" id="demoModalTitle">Modal di esempio</h3>
+            <button type="button" class="ps-btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="ps-modal-body">
+            <div class="ps-field">
+              <label class="ps-label" for="demoModalInput">Un campo qualunque</label>
+              <input class="ps-input" id="demoModalInput" type="text" autofocus />
+            </div>
+            <p class="ps-muted">Esc, click fuori dal riquadro, o i bottoni sotto: tutti devono chiudere.</p>
+          </div>
+          <div class="ps-modal-footer">
+            <button type="button" class="ps-btn-secondary" data-bs-dismiss="modal">Annulla</button>
+            <button type="button" class="ps-btn-primary">Salva</button>
+          </div>
+        </div>
+      </dialog>
+
+      <dialog class="ps-modal" id="deleteAccountDemoModal" aria-labelledby="deleteAccountDemoTitle">
+        <div class="ps-modal-panel">
+          <div class="ps-modal-header" style="background-color: color-mix(in srgb, var(--ps-expense) 12%, var(--ps-surface)); color: var(--ps-expense);">
+            <h3 class="ps-modal-title" id="deleteAccountDemoTitle">
+              <i class="bi bi-exclamation-triangle"></i> Conferma Eliminazione Account (demo)
+            </h3>
+            <button type="button" class="ps-btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="ps-modal-body">
+            <p class="ps-muted">Cosa verrà eliminato:</p>
+            <ul id="deletionDetailsDemo" class="ps-muted">
+              <li>(in attesa di checkAccountSharing()…)</li>
+            </ul>
+          </div>
+          <div class="ps-modal-footer">
+            <button type="button" class="ps-btn-secondary" data-bs-dismiss="modal">Annulla</button>
+            <button type="button" class="ps-btn-danger" disabled>Elimina Definitivamente</button>
+          </div>
+        </div>
+      </dialog>
+    </section>
+
+    <!-- ===================================================================
+         Drawer (off-canvas) — nuovo componente, usato dalla shell in Fase 2
+         =================================================================== -->
+    <section>
+      <h2 class="ps-h2 mb-3">Drawer sidebar (off-canvas, non ancora collegato ad alcuna pagina)</h2>
+      <button type="button" class="ps-btn-outline-primary" data-ps-toggle="drawer" data-ps-target="#demoDrawer">
+        <i class="bi bi-list"></i> Apri drawer
+      </button>
+      <div class="ps-drawer-backdrop" data-ps-dismiss="drawer" data-ps-target="#demoDrawer"></div>
+      <div class="ps-drawer" id="demoDrawer" aria-hidden="true">
+        <div class="ps-card-header flex items-center justify-between">
+          <span class="ps-card-title">Menu</span>
+          <button type="button" class="ps-btn-close" data-ps-dismiss="drawer" data-ps-target="#demoDrawer" aria-label="Close"></button>
+        </div>
+        <div class="ps-card-body">
+          <p class="ps-muted">Contenuto del drawer (demo). Esc o backdrop chiudono.</p>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <script src="/static/js/ps-ui.js"></script>
+  <script src="/static/js/ps-theme.js"></script>
+  <script>
+    // ------------------------------------------------------------------
+    // Solo per la vetrina: log degli eventi .bs.* su un <pre>, per
+    // verificare a occhio l'ordine e il timing (A1.7/A1.8 + i due punti
+    // critici del task).
+    // ------------------------------------------------------------------
+    var logEl = document.getElementById('event-log');
+    function log(msg) {
+      var line = '[' + new Date().toISOString().split('T')[1].replace('Z', '') + '] ' + msg;
+      logEl.textContent += line + '\n';
+      logEl.scrollTop = logEl.scrollHeight;
+      console.log(line);
+    }
+
+    ['demoModal', 'deleteAccountDemoModal'].forEach(function (id) {
+      var el = document.getElementById(id);
+      ['show.bs.modal', 'shown.bs.modal', 'hide.bs.modal', 'hidden.bs.modal'].forEach(function (evt) {
+        el.addEventListener(evt, function () { log('#' + id + ' → ' + evt); });
+      });
+    });
+
+    var demoCollapse = document.getElementById('demo-filters-collapse');
+    ['show.bs.collapse', 'shown.bs.collapse', 'hide.bs.collapse', 'hidden.bs.collapse'].forEach(function (evt) {
+      demoCollapse.addEventListener(evt, function () { log('#demo-filters-collapse → ' + evt); });
+    });
+    // Replica esatta del pattern di ps-show-mov.html:515-521: l'init "pesante"
+    // (qui solo simulata) parte alla prima shown.bs.collapse, una sola volta.
+    demoCollapse.addEventListener('shown.bs.collapse', function initDemoTomSelect() {
+      document.getElementById('demo-tomselect-placeholder').style.display = 'block';
+      log('init Tom Select (demo) eseguita — contenitore già a piena larghezza');
+    }, { once: true });
+
+    function openDemoModalImperative() {
+      var modal = new bootstrap.Modal(document.getElementById('demoModal'));
+      modal.show();
+    }
+
+    function openDeleteAccountDemo() {
+      var el = document.getElementById('deleteAccountDemoModal');
+      // Verifica visiva del punto critico n.1: nel log, "show.bs.modal" deve
+      // precedere qualunque riga che inizi con "checkAccountSharing" — e
+      // quest'ultima deve comparire PRIMA che il modal sia percepibile come
+      // aperto (shown.bs.modal arriva dopo, a transizione conclusa).
+      el.addEventListener('show.bs.modal', function onShow() {
+        log('checkAccountSharing() avviata (fetch simulata)');
+        document.getElementById('deletionDetailsDemo').innerHTML =
+          '<li>Il tuo profilo utente</li><li>I tuoi movimenti personali</li>';
+        setTimeout(function () {
+          log('checkAccountSharing() risolta — dettagli aggiornati');
+          document.getElementById('deletionDetailsDemo').innerHTML +=
+            '<li>Account condiviso: resterà attivo per gli altri membri</li>';
+        }, 400);
+      }, { once: true });
+      var modal = bootstrap.Modal.getOrCreateInstance(el);
+      modal.show();
+    }
+
+    function addDemoAlert() {
+      var wrap = document.getElementById('alertDemoContainer');
+      var div = document.createElement('div');
+      div.className = 'ps-alert ps-alert-success fade show ps-alert-dismissible';
+      div.setAttribute('role', 'alert');
+      div.innerHTML = 'Alert aggiunto dinamicamente — chiudibile con la X.' +
+        '<button type="button" class="ps-btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
+      wrap.appendChild(div);
+    }
+  </script>
+</body>
+</html>

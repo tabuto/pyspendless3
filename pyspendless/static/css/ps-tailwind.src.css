@@ -1,0 +1,590 @@
+/*
+ * pyspendless/static/css/ps-tailwind.src.css
+ * ============================================================================
+ * Task 19-0 — Sorgente Tailwind CSS v4 del restyling.
+ *
+ * SORGENTE versionato. L'output compilato (ps-tailwind.css) si genera con
+ * ./tools/build-css.sh e va versionato anch'esso: il deploy e' un `git pull`,
+ * non c'e' build sul server (vedi piano-restyling-tailwind.md §2.1/§2.6).
+ *
+ * Regola non negoziabile (piano §3.1): verde = entrate, rosso = uscite,
+ * info/warning = bilancio positivo/negativo. Le classi .ps-* nominate nella
+ * tabella di conversione di backlog/task19-0/fasi/fase-1.md §1.3 DEVONO
+ * esistere qui: e' l'input di ps-markup per le fasi successive.
+ * ============================================================================
+ */
+
+@import "tailwindcss";
+
+/* Dark mode a classe su <html>, non a media query (default v4) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* v4 scansiona in automatico, ma da CLI standalone conviene essere espliciti */
+@source "../../templates/**/*.html";
+@source "../js/*.js";
+
+@theme {
+  /* --- palette grezza: brand (indigo), scala Tailwind standard --- */
+  --color-brand-50:  #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+  --color-brand-800: #3730a3;
+  --color-brand-900: #312e81;
+
+  --font-sans: "Source Sans 3", ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  --radius-card: 0.75rem;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / .05), 0 1px 3px rgb(0 0 0 / .08);
+}
+
+/* ==========================================================================
+ * Font self-hosted (attività 1.6)
+ * Isofunzionalità: oggi la pagina scarica UN SOLO file,
+ * source-sans-3-latin-400-normal.woff2 (15,3 KB) da @fontsource/source-sans-3
+ * via CDN. Il peso 400 è l'unico servito; i grassetti sono SINTETIZZATI dal
+ * browser. Qui si self-hosta lo stesso identico file, stesso peso, stesso
+ * subset: zero cambio percepito, una dipendenza CDN in meno. Self-hostare
+ * anche 600/700 sarebbe un cambiamento visibile (i bold smetterebbero di
+ * essere sintetizzati) e non è stato fatto qui di propria iniziativa — va
+ * deciso esplicitamente, se richiesto.
+ * ========================================================================== */
+@font-face {
+  font-family: "Source Sans 3";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/source-sans-3-latin-400-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ==========================================================================
+ * Token semantici: stesso nome, valore diverso per tema (piano §2.3/§3.2)
+ * ========================================================================== */
+@layer base {
+  :root {
+    --ps-bg:         #f8fafc;
+    --ps-surface:    #ffffff;
+    --ps-surface-2:  #f1f5f9;
+    --ps-border:     #e2e8f0;
+    --ps-text:       #0f172a;
+    --ps-text-muted: #64748b;
+    --ps-brand:      #4f46e5;
+    --ps-income:     #059669;
+    --ps-expense:    #e11d48;
+    --ps-info:       #0284c7;
+    --ps-warning:    #d97706;
+    /* overlay del backdrop nativo di <dialog> (vedi .ps-modal::backdrop) */
+    --ps-backdrop:   rgb(15 23 42 / 0.5);
+  }
+  .dark {
+    --ps-bg:         #0b1120;
+    --ps-surface:    #111827;
+    --ps-surface-2:  #1e293b;
+    --ps-border:     #334155;
+    --ps-text:       #e2e8f0;
+    --ps-text-muted: #94a3b8;
+    --ps-brand:      #818cf8;
+    --ps-income:     #34d399;
+    --ps-expense:    #fb7185;
+    --ps-info:       #38bdf8;
+    --ps-warning:    #fbbf24;
+    --ps-backdrop:   rgb(0 0 0 / 0.6);
+  }
+
+  html { color-scheme: light; }
+  html.dark { color-scheme: dark; }
+
+  body {
+    background-color: var(--ps-bg);
+    color: var(--ps-text);
+    font-family: var(--font-sans);
+  }
+
+  /* Ring di focus unico e visibile (piano §3.5) */
+  :focus-visible {
+    outline: 2px solid var(--ps-brand);
+    outline-offset: 2px;
+  }
+}
+
+/* ==========================================================================
+ * Componenti (piano §2.3, tabella fase-1.md §1.3)
+ * ========================================================================== */
+@layer components {
+
+  /* ---- Tipografia (piano §3.3) --------------------------------------
+     NOTA Tailwind v4: @apply non può referenziare un'altra classe custom
+     (solo utility reali). Dove un componente "eredita" da un altro
+     (card-title/modal-title/alert-heading da .ps-h3, badge/alert da una
+     base comune, ecc.) si usa un selettore raggruppato con la virgola
+     invece di incatenare @apply — stesso CSS, compilabile da v4.
+  */
+  .ps-h1 {
+    @apply text-2xl font-semibold leading-8 sm:text-3xl;
+    margin: 0;
+    color: var(--ps-text);
+  }
+  .ps-h2 {
+    @apply text-lg font-semibold leading-7;
+    margin: 0;
+    color: var(--ps-text);
+  }
+  .ps-h3,
+  .ps-card-title,
+  .ps-modal-title,
+  .ps-alert-heading {
+    @apply text-base font-semibold leading-6;
+    margin: 0;
+    color: var(--ps-text);
+  }
+  .ps-alert-heading {
+    margin-bottom: 0.5rem;
+    color: inherit;
+  }
+  .ps-muted,
+  .ps-help {
+    font-size: 13px;
+    line-height: 1.25rem;
+    color: var(--ps-text-muted);
+  }
+  .ps-help {
+    margin-top: 0.25rem;
+  }
+  .ps-kpi {
+    @apply text-2xl font-bold leading-9 tabular-nums;
+    color: var(--ps-text);
+  }
+  .ps-amount {
+    @apply tabular-nums text-right;
+  }
+  /* Risolve il rischio R1 (piano §2.4): il colore dell'importo non si
+     concatena mai lato JS, si assegna una di queste due classi intere. */
+  .ps-amount-income {
+    @apply font-semibold;
+    color: var(--ps-income);
+  }
+  .ps-amount-expense {
+    @apply font-semibold;
+    color: var(--ps-expense);
+  }
+
+  /* ---- Card -------------------------------------------------------------
+     .ps-modal-panel/.ps-modal-header/.ps-modal-body/.ps-modal-footer
+     condividono il box dei rispettivi .ps-card-*: stesso selettore
+     raggruppato, poi le differenze (centratura, flex, transizione) a parte.
+  */
+  .ps-card,
+  .ps-modal-panel {
+    @apply rounded-[var(--radius-card)] border;
+    background-color: var(--ps-surface);
+    border-color: var(--ps-border);
+    box-shadow: var(--shadow-card);
+  }
+  .ps-card-header,
+  .ps-modal-header {
+    @apply px-4 py-3 rounded-t-[var(--radius-card)] border-b font-semibold;
+    background-color: var(--ps-surface);
+    border-color: var(--ps-border);
+  }
+  .ps-card-body,
+  .ps-modal-body {
+    @apply px-4 py-4;
+  }
+  .ps-card-footer,
+  .ps-modal-footer {
+    @apply px-4 py-3 rounded-b-[var(--radius-card)] border-t;
+    background-color: var(--ps-surface-2);
+    border-color: var(--ps-border);
+  }
+  /* card-primary / card-outline: header "di marca" (D11: tinted, non solid,
+     per restare leggibile in dark). */
+  .ps-card-accent {
+    background-color: color-mix(in srgb, var(--ps-brand) 10%, var(--ps-surface));
+    color: var(--ps-brand);
+    border-color: color-mix(in srgb, var(--ps-brand) 30%, var(--ps-border));
+  }
+  .ps-card-header-tabs {
+    @apply -mb-3 border-b-0 flex gap-1;
+  }
+
+  /* ---- Bottoni ---------------------------------------------------------
+     Touch target ≥44px su mobile anche per la variante -sm (piano §3.4):
+     è un miglioramento di presentazione dichiarato, non un cambio funzionale.
+  */
+  .ps-btn,
+  .ps-btn-primary,
+  .ps-btn-secondary,
+  .ps-btn-danger,
+  .ps-btn-warning,
+  .ps-btn-success,
+  .ps-btn-info,
+  .ps-btn-light,
+  .ps-btn-outline-primary,
+  .ps-btn-outline-secondary,
+  .ps-btn-outline-danger,
+  .ps-btn-outline-warning,
+  .ps-btn-outline-success {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2
+           text-sm font-medium transition-colors select-none
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2
+           disabled:opacity-50 disabled:pointer-events-none;
+    --tw-ring-color: var(--ps-brand);
+    --tw-ring-offset-color: var(--ps-bg);
+    min-height: 2.25rem;
+  }
+  .ps-btn-primary   { color: #fff; background-color: var(--ps-brand); }
+  .ps-btn-primary:hover   { background-color: color-mix(in srgb, var(--ps-brand) 85%, black); }
+  .ps-btn-secondary { background-color: var(--ps-surface-2); color: var(--ps-text); border: 1px solid var(--ps-border); }
+  .ps-btn-secondary:hover { background-color: var(--ps-border); }
+  .ps-btn-danger    { color: #fff; background-color: var(--ps-expense); }
+  .ps-btn-danger:hover    { background-color: color-mix(in srgb, var(--ps-expense) 85%, black); }
+  .ps-btn-warning   { color: #fff; background-color: var(--ps-warning); }
+  .ps-btn-warning:hover   { background-color: color-mix(in srgb, var(--ps-warning) 85%, black); }
+  .ps-btn-success   { color: #fff; background-color: var(--ps-income); }
+  .ps-btn-success:hover   { background-color: color-mix(in srgb, var(--ps-income) 85%, black); }
+  .ps-btn-info      { color: #fff; background-color: var(--ps-info); }
+  .ps-btn-info:hover      { background-color: color-mix(in srgb, var(--ps-info) 85%, black); }
+  .ps-btn-light     { background-color: var(--ps-surface); color: var(--ps-text); border: 1px solid var(--ps-border); }
+  .ps-btn-light:hover     { background-color: var(--ps-surface-2); }
+
+  .ps-btn-outline-primary,
+  .ps-btn-outline-secondary,
+  .ps-btn-outline-danger,
+  .ps-btn-outline-warning,
+  .ps-btn-outline-success {
+    border-width: 1px;
+    border-style: solid;
+    background-color: transparent;
+  }
+  .ps-btn-outline-primary   { color: var(--ps-brand); border-color: var(--ps-brand); }
+  .ps-btn-outline-primary:hover   { background-color: color-mix(in srgb, var(--ps-brand) 10%, transparent); }
+  .ps-btn-outline-secondary { color: var(--ps-text); border-color: var(--ps-border); }
+  .ps-btn-outline-secondary:hover { background-color: var(--ps-surface-2); }
+  .ps-btn-outline-danger    { color: var(--ps-expense); border-color: var(--ps-expense); }
+  .ps-btn-outline-danger:hover    { background-color: color-mix(in srgb, var(--ps-expense) 10%, transparent); }
+  .ps-btn-outline-warning   { color: var(--ps-warning); border-color: var(--ps-warning); }
+  .ps-btn-outline-warning:hover   { background-color: color-mix(in srgb, var(--ps-warning) 10%, transparent); }
+  .ps-btn-outline-success   { color: var(--ps-income); border-color: var(--ps-income); }
+  .ps-btn-outline-success:hover   { background-color: color-mix(in srgb, var(--ps-income) 10%, transparent); }
+
+  .ps-btn-link {
+    @apply inline-flex items-center gap-2 text-sm font-medium underline-offset-2
+           hover:underline focus-visible:outline-none focus-visible:ring-2
+           disabled:opacity-50 disabled:pointer-events-none;
+    --tw-ring-color: var(--ps-brand);
+    color: var(--ps-brand);
+    background-color: transparent;
+    min-height: 0;
+    padding: 0;
+  }
+
+  /* Il target touch da 44px vale SU MOBILE, come dice la tabella §1.3 della
+     fase-1. Applicarlo anche su desktop cambierebbe la densita' delle tabelle:
+     /movements ha tre .ps-btn-sm per riga su decine di righe, e una riga alta
+     44px invece di ~31px e' un cambiamento visibile che nessuno ha chiesto. */
+  .ps-btn-sm { @apply text-xs px-3 py-1.5; }
+  @media (max-width: 767.98px) {
+    .ps-btn-sm { min-height: 2.75rem; }
+  }
+  .ps-btn-lg { @apply text-base px-5 py-3; min-height: 3rem; }
+
+  /* La X di modal/alert: stessa icona SVG di Bootstrap, stesso comportamento
+     (opacità .5 → .75 in hover), per restare visivamente identica. */
+  .ps-btn-close {
+    @apply inline-block h-4 w-4 rounded-md opacity-50 transition-opacity
+           hover:opacity-75 focus-visible:outline-none focus-visible:ring-2;
+    --tw-ring-color: var(--ps-brand);
+    background: transparent
+      url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23000'%3e%3cpath d='M.293.293a1 1 0 0 1 1.414 0L8 6.586 14.293.293a1 1 0 1 1 1.414 1.414L9.414 8l6.293 6.293a1 1 0 0 1-1.414 1.414L8 9.414l-6.293 6.293a1 1 0 0 1-1.414-1.414L6.586 8 .293 1.707a1 1 0 0 1 0-1.414z'/%3e%3c/svg%3e")
+      center / 1em auto no-repeat;
+  }
+  .ps-btn-close-light {
+    filter: invert(1) grayscale(100%) brightness(200%);
+  }
+
+  /* ---- Form ------------------------------------------------------------ */
+  .ps-field { @apply mb-3; }
+  .ps-label { @apply mb-1 block text-sm font-medium; color: var(--ps-text); }
+  .ps-input,
+  .ps-select {
+    @apply w-full rounded-lg border px-3 py-2 text-sm transition-colors
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-0
+           disabled:opacity-60 disabled:cursor-not-allowed;
+    background-color: var(--ps-surface);
+    border-color: var(--ps-border);
+    color: var(--ps-text);
+    --tw-ring-color: var(--ps-brand);
+    min-height: 2.5rem;
+  }
+  .ps-input::placeholder,
+  .ps-select::placeholder { color: var(--ps-text-muted); }
+  .ps-input-sm { @apply text-xs px-2 py-1.5; min-height: 2rem; }
+  .ps-select { padding-right: 2rem; }
+  .ps-input-group { @apply flex w-full; }
+  .ps-input-group > .ps-input { @apply rounded-none first:rounded-l-lg last:rounded-r-lg; }
+  .ps-input-group > .ps-btn,
+  .ps-input-group > .ps-btn-outline-primary,
+  .ps-input-group > .ps-btn-outline-secondary {
+    @apply rounded-none first:rounded-l-lg last:rounded-r-lg;
+  }
+
+  /* ---- Tabella ----------------------------------------------------------
+     `table` + `table-striped` + `table-hover` sono sempre insieme nel
+     markup reale (fase-1.md §1.3): un'unica classe copre il pattern.
+  */
+  .ps-table {
+    @apply w-full text-sm border-collapse;
+    color: var(--ps-text);
+  }
+  .ps-table thead th {
+    @apply px-3 py-2 text-left font-semibold border-b;
+    background-color: var(--ps-surface-2);
+    border-color: var(--ps-border);
+  }
+  .ps-table tbody td {
+    @apply px-3 py-2 border-b align-middle;
+    border-color: var(--ps-border);
+  }
+  .ps-table tbody tr:nth-child(odd) {
+    background-color: color-mix(in srgb, var(--ps-surface-2) 45%, transparent);
+  }
+  .ps-table tbody tr:hover {
+    background-color: var(--ps-surface-2);
+  }
+  .ps-table-bordered td,
+  .ps-table-bordered th {
+    @apply border;
+    border-color: var(--ps-border);
+  }
+
+  /* ---- Modal: <dialog> nativo (attività 1.4) ---------------------------
+     Backdrop, focus trap, Esc e aria-modal arrivano dal browser via
+     showModal(). .ps-modal e' il <dialog> (catch-all a tutta viewport per
+     intercettare il click sul backdrop); .ps-modal-panel e' il riquadro
+     visibile vero e proprio.
+  */
+  /* ATTENZIONE: il display va messo SOLO su [open].
+     Il browser dà a un <dialog> chiuso `display: none`. Applicare `flex` qui
+     lo sovrascrive, e il dialog resta steso su tutta la viewport anche da
+     chiuso: invisibile (il pannello è opacity-0) ma intercetta OGNI click
+     della pagina. È un blocco totale dell'interfaccia che non si vede. */
+  .ps-modal {
+    @apply fixed inset-0 m-0 max-h-none max-w-none items-center
+           justify-center border-0 bg-transparent p-4;
+    display: none;
+    width: 100vw;
+    height: 100vh;
+  }
+  .ps-modal[open] {
+    display: flex;
+  }
+  .ps-modal::backdrop {
+    background: var(--ps-backdrop);
+  }
+  /* Il box (sfondo/bordo/ombra) è condiviso con .ps-card più sopra; qui solo
+     le differenze: dimensione, centratura e transizione di apertura. */
+  .ps-modal-panel {
+    @apply w-full max-w-lg opacity-0 scale-95 transition-all duration-150;
+  }
+  .ps-modal[open] .ps-modal-panel {
+    @apply opacity-100 scale-100;
+  }
+  .ps-modal-header {
+    @apply flex items-center justify-between gap-3;
+  }
+  .ps-modal-footer {
+    @apply flex items-center justify-end gap-2;
+  }
+
+  /* ---- Alert ------------------------------------------------------------ */
+  .ps-alert {
+    @apply rounded-lg border px-4 py-3 text-sm;
+  }
+  .ps-alert-success { background-color: color-mix(in srgb, var(--ps-income) 12%, var(--ps-surface)); border-color: var(--ps-income); color: var(--ps-income); }
+  .ps-alert-danger  { background-color: color-mix(in srgb, var(--ps-expense) 12%, var(--ps-surface)); border-color: var(--ps-expense); color: var(--ps-expense); }
+  .ps-alert-info    { background-color: color-mix(in srgb, var(--ps-info) 12%, var(--ps-surface)); border-color: var(--ps-info); color: var(--ps-info); }
+  .ps-alert-warning { background-color: color-mix(in srgb, var(--ps-warning) 12%, var(--ps-surface)); border-color: var(--ps-warning); color: var(--ps-warning); }
+  .ps-alert-dismissible { @apply relative pr-10; }
+  .ps-alert-dismissible .ps-btn-close { @apply absolute right-3 top-3; }
+
+  /* ---- Classi di STATO, nomi letterali (fase-1.md §1.3: "fade / show /
+     collapse → gestite da ps-ui.js: non sono stile, sono stato") -----------
+     Il JS di pagina non viene riscritto e in alcuni punti (ps-show-mov.html,
+     più ogni showAlert() non ancora migrata) legge o scrive letteralmente
+     `.show`/`.fade`/`.collapse`. Queste classi restano con questi nomi
+     anche nel markup Tailwind: qui si definisce solo la LORO CSS, non si
+     rinominano.
+  */
+  .fade { @apply transition-opacity duration-150; opacity: 0; }
+  .fade.show { opacity: 1; }
+
+  .collapse:not(.show) { display: none; }
+  .collapsing {
+    @apply overflow-hidden transition-[height] duration-200 ease-in-out;
+    display: block;
+  }
+
+  /* ---- Badge -------------------------------------------------------------
+     Mai bg-* in chiaro: solo ruoli, per togliere di mezzo il rischio R1 nei
+     punti dove il JS concatena il nome della classe.
+  */
+  .ps-badge,
+  .ps-badge-income,
+  .ps-badge-expense,
+  .ps-badge-brand,
+  .ps-badge-neutral,
+  .ps-balance-positive,
+  .ps-balance-negative {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold;
+  }
+  .ps-badge-income  { background-color: color-mix(in srgb, var(--ps-income) 15%, transparent); color: var(--ps-income); }
+  .ps-badge-expense { background-color: color-mix(in srgb, var(--ps-expense) 15%, transparent); color: var(--ps-expense); }
+  .ps-badge-brand   { color: #fff; background-color: var(--ps-brand); }
+  .ps-badge-neutral { background-color: var(--ps-surface-2); color: var(--ps-text-muted); }
+
+  /* Bilancio ≥0 / <0 (bg-info / bg-warning su ps-show-mov.html:110) */
+  .ps-balance-positive { color: #fff; background-color: var(--ps-info); }
+  .ps-balance-negative { color: #fff; background-color: var(--ps-warning); }
+
+  /* ---- Spinner ----------------------------------------------------------- */
+  .ps-spinner {
+    @apply inline-block h-8 w-8 animate-spin rounded-full border-4 align-[-0.125em];
+    border-color: var(--ps-border);
+    border-right-color: var(--ps-brand);
+  }
+  .ps-spinner-sm {
+    @apply h-4 w-4 border-2;
+  }
+
+  /* ---- Progress bar ------------------------------------------------------- */
+  .ps-progress {
+    @apply h-4 w-full overflow-hidden rounded-full;
+    background-color: var(--ps-surface-2);
+  }
+  .ps-progress-bar {
+    @apply h-full text-center text-xs text-white transition-[width];
+    background-color: var(--ps-brand);
+  }
+  .ps-progress-striped {
+    background-image: linear-gradient(
+      45deg,
+      rgb(255 255 255 / 0.15) 25%, transparent 25%,
+      transparent 50%, rgb(255 255 255 / 0.15) 50%,
+      rgb(255 255 255 / 0.15) 75%, transparent 75%, transparent
+    );
+    background-size: 1rem 1rem;
+  }
+  .ps-progress-animated {
+    animation: ps-progress-stripes 1s linear infinite;
+  }
+  @keyframes ps-progress-stripes {
+    from { background-position: 1rem 0; }
+    to   { background-position: 0 0; }
+  }
+
+  /* ---- List group ---------------------------------------------------------- */
+  .ps-list { @apply rounded-lg border; border-color: var(--ps-border); }
+  .ps-list-flush { @apply border-0 rounded-none; }
+  .ps-list-item {
+    @apply flex items-center justify-between gap-2 px-4 py-3 border-b text-sm;
+    border-color: var(--ps-border);
+  }
+  .ps-list-item:last-child { @apply border-b-0; }
+
+  /* ---- Tab --------------------------------------------------------------- */
+  .ps-tabs {
+    @apply flex gap-1 border-b;
+    border-color: var(--ps-border);
+  }
+  .ps-tab { @apply -mb-px; }
+  .ps-tab-btn {
+    @apply inline-flex items-center gap-2 rounded-t-lg border border-transparent
+           px-4 py-2 text-sm font-medium transition-colors;
+    color: var(--ps-text-muted);
+  }
+  .ps-tab-btn:hover { color: var(--ps-text); }
+  .ps-tab-btn.active,
+  .ps-tab-btn[aria-selected="true"] {
+    color: var(--ps-brand);
+    border-color: var(--ps-border);
+    border-bottom-color: var(--ps-surface);
+    background-color: var(--ps-surface);
+  }
+  .ps-tabpanels { @apply pt-4; }
+  .ps-tabpanel { @apply hidden; }
+  .ps-tabpanel.active { @apply block; }
+
+  /* ---- Paginazione --------------------------------------------------------- */
+  .ps-pagination { @apply flex items-center gap-1 text-sm; }
+  .ps-page-item { @apply list-none; }
+  .ps-page-link {
+    @apply inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg
+           border px-3 py-1.5 transition-colors;
+    border-color: var(--ps-border);
+    color: var(--ps-text);
+  }
+  .ps-page-link:hover { background-color: var(--ps-surface-2); }
+  .ps-page-item.active .ps-page-link {
+    background-color: var(--ps-brand);
+    border-color: var(--ps-brand);
+    color: #fff;
+  }
+  .ps-page-item.disabled .ps-page-link {
+    @apply pointer-events-none opacity-50;
+  }
+
+  /* ---- Drawer sidebar (off-canvas, Fase 2) ----------------------------------
+     Non ancora collegato a nessuna pagina: la shell che lo usa è ps-nav-tw.html
+     (Fase 2). Qui vive solo il componente, dimostrato in _styleguide.html.
+  */
+  .ps-drawer-backdrop {
+    @apply fixed inset-0 z-40 opacity-0 pointer-events-none transition-opacity duration-200;
+    background: var(--ps-backdrop);
+  }
+  .ps-drawer-backdrop.ps-drawer-open {
+    @apply opacity-100 pointer-events-auto;
+  }
+  .ps-drawer {
+    @apply fixed inset-y-0 left-0 z-50 w-72 -translate-x-full transition-transform
+           duration-200 ease-out;
+    background-color: var(--ps-surface);
+    border-right: 1px solid var(--ps-border);
+  }
+  .ps-drawer.ps-drawer-open {
+    @apply translate-x-0;
+  }
+  /* Scroll-lock del body sotto il drawer aperto (A2.7, fase-2.md). Il drawer
+     NON è un <dialog> (niente top-layer nativo come il modal): senza questo
+     lo sfondo scrollerebbe comunque dietro il backdrop. */
+  body.ps-drawer-locked {
+    overflow: hidden;
+  }
+
+  /* ---- Nav link della shell (Fase 2, ps-nav-tw.html) ------------------------
+     Shell AdminLTE "non si traduce, si riscrive" (fase-1.md §1.3): qui vive
+     lo stile unico condiviso da voci di primo livello e sottomenu dei due
+     treeview (Dashboard, Impostazioni).
+  */
+  .ps-nav-link {
+    @apply flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors;
+    color: var(--ps-text-muted);
+  }
+  .ps-nav-link:hover {
+    background-color: var(--ps-surface-2);
+    color: var(--ps-text);
+  }
+  .ps-nav-link-danger {
+    color: var(--ps-expense);
+  }
+  .ps-nav-link-danger:hover {
+    background-color: color-mix(in srgb, var(--ps-expense) 10%, transparent);
+    color: var(--ps-expense);
+  }
+}

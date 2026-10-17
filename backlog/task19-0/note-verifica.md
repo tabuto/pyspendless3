@@ -127,9 +127,14 @@ aggiunto durante la conversione faceva fallire il confronto. E un commento che
 **cita** l'anti-pattern R1 fa scattare la sonda del contratto, che legge il
 testo grezzo. Regola: nei commenti non si scrive l'anti-pattern per esteso.
 
-**`_styleguide.html` comparirà fra i file "con Bootstrap" in Fase 9**, perché
-contiene `new bootstrap.Modal(...)` — ed è giusto che lo contenga: serve a
-provare lo shim. Va prevista un'eccezione nel controllo `PS_FASE9=1`.
+**Alcuni file migrati compaiono fra quelli "con Bootstrap"** perché chiamano
+`new bootstrap.Modal(...)`: è lo **shim** di `ps-ui.js`, non il framework. Al
+2026-10-17 sono `_styleguide.html` (lo prova apposta) e `ps-recurrent-mov.html`
+(il modal di conferma). Il controllo `PS_FASE9=1` cerca la stringa `bootstrap`
+nel testo grezzo e li segnalerebbe come residui: in Fase 9 va distinto il
+**riferimento al framework** (CSS, CDN, classi) dalla **chiamata all'API
+shimmata**. `tools/check-page-migration.py` lo fa già, con un lookahead che
+esclude `bootstrap.Modal` / `.Tab` / `.Collapse`: conviene allineare il test.
 
 ## Aggiunte dopo la Fase 4
 

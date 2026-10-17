@@ -31,7 +31,7 @@ sys.path.insert(0, _ROOT)
 import logging  # noqa: E402
 logging.disable(logging.INFO)
 
-NUOVO_DEFAULT = "_shell-probe.html"
+NUOVO_DEFAULT = "ps-home.html"   # era _shell-probe.html, cancellata a fine Fase 3
 
 
 def _blocco_navigation(html):

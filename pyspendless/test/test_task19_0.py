@@ -91,6 +91,13 @@ CONTRACT = {
             "/settings/group", "/settings/import-export",
         ],
     },
+    # Copribile dalla Fase 3 in poi: vedi la nota in _fake_login sul perche'
+    # questa rotta sembrava irraggiungibile.
+    "/onboarding": {
+        "fase": 3,
+        "ids": ["account_name", "wallet_name"],
+        "form_fields": ["account_name", "wallet_name"],
+    },
     "/create": {
         "fase": 4,
         "ids": [
@@ -326,6 +333,13 @@ def _fake_login(client):
         sess["account_id"] = user["account_id"]
         sess["user_email"] = user["email"]
         sess["user_name"] = user["name"]
+        # /onboarding NON redirige perche' l'utente ha gia' un account, come si
+        # era supposto in Fase 0: redirige perche' manca `oauth_user_info`
+        # (app.py:338). E' l'unica rotta che legge questa chiave, quindi
+        # aggiungerla qui non cambia il comportamento di nessun'altra.
+        sess["oauth_user_info"] = {
+            "name": user["name"], "email": user["email"],
+        }
     return user
 
 
@@ -503,9 +517,6 @@ class IgieneTemplate(unittest.TestCase):
             "ps-setting-categories.html", "ps-setting-wallet.html",
             "ps-setting-admin.html", "ps-setting-import-export.html",
             "ps-recurrent-mov.html", "ps-add-mov.html",
-            # entra in whitelist con il pattern Jinja: ps-onboarding.html:17
-            # costruisce `alert-{{ category }}`
-            "ps-onboarding.html",
             "ps-dashboard-monthly.html", "ps-dashboard-yearly.html",
             "ps-reports.html",
             # template morti

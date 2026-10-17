@@ -57,21 +57,35 @@ COPERTE_DA_PATTERN = [
 ]
 
 
+def _gia_migrato(testo):
+    """Un template che estende una shell `-tw` e' gia' convertito: le sue
+    classi sono la DESTINAZIONE, non la sorgente. Cercarle in tabella non ha
+    senso e produrrebbe falsi 'non coperte' su ogni utility Tailwind."""
+    m = re.search(r"\{%\s*extends\s+['\"]([^'\"]+)['\"]", testo)
+    return bool(m and m.group(1).endswith("-tw.html"))
+
+
 def classi_nei_template():
     cnt = Counter()
     dove = {}
+    saltati = []
     for nome in RENDERIZZATI:
         p = os.path.join(TPL, nome + ".html")
         if not os.path.exists(p):
             print(f"[attenzione] template assente: {nome}.html", file=sys.stderr)
             continue
         testo = open(p, encoding="utf-8").read()
+        if _gia_migrato(testo):
+            saltati.append(nome + ".html")
+            continue
         for m in re.finditer(r'class="([^"]*)"', testo):
             for c in m.group(1).split():
                 if "{" in c or "}" in c or NON_CLASSI.match(c):
                     continue
                 cnt[c] += 1
                 dove.setdefault(c, nome + ".html")
+    if saltati:
+        print(f"gia' migrati, esclusi dal confronto: {len(saltati)} -> {saltati}")
     return cnt, dove
 
 

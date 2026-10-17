@@ -94,3 +94,39 @@ provando a cliccare. Vale per qualunque overlay: modal, drawer, backdrop.
   scritta "PySpendless" isolata su ogni pagina. La shell nuova non la riproduce.
 - **MB-006**: ordinamento per data corretto con `data-order`, separatamente dal
   restyling. La Fase 6 deve conservare quell'attributo.
+
+## Aggiunte dopo la Fase 3
+
+**`isolation: worktree` nel frontmatter NON ha effetto.** Il RUNBOOK §4.1
+afferma che, stando nella definizione di `ps-markup`, «vale sempre e
+l'orchestratore non se ne deve ricordare». È falso: i quattro subagent della
+Fase 3 hanno scritto tutti nel checkout principale (`git worktree list` mostra
+solo quello). Nessun danno, perché i quattro file erano disgiunti — ma in Fase 5
+ci saranno cinque agenti e la stessa assunzione. **L'isolamento va passato
+esplicitamente all'invocazione.**
+
+**Un worktree non vedrebbe comunque il lavoro non committato.** Contiene solo i
+file **tracciati**: prima di usarne uno, il lavoro delle fasi precedenti deve
+essere committato, o gli agenti trovano `TemplateNotFound` sulle shell `-tw`.
+
+**`/onboarding` non redirige perché l'utente ha già un account** — come si era
+supposto in Fase 0. Redirige perché manca `session['oauth_user_info']`
+(`app.py:338`), che è l'**unica** chiave che quella rotta legge e che nessun
+altro endpoint usa. Iniettandola, la pagina è raggiungibile e testabile: ora è
+nel CONTRACT, e `build_cookie(extra=...)` la rende visitabile anche nel browser.
+
+**Il confine di parola morde anche negli strumenti.** `check-page-migration.py`
+cercava `\bcard-body\b` e combaciava **dentro** `ps-card-body`, segnalando come
+residuo Bootstrap la classe Tailwind che lo sostituisce. Stesso difetto di
+`\bid=` nel test. Ogni pattern su nomi di classe con trattini vuole un
+lookbehind `(?<![-\w])`.
+
+**Lo strumento non deve rompersi sui commenti.** La regex che rimuove i tag per
+confrontare il testo visibile non toglieva i commenti Jinja `{# #}`: un commento
+aggiunto durante la conversione faceva fallire il confronto. E un commento che
+**cita** l'anti-pattern R1 fa scattare la sonda del contratto, che legge il
+testo grezzo. Regola: nei commenti non si scrive l'anti-pattern per esteso.
+
+**`_styleguide.html` comparirà fra i file "con Bootstrap" in Fase 9**, perché
+contiene `new bootstrap.Modal(...)` — ed è giusto che lo contenga: serve a
+provare lo shim. Va prevista un'eccezione nel controllo `PS_FASE9=1`.

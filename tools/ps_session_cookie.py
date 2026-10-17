@@ -27,7 +27,7 @@ from pyspendless.conf import get_db_session  # noqa: E402
 from pyspendless.models import User  # noqa: E402
 
 
-def build_cookie():
+def build_cookie(extra=None):
     """Ritorna (nome_cookie, valore_firmato, dict_utente) per il primo utente."""
     db = get_db_session()
     try:
@@ -50,12 +50,16 @@ def build_cookie():
     if serializer is None:
         raise SystemExit("SECRET_KEY assente: impossibile firmare la sessione.")
 
-    value = serializer.dumps({
+    dati = {
         "user_id": user["id"],
         "account_id": user["account_id"],
         "user_email": user["email"],
         "user_name": user["name"],
-    })
+    }
+    # `extra` serve alle rotte che leggono altre chiavi di sessione: /onboarding
+    # richiede `oauth_user_info`, che e' l'unica ragione per cui redirige.
+    dati.update(extra or {})
+    value = serializer.dumps(dati)
     name = app.config.get("SESSION_COOKIE_NAME") or "session"
     return name, value, user
 

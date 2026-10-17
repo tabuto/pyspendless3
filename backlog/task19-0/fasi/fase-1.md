@@ -207,6 +207,19 @@ di colore Bootstrap vanno tradotte nel **ruolo**, non nella tinta.
 > rimuovendola il blocco si accorcia, ed è l'unico punto in cui la rimozione
 > si nota nel layout. È accettabile — quello spazio oggi è vuoto comunque.
 
+#### Classi custom dell'applicazione — non sono Bootstrap
+
+Tre classi sono definite in un `<style>` dentro `ps-show-mov.html` (righe
+288-302) e generate dal suo JS. Non hanno un equivalente Bootstrap: vanno
+portate in Tailwind in **Fase 6**, insieme alla pagina.
+
+| Classe | Dove | Cosa fa | Nota |
+|---|---|---|---|
+| `filters-toggle` (1) | `ps-show-mov.html:10`, stile a :290 | toglie l'aspetto "link" (blu/sottolineato) al toggle dei filtri | nata con MB-002 |
+| `filters-chevron` (1) | `ps-show-mov.html:22`, stile a :296 | la freccia che ruota: `.filters-toggle[aria-expanded="true"] .filters-chevron` | **la rotazione dipende da `aria-expanded`**: `ps-ui.js` deve continuare a impostarlo |
+| `no-results` (1) | generata dal JS, `ps-show-mov.html:509` | messaggio "Nessun risultato" della card-list | |
+| `footer` (1) | `ps-base.html:74` | appartiene alla shell, riscritta in Fase 2 | |
+
 #### Shell AdminLTE — non si traduce, si riscrive
 
 `app-wrapper`, `app-header`, `app-sidebar`, `app-main`, `app-content`,

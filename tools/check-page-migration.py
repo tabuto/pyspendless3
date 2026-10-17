@@ -35,19 +35,28 @@ TPL = os.path.join("pyspendless", "templates")
 # Residui che non devono sopravvivere alla conversione. `col-` e `d-` da soli
 # darebbero falsi positivi su attributi non-classe, quindi si ancora il match
 # all'interno di un attributo class.
+# ATTENZIONE al confine di parola. `\bcard-body\b` combacia ANCHE dentro
+# `ps-card-body`, perche' il trattino e' un carattere non-di-parola e `\b`
+# cade fra "ps-" e "card-body". E' lo stesso difetto che aveva `\bid=` nel
+# test di contratto, dove catturava i `data-*-id`. Serve un lookbehind che
+# escluda trattino e caratteri di parola.
+_P = r"(?<![-\w])"
+
 RESIDUI = [
     ("bootstrap",      re.compile(r"bootstrap", re.I)),
     ("adminlte",       re.compile(r"adminlte", re.I)),
-    ("btn btn-",       re.compile(r"\bbtn btn-")),
-    ("card-body",      re.compile(r"\bcard-body\b")),
-    ("card-header",    re.compile(r"\bcard-header\b")),
-    ("col-md-",        re.compile(r"\bcol-(sm|md|lg|xl)-\d")),
-    ("d-md-/d-none",   re.compile(r"\bd-(none|flex|grid|block)\b|\bd-(sm|md|lg)-")),
-    ("form-control",   re.compile(r"\bform-control\b")),
-    ("form-label",     re.compile(r"\bform-label\b")),
-    ("text-muted",     re.compile(r"\btext-muted\b")),
-    ("mb-/mt-/me-",    re.compile(r"\bme-\d|\bms-\d")),
-    ("icone FontAwesome", re.compile(r"\bfa[sbr]?\b|\bfa-[a-z0-9-]+")),
+    ("btn btn-",       re.compile(_P + r"btn btn-")),
+    ("card-body",      re.compile(_P + r"card-body\b")),
+    ("card-header",    re.compile(_P + r"card-header\b")),
+    ("card-title",     re.compile(_P + r"card-title\b")),
+    ("col-*-N",        re.compile(_P + r"col-(sm|md|lg|xl)-\d")),
+    ("d-* Bootstrap",  re.compile(_P + r"d-(none|flex|grid|block|inline)\b|" + _P + r"d-(sm|md|lg)-")),
+    ("form-control",   re.compile(_P + r"form-control\b")),
+    ("form-label",     re.compile(_P + r"form-label\b")),
+    ("form-text",      re.compile(_P + r"form-text\b")),
+    ("text-muted",     re.compile(_P + r"text-muted\b")),
+    ("me-/ms- logici", re.compile(_P + r"m[es]-\d\b")),
+    ("icone FontAwesome", re.compile(_P + r"fa[sbr]?\b|" + _P + r"fa-[a-z0-9-]+")),
 ]
 
 ID = re.compile(r'(?<![-\w])id=["\']([^"\']+)["\']')
@@ -56,7 +65,10 @@ URLFOR = re.compile(r"url_for\(\s*['\"]([^'\"]+)['\"]")
 JINJA_IF = re.compile(r"\{%-?\s*if\b")
 JINJA_FOR = re.compile(r"\{%-?\s*for\b")
 JINJA_VAR = re.compile(r"\{\{")
-TAG = re.compile(r"<[^>]+>|\{%[^%]*%\}|\{\{[^}]*\}\}|<!--.*?-->", re.S)
+# I commenti Jinja `{# ... #}` vanno rimossi come gli altri costrutti:
+# altrimenti le parole di un commento contano come testo visibile e un
+# commento aggiunto durante la conversione fa fallire il confronto.
+TAG = re.compile(r"<[^>]+>|\{#.*?#\}|\{%[^%]*%\}|\{\{[^}]*\}\}|<!--.*?-->", re.S)
 
 
 def da_git(ref, percorso):

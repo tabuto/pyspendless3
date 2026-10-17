@@ -149,9 +149,28 @@ un'altra directory mentre il browser continua a mostrare il checkout
 principale — verificherebbe codice che non ha scritto, e non se ne
 accorgerebbe.
 
-✅ **I subagent `ps-markup`, invece, sì.** `isolation: worktree` sta nel
-frontmatter della loro definizione, quindi vale sempre e l'orchestratore non
-se ne deve ricordare:
+⚠️ **I subagent `ps-markup`, invece, sì — ma l'isolamento va chiesto
+esplicitamente.**
+
+> **Correzione, verificata in Fase 3 (2026-10-17).** Questa sezione affermava
+> che, stando `isolation: worktree` nel frontmatter della definizione, «vale
+> sempre e l'orchestratore non se ne deve ricordare». **È falso.** I quattro
+> `ps-markup` della Fase 3 hanno scritto tutti nel checkout principale:
+> `git worktree list` mostrava solo quello. Non ci sono stati danni perché i
+> quattro file erano disgiunti, ma la garanzia su cui questa sezione si fonda
+> non esiste. **L'isolamento va passato all'invocazione**, agente per agente.
+>
+> Due conseguenze pratiche:
+>
+> 1. Se si usa davvero un worktree, il lavoro delle fasi precedenti deve essere
+>    **committato**: un worktree contiene solo i file **tracciati**, quindi un
+>    agente non vedrebbe `ps-base-tw.html`, `ps-tailwind.css`, `ps-ui.js` e si
+>    fermerebbe su `TemplateNotFound` senza capire perché.
+> 2. Se non lo si usa, va verificato a mano che i file assegnati ai subagent in
+>    parallelo siano **disgiunti**, e che l'agente principale non stia
+>    verificando nel browser mentre scrivono.
+
+Il frontmatter resta utile come documentazione dell'intento:
 
 ```yaml
 ---

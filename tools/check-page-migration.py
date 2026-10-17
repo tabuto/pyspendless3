@@ -43,7 +43,10 @@ TPL = os.path.join("pyspendless", "templates")
 _P = r"(?<![-\w])"
 
 RESIDUI = [
-    ("bootstrap",      re.compile(r"bootstrap", re.I)),
+    # `window.bootstrap.Modal` e' lo SHIM di ps-ui.js: il JS di pagina lo
+    # chiama ed e' autorizzato a restare. Qui si cercano i riferimenti al
+    # framework (CSS, CDN, classi), non all'API shimmata.
+    ("bootstrap", re.compile(r"bootstrap(?!\.Modal|\.Tab|\.Collapse)", re.I)),
     ("adminlte",       re.compile(r"adminlte", re.I)),
     ("btn btn-",       re.compile(_P + r"btn btn-")),
     ("card-body",      re.compile(_P + r"card-body\b")),
@@ -68,6 +71,12 @@ JINJA_VAR = re.compile(r"\{\{")
 # I commenti Jinja `{# ... #}` vanno rimossi come gli altri costrutti:
 # altrimenti le parole di un commento contano come testo visibile e un
 # commento aggiunto durante la conversione fa fallire il confronto.
+DATA_ATTR = re.compile(r'(data-[a-z0-9-]+)=["\']([^"\']*)["\']')
+SCRIPT = re.compile(r"<script\b[^>]*>(.*?)</script>", re.S)
+VALIDAZIONE = re.compile(
+    r"(?<![-\w])(required|min|max|step|maxlength|minlength|rows|pattern|type)"
+    r"(?:=[\"\'][^\"\']*[\"\'])?")
+
 TAG = re.compile(r"<[^>]+>|\{#.*?#\}|\{%[^%]*%\}|\{\{[^}]*\}\}|<!--.*?-->", re.S)
 
 
@@ -81,7 +90,11 @@ def da_git(ref, percorso):
 
 
 def testo_visibile(html):
-    senza = TAG.sub(" ", html)
+    # Il corpo degli <script> non e' testo visibile: lasciarlo dentro fa
+    # fallire il confronto ogni volta che cambia una stringa di classe nel JS,
+    # confondendo una modifica autorizzata con una perdita di contenuto.
+    senza = SCRIPT.sub(" ", html)
+    senza = TAG.sub(" ", senza)
     return [p for p in senza.split() if p.strip()]
 
 
@@ -145,6 +158,43 @@ def main():
                            ("{{ }}", JINJA_VAR)):
         n1, n2 = len(pat.findall(prima)), len(pat.findall(dopo))
         check(f"stesso numero di {etichetta}", n1 == n2, f"prima {n1}, dopo {n2}")
+
+    # --- data-* letti dal JS ---
+    # In Fase 4 sono contratto quanto gli id: `filterCategories()` legge
+    # data-type sulle <option>, e il listener su #recurrent_template legge
+    # data-movement-type / -category-id / -wallet-id / -amount / -note per
+    # precompilare il form. Se uno sparisce, la precompilazione smette di
+    # funzionare in silenzio.
+    d1 = Counter(n for n, _ in DATA_ATTR.findall(prima))
+    d2 = Counter(n for n, _ in DATA_ATTR.findall(dopo))
+    persi_d = sorted((d1 - d2).elements())
+    check("tutti i data-* preservati", not persi_d, f"spariti: {persi_d}")
+
+    # --- attributi di validazione ---
+    v1, v2 = Counter(VALIDAZIONE.findall(prima)), Counter(VALIDAZIONE.findall(dopo))
+    persi_v = sorted((v1 - v2).elements())
+    check("attributi di validazione preservati", not persi_v,
+          f"spariti: {persi_v}")
+
+    # --- il blocco <script> non si tocca ---
+    # E' il criterio piu' importante delle fasi con JS di pagina: se lo script
+    # cambia, la conversione ha sconfinato dalla presentazione al comportamento.
+    sc1, sc2 = SCRIPT.findall(prima), SCRIPT.findall(dopo)
+    if sc1 or sc2:
+        uguale = sc1 == sc2
+        dettaglio = ""
+        if not uguale:
+            import difflib
+            # NB: non chiamarle `a`/`b`: `a` e' il namespace di argparse,
+            # e oscurarlo fa esplodere il check() successivo su a.verbose.
+            righe_prima = "\n".join(sc1).splitlines()
+            righe_dopo = "\n".join(sc2).splitlines()
+            diff = [r for r in difflib.unified_diff(
+                        righe_prima, righe_dopo, lineterm="", n=0)
+                    if r and r[0] in "+-" and not r.startswith(("---", "+++"))]
+            dettaglio = (f"{len(diff)} righe cambiate:\n         "
+                         + "\n         ".join(diff[:14]))
+        check("il blocco <script> e' identico", uguale, dettaglio)
 
     # --- testo visibile ---
     t1, t2 = testo_visibile(prima), testo_visibile(dopo)

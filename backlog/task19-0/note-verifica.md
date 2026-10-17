@@ -130,3 +130,37 @@ testo grezzo. Regola: nei commenti non si scrive l'anti-pattern per esteso.
 **`_styleguide.html` comparirà fra i file "con Bootstrap" in Fase 9**, perché
 contiene `new bootstrap.Modal(...)` — ed è giusto che lo contenga: serve a
 provare lo shim. Va prevista un'eccezione nel controllo `PS_FASE9=1`.
+
+## Aggiunte dopo la Fase 4
+
+**Le scritture si verificano senza scrivere.** `/create` e le ricorrenti
+salvano via `fetch`. Intercettando la chiamata con `page.route(...)` e
+rispondendo un 200 finto si esercita **tutto** il percorso client — alert,
+reset del form, redirect a 1s — senza toccare il DB. Il conteggio dei movimenti
+prima e dopo la prova è parte della verifica: 8210 → 8210.
+
+**`showAlert()` è il punto in cui "non toccare il JS" si rompe.** Il JS di
+pagina genera classi del vecchio framework (`alert alert-${type}`,
+`btn-close`): dopo la conversione del CSS quelle classi non hanno più stile, e
+l'alert di esito comparirebbe **senza sfondo né bordo**. L'istruzione "il
+blocco `<script>` non si tocca" va quindi letta come "non si tocca la LOGICA":
+le stringhe di classe dentro il JS sono markup travestito e vanno convertite.
+`ps-component` l'ha segnalato invece di decidere da solo — comportamento
+corretto.
+
+**Il dismiss dei modal passa da `data-bs-dismiss`, non da `dialog.close()`.**
+Chiamare `close()` direttamente funziona ma scavalca `ps-ui.js`: niente
+`hidden.bs.modal` e niente ritorno del focus al trigger, che la Fase 1 aveva
+verificato. Lo shim resta in sincrono solo se la chiusura passa da lui.
+
+**A4.15 dipende da MB-004.** `applyLastUsedWallet()` esce subito se l'utente ha
+un wallet preferito: la scelta esplicita batte l'euristica dell'ultimo usato.
+Tutti gli utenti del DB di sviluppo ne hanno uno, quindi il ramo con
+`localStorage` si prova solo spegnendo `hasPreferredWallet` nell'HTML reso.
+Un test che lo ignora produce un falso fallimento.
+
+**Due difetti miei negli strumenti, trovati usandoli.** Il corpo degli
+`<script>` contava come "testo visibile", quindi ogni stringa di classe
+cambiata nel JS faceva fallire il confronto; e nel codice del diff avevo
+chiamato `a` sia il namespace di argparse sia una lista, facendo esplodere il
+controllo successivo. Gli strumenti di verifica vanno verificati.

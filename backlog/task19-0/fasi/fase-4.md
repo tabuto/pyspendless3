@@ -71,7 +71,7 @@ conversione ha sconfinato.
 | A4.12 | **Ripeti**: `?repeat_from=` precompila con data odierna, mostra l'alert informativo, dopo il salvataggio redirige a `/movements` dopo 1s |
 | A4.13 | Il selettore spesa ricorrente precompila tipo, categoria, wallet, importo, nota — **e non tocca la data** |
 | A4.14 | Cambiando "Tipo Movimento" le categorie si filtrano per tipo |
-| A4.15 | `ps_last_wallet_id`: il wallet dell'ultimo salvataggio è preselezionato alla creazione successiva |
+| A4.15 | `ps_last_wallet_id`: il wallet dell'ultimo salvataggio è preselezionato alla creazione successiva — **ma solo se l'utente non ha un wallet preferito**: `applyLastUsedWallet()` esce subito quando `hasPreferredWallet` è vero, perché MB-004 ha stabilito che una scelta esplicita batte l'euristica. Sul DB di sviluppo tutti gli utenti hanno `preferred_wallet_id`, quindi il ramo con localStorage va provato spegnendo quel flag nell'HTML reso |
 | A4.16 | L'alert di esito entra nella viewport (scroll automatico) e non sparisce mentre ha il focus |
 | A4.17 | Ricorrenti: crea, modifica, annulla, elimina con modal di conferma |
 | A4.18 | Entrambe le pagine senza overflow a 375 px, in light e dark |

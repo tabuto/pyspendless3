@@ -1,4 +1,4 @@
-{% extends 'ps-nav.html' %}
+{% extends 'ps-nav-tw.html' %}
 
 {% block nav_content %}
 {# `src` è il movimento che fornisce i valori del form:
@@ -7,23 +7,23 @@
    In creazione da zero entrambi sono None e il form resta vuoto.
    Il set è dentro al block: le variabili definite fuori non sarebbero visibili qui. #}
 {% set src = movement or repeat_source %}
-<div class="container mt-4">
-  <div class="row justify-content-center">
-    <div class="col-md-8">
+<div class="mx-auto max-w-7xl px-4 mt-4">
+  <div class="grid grid-cols-12 gap-4">
+    <div class="col-span-12 md:col-span-8 md:col-start-3">
       <!-- Alert container per messaggi di successo/errore -->
       <div id="alert-container" aria-live="polite" aria-atomic="true"></div>
 
       {% if repeat_source %}
-      <div class="alert alert-info" role="alert">
+      <div class="ps-alert ps-alert-info" role="alert">
         <i class="bi bi-arrow-repeat"></i>
         Stai ripetendo il movimento del {{ repeat_source.move_date.strftime('%d/%m/%Y') }}:
         la data è stata impostata a oggi, gli altri campi sono modificabili prima di salvare.
       </div>
       {% endif %}
 
-      <div class="card card-primary">
-        <div class="card-header">
-          <h3 class="card-title">
+      <div class="ps-card ps-card-accent">
+        <div class="ps-card-header">
+          <h3 class="ps-card-title">
             {% if movement %}Modifica Movimento{% elif repeat_source %}Ripeti Movimento{% else %}Nuovo Movimento{% endif %}
           </h3>
         </div>
@@ -31,11 +31,11 @@
           <input type="hidden" id="movement_id" name="movement_id" value="{% if movement %}{{ movement.id }}{% endif %}">
           <input type="hidden" id="is_repeat" value="{% if repeat_source %}1{% endif %}">
           <input type="hidden" id="recurrent_movement_id" value="{% if repeat_source and repeat_source.recurrent_movement_id %}{{ repeat_source.recurrent_movement_id }}{% endif %}">
-          <div class="card-body">
+          <div class="ps-card-body">
             {% if not movement %}
             <div class="mb-3" id="recurrent-template-block">
-              <label for="recurrent_template" class="form-label">Spesa Ricorrente</label>
-              <select class="form-select" id="recurrent_template" name="recurrent_template">
+              <label for="recurrent_template" class="ps-label">Spesa Ricorrente</label>
+              <select class="ps-select" id="recurrent_template" name="recurrent_template">
                 <option value="">— Seleziona spesa ricorrente (opzionale) —</option>
                 {% for rt in recurrent_movements %}
                   <option value="{{ rt.id }}"
@@ -52,20 +52,20 @@
             </div>
             {% endif %}
             <div class="mb-3">
-              <label for="move_date" class="form-label">Data</label>
-              <input type="date" class="form-control" id="move_date" name="move_date"
+              <label for="move_date" class="ps-label">Data</label>
+              <input type="date" class="ps-input" id="move_date" name="move_date"
                      value="{% if movement %}{{ movement.move_date.strftime('%Y-%m-%d') }}{% elif repeat_source %}{{ today.strftime('%Y-%m-%d') }}{% endif %}" required>
             </div>
             <div class="mb-3">
-              <label for="movement_type" class="form-label">Tipo Movimento</label>
-              <select class="form-select" id="movement_type" name="movement_type" required>
+              <label for="movement_type" class="ps-label">Tipo Movimento</label>
+              <select class="ps-select" id="movement_type" name="movement_type" required>
                 <option value="expense" {% if src and src.expense %}selected{% endif %}>Uscita</option>
                 <option value="income" {% if src and src.income %}selected{% endif %}>Entrata</option>
               </select>
             </div>
             <div class="mb-3">
-              <label for="category" class="form-label">Categoria</label>
-              <select class="form-select" id="category" name="category" required>
+              <label for="category" class="ps-label">Categoria</label>
+              <select class="ps-select" id="category" name="category" required>
                 <option value="">Seleziona una categoria</option>
                 {% for cat in categories %}
                   <option value="{{ cat.id }}" data-type="{{ cat.type }}"
@@ -76,8 +76,8 @@
               </select>
             </div>
             <div class="mb-3">
-              <label for="wallet" class="form-label">Wallet</label>
-              <select class="form-select" id="wallet" name="wallet" required>
+              <label for="wallet" class="ps-label">Wallet</label>
+              <select class="ps-select" id="wallet" name="wallet" required>
                 {% for wal in wallets %}
                   {# In modifica/ripeti vince il wallet del movimento sorgente;
                      altrimenti si propone il wallet preferito dell'account (MB-004) #}
@@ -90,18 +90,18 @@
               </select>
             </div>
             <div class="mb-3">
-              <label for="amount" class="form-label">Importo (€)</label>
-              <input type="number" step="0.01" class="form-control" id="amount" name="amount"
+              <label for="amount" class="ps-label">Importo (€)</label>
+              <input type="number" step="0.01" class="ps-input" id="amount" name="amount"
                      value="{% if src %}{{ src.income or src.expense }}{% endif %}"
                      required min="0.01">
             </div>
             <div class="mb-3">
-              <label for="note" class="form-label">Nota</label>
-              <textarea class="form-control" id="note" name="note" rows="2">{% if src %}{{ src.note or '' }}{% endif %}</textarea>
+              <label for="note" class="ps-label">Nota</label>
+              <textarea class="ps-input" id="note" name="note" rows="2">{% if src %}{{ src.note or '' }}{% endif %}</textarea>
             </div>
           </div>
-          <div class="card-footer text-end">
-            <button type="submit" class="btn btn-primary" id="submit-btn">Salva Movimento</button>
+          <div class="ps-card-footer text-right">
+            <button type="submit" class="ps-btn ps-btn-primary" id="submit-btn">Salva Movimento</button>
           </div>
         </form>
       </div>
@@ -301,13 +301,16 @@ document.addEventListener('DOMContentLoaded', function() {
     const AUTO_HIDE_MS = 5000;
 
     const alert = document.createElement('div');
-    alert.className = `alert alert-${type} alert-dismissible fade show`;
+    // Le classi del vecchio framework non hanno piu' uno stile: senza questa riga l'alert
+    // di esito comparirebbe senza sfondo ne' bordo. `fade`/`show` restano coi
+    // loro nomi letterali perche' sono STATO, non stile (ps-tailwind.src.css).
+    alert.className = `ps-alert ps-alert-${type} ps-alert-dismissible fade show`;
     alert.role = 'alert';
     // Focalizzabile da script ma non raggiungibile con Tab
     alert.tabIndex = -1;
     alert.innerHTML = `
       ${message}
-      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      <button type="button" class="ps-btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     `;
 
     alertContainer.innerHTML = '';

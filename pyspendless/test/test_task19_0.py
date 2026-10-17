@@ -516,7 +516,6 @@ class IgieneTemplate(unittest.TestCase):
             "ps-show-mov.html", "ps-search-mov.html", "ps-setting-group.html",
             "ps-setting-categories.html", "ps-setting-wallet.html",
             "ps-setting-admin.html", "ps-setting-import-export.html",
-            "ps-recurrent-mov.html", "ps-add-mov.html",
             "ps-dashboard-monthly.html", "ps-dashboard-yearly.html",
             "ps-reports.html",
             # template morti

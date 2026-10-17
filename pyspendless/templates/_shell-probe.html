@@ -1,0 +1,31 @@
+{% extends 'ps-nav-tw.html' %}
+
+{#
+  pyspendless/templates/_shell-probe.html
+  ============================================================================
+  Task 19-0 (Fase 2) — Pagina di prova, NON instradata (prefisso underscore,
+  come _styleguide.html: nessuna route in app.py, il gate sul diff non la
+  vieta di toccare perché non esiste ancora). Esiste solo per far girare i
+  criteri A2.3/A2.4/A2.5/A2.6/A2.7/A2.8 su una pagina che estende
+  ps-nav-tw.html. Si cancella in Fase 3, quando arrivano le pagine vere.
+#}
+
+{% block title %}Shell probe (task19-0){% endblock %}
+
+{% block nav_content %}
+<div class="mx-auto max-w-5xl space-y-6 p-6">
+  <h1 class="ps-h1">Shell probe</h1>
+  <p class="ps-muted">
+    Pagina temporanea per verificare la nuova app-shell (ps-base-tw.html +
+    ps-nav-tw.html): le 13 destinazioni della sidebar, i due treeview, la
+    voce Admin condizionata, il drawer mobile e il toggle tema. Si cancella
+    in Fase 3.
+  </p>
+  <div class="ps-card">
+    <div class="ps-card-header">Stato admin</div>
+    <div class="ps-card-body">
+      <p>is_admin = <strong>{{ is_admin }}</strong></p>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<!--
+  pyspendless/templates/ps-base-tw.html
+  ============================================================================
+  Task 19-0 (Fase 2) — Nuova base Tailwind, parallela a ps-base.html.
+
+  NB (come in _styleguide.html): qui dentro i delimitatori Jinja non si
+  scrivono per esteso. Jinja analizza anche i commenti HTML, quindi una
+  parentesi graffa seguita da percento dentro un commento rende il file NON
+  COMPILABILE. Sotto si parla di "block NOME", mai del delimitatore vero.
+
+  I nomi dei block sono IDENTICI a quelli di ps-base.html: title, head,
+  page_title, body_class, header, content, footer, scripts. È ciò che rende
+  la migrazione di una pagina esistente un cambio di una riga: nel tag extends
+  del template figlio basta sostituire 'ps-base.html' con 'ps-base-tw.html'.
+
+  Differenze consapevoli rispetto a ps-base.html (vedi report finale di
+  Fase 2 per il dettaglio):
+    - P4 (title duplicato): qui c'è UN SOLO tag title. Il block page_title
+      resta dichiarato (nessuna pagina lo usa oggi: grep confermato) ma non è
+      avvolto in un tag title proprio, quindi non produce un secondo
+      elemento. Se in futuro un template lo riempisse, il testo apparirebbe
+      come testo libero nell'head: accettabile perché il block è vestigiale.
+    - La navbar residua del framework precedente, con link a /login (oggi
+      dentro il block header) non esiste più: il block header qui ha default
+      vuoto.
+    - Il block content non è avvolto in un contenitore con padding
+      (container-fluid su ps-base.html): la nuova shell (ps-nav-tw.html) ha
+      bisogno di un layout a tutta larghezza (sidebar aderente al bordo).
+      Aggiungere un contenitore con padding qui romperebbe quel layout.
+  ============================================================================
+-->
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+  <title>{% block title %}PySpendless{% endblock %}</title>{% block page_title %}{% endblock %}
+  {% block head %}{% endblock %}
+
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#4f46e5" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0b1120" media="(prefers-color-scheme: dark)">
+  <meta name="title" content="PySpendless - Gestione Spese Personali">
+  <meta name="author" content="PySpendless">
+  <meta
+    name="description"
+    content="PySpendless è un'applicazione web per la gestione di spese personali e condivise. Traccia le tue spese, gestisci wallet e categorie in modo semplice e sicuro."
+  />
+  <meta
+    name="keywords"
+    content="gestione spese, spese personali, budget, wallet, categorie, finanza personale, expense tracker"
+  />
+
+  <!-- ========================================================================
+       Script anti-FOUC — DEVE girare prima del primo paint: inline, bloccante,
+       PRIMA del <link> al CSS, non async né defer (piano §4.2, fase-1.md
+       attività 1.5). Fonte di verità: PS_FOUC_SNIPPET in ps-theme.js. Copiato
+       qui carattere per carattere (vedi anche _styleguide.html).
+       ==================================================================== -->
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('ps_theme') || 'system';
+        var dark = t === 'dark' ||
+                   (t === 'system' &&
+                    window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.classList.toggle('dark', dark);
+        document.documentElement.dataset.psTheme = t;
+      } catch (e) { /* localStorage negato: resta light */ }
+    })();
+  </script>
+
+  <!-- Icone bi-* self-hosted (decisione D9 di fase-1.md): stesse classi, zero CDN -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/ps-icons.css') }}?v={{ app_version }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/ps-tailwind.css') }}?v={{ app_version }}" />
+</head>
+<body class="min-h-screen"{% block body_class %}{% endblock %}>
+  {% block header %}{% endblock %}
+
+  {% block content %}{% endblock %}
+
+  {% block footer %}
+  <footer class="border-t px-4 py-3 text-center text-sm" style="border-color: var(--ps-border); color: var(--ps-text-muted);">
+    &copy; 2026 PySpendless
+    {% if app_version %}&middot; v{{ app_version }}{% endif %}
+  </footer>
+  {% endblock %}
+
+  <script src="{{ url_for('static', filename='js/ps-ui.js') }}?v={{ app_version }}"></script>
+  <script src="{{ url_for('static', filename='js/ps-theme.js') }}?v={{ app_version }}"></script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

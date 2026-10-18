@@ -270,3 +270,21 @@ e JS vanno convertiti insieme.
 **Il pattern R1 ora distingue frammento e classe intera anche sul `+` del JS.**
 `class="font-bold ' + classeIntera` è sicuro (il nome completo è letterale nel
 file); `class="text-' + tipo` no. Stesso criterio già applicato a `${}`.
+
+## Aggiunte dopo la Fase 7
+
+**D10 ha due applicazioni, non una.** Le icone Font Awesome mai visibili si
+rimuovono **quando sono decorative**, cioè quando accanto c'è un testo che
+resta. Dove l'icona è l'**unico contenuto di un bottone** — i tre bottoni
+d'azione di tabella e card — non è decorazione: è l'etichetta. Rimuoverla
+lascerebbe un bottone colorato vuoto, riconoscibile solo dal `title`. Lì si usa
+il `bi bi-*` corrispondente, che è anche quello che `/movements` già mostra.
+
+Il criterio operativo: *se togliendo l'icona resta un'etichetta è decorazione;
+se il bottone resta vuoto, l'icona è l'etichetta.*
+
+**Il conteggio del DB va fotografato a ogni esecuzione, non assunto.** Fra la
+Fase 6 e la Fase 7 i movimenti sono passati da 8210 a 8211: l'utente ne aveva
+inserito uno provando l'app. Le sonde confrontano il conteggio **all'inizio e
+alla fine della stessa esecuzione**, quindi l'invariante regge lo stesso — ma
+un valore atteso scritto a mano sarebbe diventato un falso allarme.

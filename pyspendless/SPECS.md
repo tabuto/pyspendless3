@@ -257,6 +257,19 @@ Authorization: tutte le rotte scrittura devono verificare che l'utente apparteng
 
 ## UI e Template Bootstrap
 
+> ⚠️ **Questa sezione è SUPERATA dal task19-0 (2026-10-18).** Bootstrap e
+> AdminLTE non esistono più nel progetto: la presentazione gira su **Tailwind
+> CSS v4**, con `ps-ui.js` al posto del JS di Bootstrap, tema light/dark, e le
+> tre shell `ps-base.html` / `ps-nav.html` / `ps-auth.html`. Per lo stato
+> attuale vedi `backlog/task19-0.md` e la sezione "Il CSS va compilato" del
+> README.
+>
+> Il testo resta qui perché SPECS.md è la **specifica originale**, cioè il
+> registro di cosa era stato chiesto all'inizio — non la documentazione di
+> com'è fatto il progetto oggi. Restano validi i requisiti che il restyling non
+> ha toccato, essendo isofunzionale: Chart.js per i grafici, la comunicazione
+> FE-BE via API REST/JSON, e quali pagine hanno la sidebar e quali no.
+
 - **Template**: Tutte le pagine devono utilizzare il template Bootstrap **AdminLTE 3** (riferimento: [AdminLTE v3 Index3](https://adminlte.io/themes/v3/index3.html)).
 - **Libreria Grafici**: I grafici devono essere renderizzati utilizzando **Chart.js**.
 - **Comunicazione FE-BE**: Il Front End comunica con il Back End esclusivamente tramite chiamate **API REST** con **AJAX** e formato dati **JSON**.

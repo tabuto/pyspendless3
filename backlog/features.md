@@ -14,3 +14,4 @@
 | Rate limiting endpoint MCP | Limite di richieste/401 sull'endpoint `/mcp`, scorporato da task20-0 (decisione D9) | TODO |
 | Correzione massiva movimenti | In `/movements`, filtrare i movimenti e cambiare in blocco categoria e/o descrizione su tutti i movimenti risultanti dai filtri (task21-0) | DONE |
 | Wallet preferito per singolo utente | Bugfix: il wallet preferito (MB-004/MB-005) era condiviso da tutti gli utenti dello stesso account; diventa un'impostazione per singolo utente (`User.preferred_wallet_id`), con migrazione di backfill (task22-0) | DONE |
+| Restyling Tailwind | Rifacimento della presentazione con Tailwind CSS v4: mobile first, tema dark/light persistente, Bootstrap e AdminLTE rimossi dal progetto. Isofunzionale — unica aggiunta voluta il selettore di tema. 18 template convertiti, -33% di peso su `/movements` (task19-0) | DONE |

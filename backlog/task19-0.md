@@ -22,7 +22,28 @@ Documenti di supporto, da leggere prima di iniziare:
 | `backlog/task19-0/fasi/fase-N.md` | Un file per fase: obiettivo, input, criteri di accettazione |
 | `.claude/agents/ps-{markup,contract,component}.md` | Definizioni dei subagent, con il modello nel frontmatter (vedi RUNBOOK §1.1) |
 
-## Stato attuale
+## Stato: CHIUSO — 2026-10-18
+
+Tutte e dieci le fasi (0-9) sono completate. Bootstrap e AdminLTE non esistono
+più nel progetto: **18 template** su tre shell Tailwind, tema light/dark
+persistente, −33% di peso su `/movements`.
+
+Il criterio che dà senso all'intero task, **A9.11**, è verde e dimostrato:
+sull'intero branch `git diff --name-only main...HEAD` non tocca
+`app.py`, `models.py`, `repository.py`, `conf.py`, `report_*.py` né
+`oauth_server.py`. «Abbiamo cambiato solo la presentazione» è misurato, non
+asserito.
+
+Restano aperti, e **non** fanno parte di questo task:
+
+| Cosa | Dove |
+|---|---|
+| Il subset delle icone (216,6 KB per 59 glifi su 2.078) | voce `MB-NNN` da aprire — vedi "Misura finale" |
+| Verifica A9.6-A9.9 nei due temi su tre larghezze | richiede prima di estendere `ui-shots.py`, oggi bloccato su `THEME = "light"` |
+| Il rilascio | vedi D14 |
+| I due strumenti tautologici | vedi "Due strumenti di verifica sono diventati tautologici" |
+
+### Stato di partenza (per memoria)
 
 Stack: **AdminLTE 4 + Bootstrap 5.3**, CSS AdminLTE locale
 (`pyspendless/static/css/adminlte.css`), tutto il resto da CDN — Bootstrap JS,
@@ -32,6 +53,15 @@ font Source Sans 3.
 16 template renderizzati da `app.py`, su due layout (`ps-nav.html` per l'area
 autenticata, `ps-auth.html` per login/onboarding/manutenzione), più 9 template
 morti mai referenziati da `render_template`.
+
+> **Questo inventario era incompleto, e lo si è scoperto solo in Fase 9: i
+> template resi sono 18, non 16.** Mancavano `ps-maintenance.html` e, più
+> seriamente, `ps-oauth-consent.html` — che non è reso da `app.py` ma da
+> `oauth_server.py:158`, un blueprint registrato a parte. Cercare
+> `render_template` nel solo `app.py` dà un inventario incompleto: quel
+> template non era assegnato a nessuna fase, estendeva ancora la vecchia shell,
+> ed era l'ultimo file vivo con classi Bootstrap. Cancellare `ps-auth.html`
+> senza convertirlo prima lo avrebbe rotto. Nota aggiunta anche a `CLAUDE.md`.
 
 ### Decisioni prese
 
@@ -46,7 +76,7 @@ morti mai referenziati da `render_template`.
 | D9 | **Bootstrap Icons self-hosted**: le classi `bi bi-*` restano identiche |
 | D10 | Difetti preesistenti P1-P6: le icone **Font Awesome si rimuovono** (non sono mai state visibili, FA non è caricato — la rimozione è la scelta isofunzionale). **Precisazione 2026-10-18**: vale per le icone *decorative*, quelle accanto a un testo. Dove l'icona è l'**unico contenuto** di un bottone — cioè è l'etichetta, non un ornamento — si usa il `bi bi-*` corrispondente: rimuoverla lascerebbe un bottone vuoto identificabile solo dal tooltip. P6 è **reale**: vedi "Verifiche empiriche" |
 | D12 | Sidebar mobile: **drawer off-canvas**, come oggi |
-| D14 | Versione di rilascio: **`0.2.0`** |
+| D14 | Versione di rilascio: ~~`0.2.0`~~ → **`0.3.0`**. **Corretta in Fase 9**: `_APP_VERSION` era già `0.2.2` (il branch contiene il task23 OAuth) e i tag `v0.2.0` e `v0.2.1` **esistono già**. Rilasciare come 0.2.0 sarebbe stato un downgrade su un tag occupato. Scelto il bump minor: il rifacimento di 18 pagine è un cambiamento di livello feature, pur isofunzionale |
 
 Le decisioni ancora aperte (D3, D7, D10, D11, D13) sono elencate nel piano al
 §9 e **non bloccano** l'avvio: si decidono alla fase in cui servono.
@@ -342,14 +372,17 @@ il loro verde non è evidenza.
 
 - **Branch**: il lavoro sta su `feature/task-19-FE-refactoring`, già attivo —
   da cui la numerazione `19-0`.
-- **`backlog/features.md` non è stato aggiornato di proposito.** Su questo
-  branch il backlog si ferma a `task18-0.md`, ma in `pyspendless/test/`
-  esistono `test_task22_0.py` (wallet preferito per utente) e
-  `test_task23_0.py` (OAuth2 su `/mcp-oauth2`): i task 19-23 sono stati
-  numerati altrove e le loro voci di backlog non sono su questo branch.
-  Aggiungere qui una riga a `features.md` creerebbe quasi certamente un
-  conflitto al merge. Da fare dopo l'allineamento con `main`, decidendo quale
-  versione del file tenere.
+- **`backlog/features.md`: aggiornato in Fase 9**, dopo aver verificato la
+  riserva che era scritta qui. La riserva diceva che aggiungere una riga
+  «creerebbe quasi certamente un conflitto al merge», perché i task 19-23
+  sarebbero stati numerati altrove. Misurato: `git diff main...HEAD --
+  backlog/features.md` è **vuoto**, cioè il file su questo branch è
+  **identico a `main`**, e già elenca task20-0, task21-0 e task22-0. Su un
+  file identico a main, aggiungere una riga **in coda** è l'edit meno
+  conflittuale possibile. La riga c'è, con stato `DONE`.
+
+  Resta vero che il backlog di `task23-0-oauth-alexa.md` non ha una riga in
+  `features.md`: è un buco preesistente, non di questo task.
 - `/settings/admin` **non è nel `CONTRACT`** del test: richiede che l'utente
   della sessione finta sia l'`ADMIN_USER_ID`. I suoi criteri di accettazione
   (Fase 5) restano manuali. Se vuoi coprirla, va aggiunta una fixture che

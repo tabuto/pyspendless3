@@ -18,13 +18,24 @@ tutte le attività su questo repo.
 
 ```
 pyspendless/
-├── app.py         # entry point + tutte le rotte (pagine e API /api/...)
-├── models.py      # tabelle SQLAlchemy
-├── conf.py        # configurazione e costanti (legge .env via python-dotenv)
-├── repository.py  # CRUD / logica di accesso dati
-├── templates/     # Jinja2, base = ps-base.html
-└── .env / .env_pa # variabili d'ambiente (NON versionati)
+├── app.py           # entry point + quasi tutte le rotte (pagine e API /api/...)
+├── oauth_server.py  # blueprint OAuth2: /oauth/authorize rende ps-oauth-consent.html
+├── models.py        # tabelle SQLAlchemy
+├── conf.py          # configurazione e costanti (legge .env via python-dotenv)
+├── repository.py    # CRUD / logica di accesso dati
+├── templates/       # Jinja2, base = ps-base.html
+├── static/css/      # ps-tailwind.src.css (sorgente) -> ps-tailwind.css (versionato)
+├── static/js/       # ps-ui.js (modal/drawer/tab), ps-theme.js (light/dark)
+└── .env / .env_pa   # variabili d'ambiente (NON versionati)
+
+tools/               # build-css.sh, sonde di verifica UI
 ```
+
+> **`app.py` non ha tutte le rotte.** `oauth_server.py` è un blueprint
+> registrato in `app.py:64` e rende un template per conto suo. Cercare
+> `render_template` nel solo `app.py` dà un inventario incompleto — è
+> esattamente così che `ps-oauth-consent.html` è sfuggito alla pianificazione
+> del task19-0, e si è scoperto solo in Fase 9.
 
 Deploy: PythonAnywhere `tabuto.pythonanywhere.com`, working copy server
 `/home/tabuto/pyspendless3`.
@@ -60,7 +71,7 @@ Riferimento (letti solo se servono a un vincolo specifico):
 ## Convenzioni di backlog
 
 - Task grande (modello dati, migrazione, > 2-3 file) → nuovo `backlog/taskN-0.md`
-  con numerazione progressiva (ultimo: `task18-0.md`).
+  con numerazione progressiva (ultimo: `task23-0-oauth-alexa.md`).
 - Intervento piccolo → voce `MB-NNN` in `backlog/00-task-minor-bugfix.md`
   (ID progressivo, mai riusato; stato `APERTA → IN CORSO → RISOLTA/SCARTATA`;
   alla chiusura spostare il blocco in "Risolte" con data e file toccati).
@@ -80,6 +91,9 @@ nulla**: dopo il push va eseguito a mano l'aggiornamento sul server.
 
 **Procedura di rilascio (solo su richiesta esplicita dell'utente):**
 
+0. **Compilare il CSS**: `./tools/build-css.sh`, poi verificare che
+   `pyspendless/static/css/ps-tailwind.css` sia aggiornato e **staged**.
+   Vedi "CSS: il passo che si dimentica" qui sotto.
 1. Bump di `_APP_VERSION` in `pyspendless/app.py` (semver) — vedi voce MB-003.
 2. `git commit` delle modifiche.
 3. `git tag vX.Y.Z` con la stessa versione di `_APP_VERSION`.
@@ -89,6 +103,28 @@ nulla**: dopo il push va eseguito a mano l'aggiornamento sul server.
    `git checkout vX.Y.Z`) → poi **Reload** della web app dalla tab *Web*.
 6. Verifica: `GET https://tabuto.pythonanywhere.com/version` deve riportare la
    versione appena rilasciata.
+
+### CSS: il passo che si dimentica
+
+Dal task19-0 la presentazione gira su **Tailwind**, compilato da
+`pyspendless/static/css/ps-tailwind.src.css` a `ps-tailwind.css`. Sul server
+non c'è Node e non c'è una fase di build: **l'output compilato è versionato**,
+esattamente come lo era `adminlte.css` prima.
+
+Quindi, ogni volta che si tocca un `class="..."` in un template o una regola
+nel `.src.css`:
+
+```bash
+./tools/build-css.sh
+```
+
+Il binario è `tools/tailwindcss` (CLI standalone, nessun `package.json`); lo
+script fallisce apposta se l'output scende sotto i 5 KB o se git lo ignora.
+
+**Se ci si dimentica**, in produzione finisce il CSS vecchio: le classi nuove
+non hanno stile, ma **l'app funziona** — fallimento degradato, non rotto. Il
+modo di accorgersene prima è che `git status` resti pulito dopo una build:
+se la build cambia il file, il commit era incompleto.
 
 L'assistente esegue questi passi **solo** se l'utente lo chiede esplicitamente.
 Al termine di un task, se le modifiche sembrano da rilasciare, **proporre** la

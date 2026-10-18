@@ -102,6 +102,54 @@ L'applicazione sarà disponibile su http://localhost:5000/
 5. Se utente già esistente, lo autentica direttamente
 6. Salva i dati nella sessione e reindirizza alla home
 
+## Il CSS va compilato
+
+La presentazione gira su **Tailwind CSS v4** (task19-0). Il foglio servito
+alle pagine non si scrive a mano: si compila.
+
+```
+static/css/ps-tailwind.src.css   sorgente — token, @theme, @layer components
+            ↓  ./tools/build-css.sh
+static/css/ps-tailwind.css       output — VERSIONATO, è quello che il browser scarica
+```
+
+### Quando ricompilare
+
+Ogni volta che cambia una `class="..."` in un template o una regola nel
+sorgente. Tailwind genera **solo** le utility che trova scritte nei file: una
+classe nuova in un template non esiste nel CSS finché non si ricompila.
+
+```bash
+./tools/build-css.sh
+```
+
+### Perché l'output è versionato
+
+Su PythonAnywhere non c'è Node e **non esiste una fase di build**: il deploy è
+`git pull` + Reload. Quindi il compilato sta in git, esattamente come ci stava
+`adminlte.css` prima del restyling. Il binario che lo produce è
+`tools/tailwindcss` — la CLI standalone, nessun `package.json`, nessuna
+dipendenza npm.
+
+### Se ci si dimentica
+
+In produzione va il CSS vecchio: le classi nuove restano senza stile, ma
+**l'app funziona**. È un fallimento degradato, non una pagina rotta.
+
+Il controllo veloce: dopo una build, `git status` deve restare **pulito**. Se
+la build modifica `ps-tailwind.css`, il commit precedente era incompleto.
+
+Lo script fallisce apposta se l'output scende sotto i 5 KB (segno che la
+compilazione è andata storta) o se `.gitignore` sta escludendo il file.
+
+### Tema light/dark
+
+`static/js/ps-theme.js` gestisce tre stati — `light`, `dark`, `system` —
+persistiti in `localStorage['ps_theme']`. Nel `<head>` di `ps-base.html` c'è
+uno snippet anti-FOUC che applica la classe `dark` **prima** del primo paint:
+senza, la pagina lampeggia in chiaro e poi passa a scuro. La fonte di verità
+di quello snippet è `PS_FOUC_SNIPPET` in `ps-theme.js`, da cui è copiato.
+
 ## Note per lo sviluppo
 
 ### Ambiente locale

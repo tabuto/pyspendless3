@@ -52,8 +52,10 @@ meccaniche di paginazione diverse nella stessa pagina.
 | A7.15 | Le card qui e quelle di `/movements` hanno lo stesso aspetto |
 | A7.16 | Nessun overflow a 375 px, light e dark |
 
-A7.14 è una verifica che la baseline non può confermare: oggi quelle icone non
-si vedono. È un miglioramento dichiarato, non una regressione.
+A7.14 riguarda solo i **tre bottoni d'azione**, dove l'icona è l'etichetta.
+È una verifica che la baseline non può confermare — oggi quei bottoni sono
+vuoti — ed è un miglioramento dichiarato, non una regressione. Le tre icone
+decorative, invece, spariscono e basta: lì la baseline resta il riferimento.
 
 ## Definition of done
 

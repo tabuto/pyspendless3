@@ -44,7 +44,7 @@ morti mai referenziati da `render_template`.
 | D6 | Font **Source Sans 3 self-hosted** |
 | D8 | Tema persistito in **`localStorage`**, nessuna modifica a DB o sessione |
 | D9 | **Bootstrap Icons self-hosted**: le classi `bi bi-*` restano identiche |
-| D10 | Difetti preesistenti P1-P6: le icone **Font Awesome si rimuovono** (non sono mai state visibili, FA non è caricato — la rimozione è la scelta isofunzionale). P6 è **reale**: vedi "Verifiche empiriche" |
+| D10 | Difetti preesistenti P1-P6: le icone **Font Awesome si rimuovono** (non sono mai state visibili, FA non è caricato — la rimozione è la scelta isofunzionale). **Precisazione 2026-10-18**: vale per le icone *decorative*, quelle accanto a un testo. Dove l'icona è l'**unico contenuto** di un bottone — cioè è l'etichetta, non un ornamento — si usa il `bi bi-*` corrispondente: rimuoverla lascerebbe un bottone vuoto identificabile solo dal tooltip. P6 è **reale**: vedi "Verifiche empiriche" |
 | D12 | Sidebar mobile: **drawer off-canvas**, come oggi |
 | D14 | Versione di rilascio: **`0.2.0`** |
 

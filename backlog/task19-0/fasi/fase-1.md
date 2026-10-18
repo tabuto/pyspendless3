@@ -184,7 +184,7 @@ di colore Bootstrap vanno tradotte nel **ruolo**, non nella tinta.
 | Oggi | Target | Note |
 |---|---|---|
 | `bi bi-*` (220 occorrenze, 56 glifi) | **invariate** | decisione D9: Bootstrap Icons self-hosted, le classi non cambiano |
-| `fas fa-*` (23 occorrenze, 10 classi) | **rimuovere** (D10) | vedi sotto |
+| `fas fa-*` (23 occorrenze, 10 classi) | **rimuovere** se decorative, `bi bi-*` se sono l'etichetta (D10) | vedi sotto |
 
 > **Font Awesome non è caricato da nessuna parte**, quindi queste 23
 > occorrenze — tutte in `ps-maintenance.html` (`fa-tools`, `fa-sync-alt`,
@@ -199,6 +199,18 @@ di colore Bootstrap vanno tradotte nel **ruolo**, non nella tinta.
 > cambiamento visibile introdotto di straforo dentro un restyling che si
 > impegna a non cambiare comportamento.
 >
+> **Precisazione del 2026-10-18.** La rimozione vale per le icone
+> **decorative**, quelle che stanno accanto a un testo: togliendole resta
+> l'etichetta, e l'utente non perde niente (è il caso di `ps-maintenance.html`,
+> e di `fa-search`/`fa-undo`/`fa-info-circle` su `ps-search-mov.html`).
+>
+> Dove invece l'icona è l'**unico contenuto di un bottone** — `fa-edit`,
+> `fa-redo`, `fa-trash` nelle righe di tabella e nelle card — non è
+> decorazione: **è l'etichetta**. Rimuoverla lascerebbe un bottone colorato
+> vuoto, riconoscibile solo dal `title`. Lì si usa il `bi bi-*`
+> corrispondente, che è anche ciò che `/movements` già mostra per gli stessi
+> tre bottoni: `bi-pencil`, `bi-arrow-repeat`, `bi-trash`.
+
 > Operativamente, per `ps-markup`: **cancellare l'intero elemento** che porta
 > `fas fa-*` (di norma un `<i class="fas fa-xxx"></i>`), non solo le classi —
 > un `<i>` vuoto resterebbe nel DOM senza scopo. Se l'icona è dentro un

@@ -49,12 +49,69 @@ il rimando.
 | MB-004 | evolutiva | Gestione del wallet preferito (`order_index = 0` riservato, unico, impostabile solo dall'azione dedicata) | media | RISOLTA |
 | MB-005 | evolutiva | Il server MCP usa il wallet preferito quando la chiamata non ne specifica uno (dipende da MB-004) | bassa | RISOLTA |
 | MB-006 | bug | La tabella movimenti ordina le date per giorno del mese: DataTables confronta `gg/mm/aaaa` come stringa | media | RISOLTA |
+| MB-007 | bug | Una categoria cambia colore fra la dashboard mensile e quella annuale: la palette è assegnata per posizione | bassa | RISOLTA |
 
 ## Aperte
 
 _Nessuna voce aperta._
 
 ## Risolte
+
+### MB-007 — Colori delle categorie incoerenti fra le dashboard · risolta il 2026-10-18
+
+- **Tipo**: bug
+- **Priorità**: bassa
+- **Dove**: `pyspendless/templates/ps-dashboard-monthly.html` e
+  `ps-dashboard-yearly.html`, funzione `psCategoryColor()`.
+- **Trovata**: misurando la baseline dei grafici prima della conversione della
+  Fase 8 del task19-0.
+
+**Problema** — il colore di una fetta veniva scelto con
+`COLORS[i % COLORS.length]`, dove `i` è la **posizione** dell'etichetta
+nell'array. Le due dashboard ordinano le categorie per importo, e gli importi
+di un mese non sono quelli di un anno: la stessa categoria finiva quindi in
+posizioni diverse, e cambiava colore passando da un grafico all'altro.
+
+Misurato sul DB di sviluppo: su **17 categorie presenti in entrambe le
+dashboard, 13 avevano un colore diverso**.
+
+| Categoria | mensile | annuale |
+|---|---|---|
+| Altro | `#FF6384` | `#FFCE56` |
+| Food And Drink | `#9966FF` | `#4BC0C0` |
+| Household | `#C9CBCF` | `#36A2EB` |
+
+Confrontare la torta mensile con quella annuale era fuorviante: due fette
+dello stesso colore non erano la stessa categoria.
+
+**Soluzione applicata** — il colore dipende dal **nome** della categoria:
+
+```js
+function psCategoryColor(nome) {
+  var h = 0;
+  for (var i = 0; i < nome.length; i++) h = (h * 31 + nome.charCodeAt(i)) >>> 0;
+  return COLORS[h % COLORS.length];
+}
+```
+
+Stessa funzione nei due file, quindi la mappa categoria → colore è identica
+ovunque, e stabile anche fra un mese e l'altro. Dopo la correzione le
+discordanze sono **0 su 17**.
+
+**Note / casi limite**
+
+- La palette ha **7 tinte distinte in 10 posizioni** (le posizioni 0 e 6, 3 e
+  8, 5 e 9 sono uguali), quindi con 17 o 27 categorie **le collisioni dentro
+  lo stesso grafico restano inevitabili**. Misurate prima di applicare: da 10
+  a 11 collisioni sul grafico mensile, da 20 a 21 sull'annuale. La correzione
+  non peggiora la distinguibilità interna in modo apprezzabile, e in cambio
+  rende il colore stabile fra i grafici. Se un giorno si vorranno fette tutte
+  distinte, serve una palette più ampia — è un intervento diverso.
+- I **totali dei nove grafici sono invariati**: la correzione tocca solo la
+  scelta del colore.
+- Tenuta **separata dalla Fase 8** di proposito: è una correzione di
+  comportamento, non di presentazione. Se qualcosa si rompe nei grafici, i due
+  commit restano distinguibili.
 
 ### MB-006 — Ordinamento per data della tabella movimenti · risolta il 2026-10-17
 

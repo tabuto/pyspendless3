@@ -146,6 +146,23 @@ const COLORS = [
   '#DD873C', '#D45469', '#7F8A9F', '#3DB8AB', '#DD873C'
 ];
 
+// MB-007: il colore di una categoria dipende dal suo NOME, non dalla posizione
+// nell'array delle etichette. Con l'assegnazione posizionale (COLORS[i % 10])
+// la stessa categoria cambiava tinta fra la dashboard mensile e quella
+// annuale, perche' i due grafici ordinano le etichette in modo diverso:
+// misurate 13 discordanze su 17 categorie comuni. Confrontare le due torte
+// diventava fuorviante.
+// L'hash e' lo stesso nei due file: la mappa categoria -> colore e' quindi
+// identica ovunque, e stabile anche fra un mese e l'altro.
+function psCategoryColor(nome) {
+  var h = 0;
+  for (var i = 0; i < nome.length; i++) {
+    h = (h * 31 + nome.charCodeAt(i)) >>> 0;
+  }
+  return COLORS[h % COLORS.length];
+}
+
+
 // Variabili globali per i grafici
 let chartIncomeExpense, chartExpenseByCategory, chartExpenseByWallet, chartIncomeByWallet, chartCategoryTrend;
 let currentCategories = [];
@@ -339,7 +356,7 @@ async function updateSummaryCharts() {
     // Grafico Spese per Categoria
     const categoryLabels = Object.keys(data.expense_by_category);
     const categoryData = Object.values(data.expense_by_category);
-    const categoryColors = categoryLabels.map((_, i) => COLORS[i % COLORS.length]);
+    const categoryColors = categoryLabels.map(psCategoryColor);
 
     // Aggiorna la lista delle categorie disponibili
     currentCategories = categoryLabels;
@@ -358,7 +375,7 @@ async function updateSummaryCharts() {
     // Grafico Spese per Wallet
     const walletExpenseLabels = Object.keys(data.expense_by_wallet);
     const walletExpenseData = Object.values(data.expense_by_wallet);
-    const walletExpenseColors = walletExpenseLabels.map((_, i) => COLORS[i % COLORS.length]);
+    const walletExpenseColors = walletExpenseLabels.map(psCategoryColor);
 
     if (chartExpenseByWallet) {
       chartExpenseByWallet.data.labels = walletExpenseLabels;
@@ -373,7 +390,7 @@ async function updateSummaryCharts() {
     // Grafico Entrate per Wallet
     const walletIncomeLabels = Object.keys(data.income_by_wallet);
     const walletIncomeData = Object.values(data.income_by_wallet);
-    const walletIncomeColors = walletIncomeLabels.map((_, i) => COLORS[i % COLORS.length]);
+    const walletIncomeColors = walletIncomeLabels.map(psCategoryColor);
 
     if (chartIncomeByWallet) {
       chartIncomeByWallet.data.labels = walletIncomeLabels;

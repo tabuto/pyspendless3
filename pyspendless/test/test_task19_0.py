@@ -293,7 +293,11 @@ NAV_LINKS_ORDER = [
 # stringhe in JS. Lo scanner di Tailwind vede solo stringhe letterali complete,
 # quindi una classe spezzata finisce ASSENTE dal CSS compilato (rischio R1).
 DYNAMIC_CLASS_PATTERNS = [
-    re.compile(r"""class=["'][^"']*["']\s*\+"""),      # class="..." + var
+    # Stesso criterio del pattern `${}` qui sotto: il pericolo e' completare un
+    # FRAMMENTO (`class="text-' + x`), non concatenare una classe intera dopo
+    # uno spazio (`class="font-bold ' + classeIntera`). Nel secondo caso i nomi
+    # completi sono comunque letterali nel file, quindi lo scanner li trova.
+    re.compile(r"""class=["'][^"']*[^"'\s]["']\s*\+"""),  # class="text-" + var
     re.compile(r"""\+\s*["'][^"']*\bclass=""" ),        # + "...class=
     # Il pericolo e' un PREFISSO spezzato (`class="text-${x}"`), non una classe
     # intera presa da una variabile (`class="${c}"` con c = 'ps-amount-income').
@@ -520,7 +524,7 @@ class IgieneTemplate(unittest.TestCase):
         # in corso, la whitelist elenca i file non ancora toccati.
         whitelist_non_migrati = {
             # <-- togliere il file da qui quando viene migrato a Tailwind
-            "ps-show-mov.html", "ps-search-mov.html",
+            "ps-search-mov.html",
             "ps-dashboard-monthly.html", "ps-dashboard-yearly.html",
             "ps-reports.html",
             # template morti

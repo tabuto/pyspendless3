@@ -222,3 +222,51 @@ Uno ha riscritto un blocco togliendo dalla whitelist anche due file di altri
 agenti ancora in corso. Niente si è corrotto, ma su un file condiviso da sei
 processi paralleli il rischio è reale: il divieto va ripetuto **citando il
 precedente**, non solo enunciato.
+
+## Aggiunte dopo la Fase 6 — due difetti SISTEMICI, non di una pagina
+
+**`collapse` collide con una utility di Tailwind, e i layer battono la
+specificità.** Tailwind genera `.collapse{visibility:collapse}`. Il nostro
+markup usa `collapse` come nome di **stato** (il JS legge
+`classList.contains('show')`), quindi ogni elemento con quella classe resta nel
+flusso — con la sua altezza e la sua larghezza — ed è **invisibile**. Su
+`/movements` il pannello filtri si "apriva" senza mostrare niente.
+
+Due cose da ricordare:
+
+1. **Non basta alzare la specificità**: in CSS i `@layer` vengono prima, quindi
+   una regola in `components` perde comunque contro una utility. L'override
+   deve stare nello **stesso layer** (`@layer utilities`), dove a parità di
+   layer vince la specificità.
+2. **Il difetto c'era dalla Fase 1**, anche nella styleguide, e nessuna delle
+   mie sonde l'aveva visto: misuravano `display` e le dimensioni. Un elemento
+   con `visibility: collapse` ha un box. **Ogni controllo di visibilità deve
+   guardare anche `visibility`.** Corretto in `fase6_probe.py`.
+
+Il piano elencava questo rischio al §5.1 (`.hidden`, `.border`, `.shadow`,
+`.text-center`): `collapse` non era nell'elenco, ma è la stessa famiglia.
+
+**Il preflight di Tailwind azzera gli heading.** `h1..h6` diventano
+`font-size: inherit; font-weight: inherit`. Il markup convertito ha
+intestazioni "nude" (`<h1 class="mb-4">Gestione Wallet</h1>`), che rendevano a
+**16px/400** — identiche al testo del corpo, dove in Bootstrap erano 40px/500.
+Quattordici intestazioni su undici pagine già migrate, e nessun controllo
+statico poteva vederlo.
+
+Risolto ridando la scala in `@layer base`, così vale anche per le pagine
+future; i componenti (`.ps-card-title`, `.ps-kpi`) continuano a vincere.
+
+> Lezione: gli screenshot di baseline servono a **confrontarli**, non ad
+> archiviarli. Questo difetto era in ogni immagine "after" dalla Fase 3 in poi,
+> e l'ho visto solo quando un subagent l'ha nominato. Il criterio A3.14
+> ("confrontati con la baseline") l'avevo dato per soddisfatto avendo solo
+> archiviato.
+
+**`d-none` era una classe di STATO.** Il JS di `ps-show-mov` faceva
+`spinner.classList.remove('d-none')` in tre punti: convertire il solo markup
+avrebbe lasciato spinner e messaggio di fine lista inerti, in silenzio. Markup
+e JS vanno convertiti insieme.
+
+**Il pattern R1 ora distingue frammento e classe intera anche sul `+` del JS.**
+`class="font-bold ' + classeIntera` è sicuro (il nome completo è letterale nel
+file); `class="text-' + tipo` no. Stesso criterio già applicato a `${}`.

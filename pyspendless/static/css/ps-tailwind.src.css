@@ -98,6 +98,25 @@
     --ps-backdrop:   rgb(0 0 0 / 0.6);
   }
 
+  /* ⚠️ Il preflight di Tailwind azzera gli heading:
+         h1,h2,h3,h4,h5,h6 { font-size: inherit; font-weight: inherit }
+     Il markup convertito ha intestazioni "nude" (`<h1 class="mb-4">Gestione
+     Wallet</h1>`), che rendevano a 16px/400 — identiche al testo del corpo.
+     Nella versione Bootstrap erano 40px/500. Nessun controllo statico lo
+     vede, e in uno screenshot si nota solo confrontandolo con la baseline.
+
+     Qui si ridà la scala di default. Sta in `base`, quindi qualunque classe
+     di componente (.ps-card-title, .ps-kpi, .ps-modal-title) continua a
+     vincere, e le utility di dimensione pure. Vale anche per le pagine che
+     verranno: una intestazione senza classe ha comunque l'aspetto di una
+     intestazione. */
+  h1 { @apply text-2xl font-semibold leading-8 sm:text-3xl; }
+  h2 { @apply text-xl font-semibold leading-7; }
+  h3 { @apply text-lg font-semibold leading-7; }
+  h4 { @apply text-base font-semibold leading-6; }
+  h5 { @apply text-base font-semibold leading-6; }
+  h6 { @apply text-sm font-semibold leading-5; }
+
   html { color-scheme: light; }
   html.dark { color-scheme: dark; }
 
@@ -596,4 +615,155 @@
     background-color: color-mix(in srgb, var(--ps-expense) 10%, transparent);
     color: var(--ps-expense);
   }
+
+  /* ---- Skin per librerie esterne (DataTables / Tom Select) --------------
+     Task 19-0, Fase 6 (ps-show-mov.html). DataTables e Tom Select caricano
+     ora il loro tema NEUTRO (non piu' il tema "bootstrap5"): qui si ridipinge
+     il chrome che generano — casella di ricerca, select della lunghezza,
+     riga info, paginazione, child row del Responsive, dropdown di Tom Select
+     — con i token del design system, cosi' non sembra un corpo estraneo
+     dentro una pagina Tailwind.
+
+     Ordine di caricamento (ps-show-mov.html, block "head"): gli stylesheet
+     di DataTables/Tom Select arrivano PRIMA di questo file nel <head>
+     (ps-base-tw.html), quindi su selettori di pari specificita' questo file
+     vince la cascata senza bisogno di !important. I pochi punti dove la
+     libreria usa !important sui propri stati (hover/current/disabled della
+     paginazione) sono gli unici dove serve !important anche qui, per
+     restare deterministico anche se l'ordine dei <link> cambiasse in futuro.
+  */
+  .dataTables_wrapper {
+    @apply text-sm;
+    color: var(--ps-text);
+  }
+  .dataTables_wrapper .dataTables_length,
+  .dataTables_wrapper .dataTables_filter,
+  .dataTables_wrapper .dataTables_info,
+  .dataTables_wrapper .dataTables_paginate {
+    color: var(--ps-text);
+    margin-bottom: 0.75rem;
+  }
+  .dataTables_wrapper .dataTables_filter input,
+  .dataTables_wrapper .dataTables_length select {
+    @apply rounded-lg border px-3 py-1.5 text-sm transition-colors;
+    background-color: var(--ps-surface);
+    border-color: var(--ps-border);
+    color: var(--ps-text);
+  }
+  .dataTables_wrapper .dataTables_filter input:focus,
+  .dataTables_wrapper .dataTables_length select:focus {
+    outline: 2px solid var(--ps-brand);
+    outline-offset: 2px;
+  }
+  table.dataTable {
+    color: var(--ps-text);
+  }
+  table.dataTable > thead > tr > th,
+  table.dataTable > thead > tr > td {
+    background-color: var(--ps-surface-2);
+    border-bottom-color: var(--ps-border);
+  }
+  table.dataTable > tfoot > tr > th,
+  table.dataTable > tfoot > tr > td {
+    border-top-color: var(--ps-border);
+  }
+  .dataTables_wrapper .dataTables_paginate .paginate_button {
+    @apply rounded-lg;
+  }
+  .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+  .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+    background: var(--ps-brand) !important;
+    border-color: var(--ps-brand) !important;
+    color: #fff !important;
+  }
+  .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+    background: color-mix(in srgb, var(--ps-brand) 15%, transparent) !important;
+    border-color: var(--ps-brand) !important;
+    color: var(--ps-text) !important;
+  }
+  .dataTables_wrapper .dataTables_paginate .paginate_button.disabled,
+  .dataTables_wrapper .dataTables_paginate .paginate_button.disabled:hover,
+  .dataTables_wrapper .dataTables_paginate .paginate_button.disabled:active {
+    color: var(--ps-text-muted) !important;
+  }
+  /* Responsive (DataTables): freccia del child row e riquadro espanso */
+  table.dataTable > tbody > tr.child {
+    background-color: var(--ps-surface);
+  }
+  table.dataTable > tbody > tr.child ul.dtr-details > li {
+    border-bottom-color: var(--ps-border);
+  }
+  table.dataTable > tbody > tr.child span.dtr-title {
+    color: var(--ps-text-muted);
+  }
+
+  /* Tom Select — tema "default": si ridipinge controllo e dropdown con i
+     token del design system, compreso il .no-results generato da
+     ps-show-mov.html (render.no_results). */
+  .ts-wrapper .ts-control {
+    @apply rounded-lg;
+    background-color: var(--ps-surface) !important;
+    border-color: var(--ps-border) !important;
+    color: var(--ps-text);
+    box-shadow: none !important;
+  }
+  .ts-wrapper.focus .ts-control {
+    outline: 2px solid var(--ps-brand);
+    outline-offset: 2px;
+    box-shadow: none !important;
+  }
+  .ts-control > input {
+    color: var(--ps-text);
+  }
+  .ts-wrapper.multi .ts-control > div {
+    background-color: color-mix(in srgb, var(--ps-brand) 12%, var(--ps-surface)) !important;
+    color: var(--ps-text) !important;
+    border: none !important;
+  }
+  .ts-wrapper.plugin-remove_button .item .remove {
+    border-left-color: var(--ps-border) !important;
+    color: var(--ps-text-muted);
+  }
+  .ts-dropdown {
+    background-color: var(--ps-surface);
+    border-color: var(--ps-border) !important;
+    color: var(--ps-text);
+  }
+  .ts-dropdown .option,
+  .ts-dropdown .optgroup-header,
+  .ts-dropdown .no-results,
+  .ts-dropdown .create {
+    color: var(--ps-text);
+  }
+  .ts-dropdown .no-results {
+    color: var(--ps-text-muted);
+  }
+  .ts-dropdown [data-selectable].option:hover,
+  .ts-dropdown .active {
+    background-color: color-mix(in srgb, var(--ps-brand) 12%, var(--ps-surface)) !important;
+    color: var(--ps-text) !important;
+  }
+}
+
+
+/* ============================================================================
+   COLLISIONE DI NOMI — il rischio elencato al §5.1 del piano.
+
+   Tailwind ha una utility `collapse` che vale `visibility: collapse`. Il
+   nostro markup usa `collapse` come nome di STATO (il JS di pagina legge
+   `classList.contains('show')` per sapere se il pannello è aperto), quindi i
+   due significati si sovrappongono sullo stesso nome.
+
+   L'effetto: ogni elemento con `class="collapse"` resta nel flusso, con la
+   sua altezza e la sua larghezza, ma è INVISIBILE. Su /movements il pannello
+   filtri si "apriva" occupando il suo spazio senza mostrare niente — e una
+   sonda che misura solo `display` e le dimensioni lo dichiara visibile.
+
+   Non basta alzare la specificità: in CSS i @layer battono la specificità,
+   quindi una regola in `components` perde comunque contro una utility. La
+   correzione deve stare nello STESSO layer, dove a parità di layer vince la
+   specificità maggiore.
+   ========================================================================= */
+@layer utilities {
+  .collapse.collapse { visibility: visible; }
 }

@@ -73,6 +73,9 @@ JINJA_VAR = re.compile(r"\{\{")
 # commento aggiunto durante la conversione fa fallire il confronto.
 DATA_ATTR = re.compile(r'(data-[a-z0-9-]+)=["\']([^"\']*)["\']')
 SCRIPT = re.compile(r"<script\b[^>]*>(.*?)</script>", re.S)
+# Anche il CSS di pagina non e' "testo visibile": senza toglierlo, cambiare
+# `var(--bs-body-color)` in `var(--ps-text)` risulta una perdita di contenuto.
+STYLE = re.compile(r"<style\b[^>]*>.*?</style>", re.S)
 # Gli attributi con valore vanno cercati CON l'uguale: senza, la sottostringa
 # "min" dentro `bootstrap.bundle.min.js` conta come attributo, e rimuovere quel
 # <script> -- cosa che la Fase 5 richiede -- sembra una perdita di validazione.
@@ -80,7 +83,13 @@ VALIDAZIONE = re.compile(
     r"(?<![-\w])(?:required(?![-\w])"
     r"|(?:min|max|step|maxlength|minlength|rows|pattern|accept)=)")
 
-TAG = re.compile(r"<[^>]+>|\{#.*?#\}|\{%[^%]*%\}|\{\{[^}]*\}\}|<!--.*?-->", re.S)
+# `<[^>]+>` si ferma al PRIMO `>`, anche quando sta dentro un attributo:
+# `class="{% if stats.balance >= 0 %}..."` spezza il match a meta', e il
+# resto dell'attributo finisce contato come testo visibile. La forma qui
+# sotto salta i `>` racchiusi fra apici.
+TAG = re.compile(
+    r"<(?:[^>\"']|\"[^\"]*\"|'[^']*')*>"
+    r"|\{#.*?#\}|\{%[^%]*%\}|\{\{[^}]*\}\}|<!--.*?-->", re.S)
 
 
 def da_git(ref, percorso):
@@ -96,7 +105,7 @@ def testo_visibile(html):
     # Il corpo degli <script> non e' testo visibile: lasciarlo dentro fa
     # fallire il confronto ogni volta che cambia una stringa di classe nel JS,
     # confondendo una modifica autorizzata con una perdita di contenuto.
-    senza = SCRIPT.sub(" ", html)
+    senza = STYLE.sub(" ", SCRIPT.sub(" ", html))
     senza = TAG.sub(" ", senza)
     return [p for p in senza.split() if p.strip()]
 

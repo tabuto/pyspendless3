@@ -273,6 +273,71 @@ Lezione di metodo: una misura su una pagina sola non dimostra niente su
 diciassette. Un difetto si smentisce sull'insieme dei file, non su un campione
 scelto perché comodo.
 
+### Misura finale (Fase 9, attività 9.7) — 2026-10-18
+
+Stessa rotta, stesso strumento, stesse condizioni: `tools/ui-measure.py
+/movements`, cache fredda, 1440x900, utente autenticato.
+
+| | Fase 0 | Fase 9 | Δ |
+|---|---|---|---|
+| **richieste** | 22 | **16** | −6 (−27%) |
+| **peso** | 882,7 KB | **593,1 KB** | **−289,6 KB (−33%)** |
+
+Per origine, dove si vede lo scambio fatto dalle decisioni D6 e D9 — meno CDN,
+più roba servita in locale:
+
+| Origine | Fase 0 | Fase 9 |
+|---|---|---|
+| `localhost:5000` | 3 req / 515,2 KB | 7 req / 432,4 KB |
+| `cdn.jsdelivr.net` | 11 req / 295,5 KB | 3 req / 90,3 KB |
+| `cdn.datatables.net` | 7 req / 42,0 KB | 5 req / 40,4 KB |
+| `code.jquery.com` | 1 req / 30,0 KB | 1 req / 30,0 KB |
+
+`adminlte.css`, che da solo valeva 354,1 KB e il 40% della pagina, non esiste
+più. Al suo posto `ps-tailwind.css` pesa **52,6 KB**: un settimo.
+
+**Quello che resta da guadagnare, ed era già previsto in Fase 0.** La risorsa
+più pesante della pagina ora è il set di icone, e non è il framework:
+
+| Risorsa | KB | % della pagina |
+|---|---|---|
+| `ps-icons.woff2` | 131,3 | 22,1% |
+| `ps-icons.css` | 85,3 | 14,4% |
+| **totale icone** | **216,6** | **36,5%** |
+
+D9 ha self-ostato Bootstrap Icons ma **non ne ha fatto un subset**. Contati:
+`ps-icons.css` definisce **2.078 glifi**, i template e il JS ne usano **59**.
+Si carica il 97% di un set per non usarlo.
+
+La misura di Fase 0 aveva individuato il difetto ma ne aveva sbagliato la
+taglia (*«set completo per una dozzina di glifi»*): dodici erano le icone
+visibili allora, non quelle referenziate — e D10 ne ha poi aggiunte,
+sostituendo le Font Awesome mai rese con i `bi bi-*` corrispondenti. Il
+difetto resta, con un numeratore quattro volte più grande.
+È il prossimo guadagno grosso, ma la stima va fatta sul serio prima di
+prometterla: 59 glifi su 2.078 non significa 59/2078 del peso, perché un
+`woff2` ha tabelle condivise che non scalano col numero di glifi. Un subset si
+misura generandolo. È comunque un intervento a sé, non parte del restyling:
+va aperta una voce `MB-NNN`.
+
+### Due strumenti di verifica sono diventati tautologici
+
+Emerso verificando la Fase 9, e va scritto perché non si creda che siano due
+criteri superati:
+
+- **`tools/check-nav-parity.py` (criterio A2.3)** confronta la nav «vecchia»
+  letta da `/home` con la «nuova» letta da `ps-home.html`. Dalla Fase 3 `/home`
+  **rende proprio `ps-home.html`**: confronta lo stesso template con se stesso,
+  per due vie di rendering diverse. Vacuo da sei fasi.
+- **`tools/check-conversion-table.py` (criterio A1.4)** salta i template già
+  migrati. Dalla Fase 9 lo sono tutti e 21: esamina **0 classi** e riporta
+  copertura completa.
+
+Entrambi avevano come termine di paragone il *prima*, che ora non esiste più
+nel working tree. Tornano significativi solo prendendolo da git, per esempio
+`git show v0.2.2:pyspendless/templates/ps-nav.html`. Finché restano così,
+il loro verde non è evidenza.
+
 ## Note
 
 - **Branch**: il lavoro sta su `feature/task-19-FE-refactoring`, già attivo —

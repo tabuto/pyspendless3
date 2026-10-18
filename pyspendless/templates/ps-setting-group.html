@@ -1,75 +1,75 @@
-{% extends 'ps-nav.html' %}
+{% extends 'ps-nav-tw.html' %}
 
 {% block nav_content %}
-<div class="container-fluid mt-4">
+<div class="w-full px-4 mt-4">
   <h1 class="mb-4">Gestione Gruppo e Account</h1>
-  
+
   <!-- Alert per messaggi -->
   <div id="alertContainer"></div>
-  
-  <div class="row">
+
+  <div class="grid grid-cols-12 gap-4">
     <!-- Account Info -->
-    <div class="col-md-12 mb-4">
-      <div class="card">
-        <div class="card-header bg-primary text-white">
-          <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
-            <h3 class="card-title mb-0"><i class="bi bi-building"></i> Informazioni Account</h3>
-            <button type="button" class="btn btn-sm btn-light text-nowrap" data-bs-toggle="modal" data-bs-target="#editAccountModal">
+    <div class="col-span-12 mb-4">
+      <div class="ps-card">
+        <div class="ps-card-header ps-badge-brand text-white">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+            <h3 class="ps-card-title mb-0"><i class="bi bi-building"></i> Informazioni Account</h3>
+            <button type="button" class="ps-btn ps-btn-sm ps-btn-light whitespace-nowrap" data-bs-toggle="modal" data-bs-target="#editAccountModal">
               <i class="bi bi-pencil"></i> Rinomina Account
             </button>
           </div>
         </div>
-        <div class="card-body">
-          <div class="row">
-            <div class="col-md-6">
+        <div class="ps-card-body">
+          <div class="grid grid-cols-12 gap-4">
+            <div class="md:col-span-6 col-span-12">
               <p><strong>Nome Account:</strong> <span id="accountName">{{ account.name if account else 'N/A' }}</span></p>
             </div>
-            <div class="col-md-6">
+            <div class="md:col-span-6 col-span-12">
               <p><strong>Creato il:</strong> {{ account.created_at.strftime('%d/%m/%Y') if account and account.created_at else 'N/A' }}</p>
             </div>
           </div>
         </div>
       </div>
     </div>
-    
-    <div class="col-md-6">
-      <div class="card">
-        <div class="card-header">
-          <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
-            <h3 class="card-title mb-0">Membri del Gruppo</h3>
-            <button type="button" class="btn btn-sm btn-primary text-nowrap" data-bs-toggle="modal" data-bs-target="#inviteModal">
+
+    <div class="md:col-span-6 col-span-12">
+      <div class="ps-card">
+        <div class="ps-card-header">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+            <h3 class="ps-card-title mb-0">Membri del Gruppo</h3>
+            <button type="button" class="ps-btn ps-btn-sm ps-btn-primary whitespace-nowrap" data-bs-toggle="modal" data-bs-target="#inviteModal">
               <i class="bi bi-person-plus"></i> Invita Utente
             </button>
           </div>
         </div>
-        <div class="card-body p-0">
-          <ul class="list-group list-group-flush" id="membersTable">
+        <div class="ps-card-body p-0">
+          <ul class="ps-list ps-list-flush" id="membersTable">
             <!-- Popolato dinamicamente -->
           </ul>
         </div>
       </div>
     </div>
-    
-    <div class="col-md-6">
-      <div class="card">
-        <div class="card-header">
-          <h3 class="card-title mb-0">Inviti Pendenti</h3>
+
+    <div class="md:col-span-6 col-span-12">
+      <div class="ps-card">
+        <div class="ps-card-header">
+          <h3 class="ps-card-title mb-0">Inviti Pendenti</h3>
         </div>
-        <div class="card-body p-0">
-          <ul class="list-group list-group-flush" id="pendingInvitesTable">
+        <div class="ps-card-body p-0">
+          <ul class="ps-list ps-list-flush" id="pendingInvitesTable">
             <!-- Popolato dinamicamente -->
           </ul>
-          <p class="text-muted px-3 py-2" id="noPendingMessage" style="display: none;">
+          <p class="ps-muted px-3 py-2" id="noPendingMessage" style="display: none;">
             Nessun invito in attesa
           </p>
         </div>
       </div>
-      
-      <div class="card mt-3">
-        <div class="card-header bg-info text-white">
-          <h3 class="card-title"><i class="bi bi-info-circle"></i> Informazioni</h3>
+
+      <div class="ps-card mt-3">
+        <div class="ps-card-header bg-[var(--ps-info)] text-white">
+          <h3 class="ps-card-title"><i class="bi bi-info-circle"></i> Informazioni</h3>
         </div>
-        <div class="card-body">
+        <div class="ps-card-body">
           <p>Solo il proprietario dell'account può invitare nuovi membri al gruppo.</p>
           <p>Gli utenti invitati riceveranno un link di accettazione (funzionalità in sviluppo).</p>
           <p>I membri del gruppo condividono l'accesso ai wallet e ai movimenti dell'account.</p>
@@ -77,24 +77,24 @@
       </div>
     </div>
   </div>
-  
+
   <!-- Sezione Eliminazione Account -->
-  <div class="row mt-4">
-    <div class="col-md-12">
-      <div class="card border-danger">
-        <div class="card-header bg-danger text-white">
-          <h3 class="card-title"><i class="bi bi-exclamation-triangle"></i> Zona Pericolosa</h3>
+  <div class="grid grid-cols-12 gap-4 mt-4">
+    <div class="col-span-12">
+      <div class="ps-card border-[var(--ps-expense)]">
+        <div class="ps-card-header" style="background-color: color-mix(in srgb, var(--ps-expense) 12%, var(--ps-surface)); color: var(--ps-expense);">
+          <h3 class="ps-card-title"><i class="bi bi-exclamation-triangle"></i> Zona Pericolosa</h3>
         </div>
-        <div class="card-body">
+        <div class="ps-card-body">
           <h5>Elimina Account</h5>
-          <p class="text-muted">
+          <p class="ps-muted">
             L'eliminazione dell'account è un'azione permanente e irreversibile.
           </p>
-          <ul class="text-muted">
+          <ul class="ps-muted">
             <li>Se l'account è condiviso con altri utenti, verranno eliminati solo il tuo profilo e i tuoi movimenti personali.</li>
             <li>Se sei l'unico utente dell'account, verranno eliminati tutti i dati: profilo, categorie, wallet e movimenti.</li>
           </ul>
-          <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteAccountModal">
+          <button type="button" class="ps-btn ps-btn-danger" data-bs-toggle="modal" data-bs-target="#deleteAccountModal">
             <i class="bi bi-trash"></i> Elimina Account
           </button>
         </div>
@@ -104,115 +104,108 @@
 </div>
 
 <!-- Modal Modifica Account -->
-<div class="modal fade" id="editAccountModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Rinomina Account</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <form id="editAccountForm">
-          <div class="mb-3">
-            <label for="accountNameInput" class="form-label">Nome Account</label>
-            <input type="text" class="form-control" id="accountNameInput" 
-                   value="{{ account.name if account else '' }}" required>
-            <div class="form-text">Il nome dell'account è condiviso con tutti i membri del gruppo</div>
-          </div>
-        </form>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
-        <button type="button" class="btn btn-primary" onclick="updateAccountName()">Salva</button>
-      </div>
+<dialog class="ps-modal" id="editAccountModal">
+  <div class="ps-modal-panel">
+    <div class="ps-modal-header">
+      <h5 class="ps-modal-title">Rinomina Account</h5>
+      <button type="button" class="ps-btn-close" aria-label="Chiudi" data-bs-dismiss="modal"></button>
+    </div>
+    <div class="ps-modal-body">
+      <form id="editAccountForm">
+        <div class="mb-3">
+          <label for="accountNameInput" class="ps-label">Nome Account</label>
+          <input type="text" class="ps-input" id="accountNameInput"
+                 value="{{ account.name if account else '' }}" required>
+          <div class="ps-help">Il nome dell'account è condiviso con tutti i membri del gruppo</div>
+        </div>
+      </form>
+    </div>
+    <div class="ps-modal-footer">
+      <button type="button" class="ps-btn ps-btn-secondary" data-bs-dismiss="modal">Annulla</button>
+      <button type="button" class="ps-btn ps-btn-primary" onclick="updateAccountName()">Salva</button>
     </div>
   </div>
-</div>
+</dialog>
 
 <!-- Modal Invita Utente -->
-<div class="modal fade" id="inviteModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Invita Utente al Gruppo</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <form id="inviteForm">
-          <div class="mb-3">
-            <label for="inviteEmail" class="form-label">Email Gmail dell'utente da invitare</label>
-            <input type="email" class="form-control" id="inviteEmail" required 
-                   placeholder="utente@gmail.com">
-            <div class="form-text">Solo email Gmail sono accettate. Il link sarà valido per 7 giorni.</div>
-          </div>
-        </form>
-        
-        <!-- Link generato (nascosto inizialmente) -->
-        <div id="generatedLinkContainer" style="display: none;" class="mt-3">
-          <div class="alert alert-success">
-            <h6 class="alert-heading">Link di invito generato!</h6>
-            <p class="mb-2">Condividi questo link con l'utente invitato:</p>
-            <div class="input-group">
-              <input type="text" class="form-control" id="generatedLink" readonly>
-              <button class="btn btn-outline-secondary" type="button" onclick="copyLink()">
-                <i class="bi bi-clipboard"></i> Copia
-              </button>
-              <button class="btn btn-outline-primary" type="button" onclick="shareLink()" id="shareButton">
-                <i class="bi bi-share"></i> Condividi
-              </button>
-            </div>
+<dialog class="ps-modal" id="inviteModal">
+  <div class="ps-modal-panel">
+    <div class="ps-modal-header">
+      <h5 class="ps-modal-title">Invita Utente al Gruppo</h5>
+      <button type="button" class="ps-btn-close" aria-label="Chiudi" data-bs-dismiss="modal"></button>
+    </div>
+    <div class="ps-modal-body">
+      <form id="inviteForm">
+        <div class="mb-3">
+          <label for="inviteEmail" class="ps-label">Email Gmail dell'utente da invitare</label>
+          <input type="email" class="ps-input" id="inviteEmail" required
+                 placeholder="utente@gmail.com">
+          <div class="ps-help">Solo email Gmail sono accettate. Il link sarà valido per 7 giorni.</div>
+        </div>
+      </form>
+
+      <!-- Link generato (nascosto inizialmente) -->
+      <div id="generatedLinkContainer" style="display: none;" class="mt-3">
+        <div class="ps-alert ps-alert-success">
+          <h6 class="ps-alert-heading">Link di invito generato!</h6>
+          <p class="mb-2">Condividi questo link con l'utente invitato:</p>
+          <div class="ps-input-group">
+            <input type="text" class="ps-input" id="generatedLink" readonly>
+            <button class="ps-btn ps-btn-outline-secondary" type="button" onclick="copyLink()">
+              <i class="bi bi-clipboard"></i> Copia
+            </button>
+            <button class="ps-btn ps-btn-outline-primary" type="button" onclick="shareLink()" id="shareButton">
+              <i class="bi bi-share"></i> Condividi
+            </button>
           </div>
         </div>
       </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
-        <button type="button" class="btn btn-primary" onclick="inviteUser()" id="generateLinkBtn">Genera Link</button>
-      </div>
+    </div>
+    <div class="ps-modal-footer">
+      <button type="button" class="ps-btn ps-btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+      <button type="button" class="ps-btn ps-btn-primary" onclick="inviteUser()" id="generateLinkBtn">Genera Link</button>
     </div>
   </div>
-</div>
+</dialog>
 
 <!-- Modal Elimina Account -->
-<div class="modal fade" id="deleteAccountModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content border-danger">
-      <div class="modal-header bg-danger text-white">
-        <h5 class="modal-title"><i class="bi bi-exclamation-triangle"></i> Conferma Eliminazione Account</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+<dialog class="ps-modal" id="deleteAccountModal">
+  <div class="ps-modal-panel border-[var(--ps-expense)]">
+    <div class="ps-modal-header" style="background-color: color-mix(in srgb, var(--ps-expense) 12%, var(--ps-surface)); color: var(--ps-expense);">
+      <h5 class="ps-modal-title"><i class="bi bi-exclamation-triangle"></i> Conferma Eliminazione Account</h5>
+      <button type="button" class="ps-btn-close" aria-label="Chiudi" data-bs-dismiss="modal"></button>
+    </div>
+    <div class="ps-modal-body">
+      <div class="ps-alert ps-alert-danger">
+        <strong>Attenzione!</strong> Questa azione è irreversibile.
       </div>
-      <div class="modal-body">
-        <div class="alert alert-danger">
-          <strong>Attenzione!</strong> Questa azione è irreversibile.
-        </div>
-        <p>Sei sicuro di voler eliminare il tuo account?</p>
-        <p class="text-muted mb-2">Cosa verrà eliminato:</p>
-        <ul id="deletionDetails" class="text-muted">
-          <li>Il tuo profilo utente</li>
-          <li>I tuoi movimenti personali</li>
-          <li id="sharedAccountNote" style="display: none;">L'account resterà attivo per gli altri membri</li>
-          <li id="fullDeletionNote" style="display: none;">Tutti i dati dell'account (wallet, categorie, movimenti)</li>
-        </ul>
-        
-        <div class="form-group mt-3">
-          <label for="confirmDeleteText" class="form-label">
-            Digita <strong>ELIMINA</strong> per confermare:
-          </label>
-          <input type="text" class="form-control" id="confirmDeleteText" placeholder="ELIMINA">
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
-        <button type="button" class="btn btn-danger" id="confirmDeleteBtn" onclick="deleteAccount()" disabled>
-          <i class="bi bi-trash"></i> Elimina Definitivamente
-        </button>
+      <p>Sei sicuro di voler eliminare il tuo account?</p>
+      <p class="ps-muted mb-2">Cosa verrà eliminato:</p>
+      <ul id="deletionDetails" class="ps-muted">
+        <li>Il tuo profilo utente</li>
+        <li>I tuoi movimenti personali</li>
+        <li id="sharedAccountNote" style="display: none;">L'account resterà attivo per gli altri membri</li>
+        <li id="fullDeletionNote" style="display: none;">Tutti i dati dell'account (wallet, categorie, movimenti)</li>
+      </ul>
+
+      <div class="ps-field mt-3">
+        <label for="confirmDeleteText" class="ps-label">
+          Digita <strong>ELIMINA</strong> per confermare:
+        </label>
+        <input type="text" class="ps-input" id="confirmDeleteText" placeholder="ELIMINA">
       </div>
     </div>
+    <div class="ps-modal-footer">
+      <button type="button" class="ps-btn ps-btn-secondary" data-bs-dismiss="modal">Annulla</button>
+      <button type="button" class="ps-btn ps-btn-danger" id="confirmDeleteBtn" onclick="deleteAccount()" disabled>
+        <i class="bi bi-trash"></i> Elimina Definitivamente
+      </button>
+    </div>
   </div>
-</div>
+</dialog>
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 const accountId = {{ session.account_id }};
 let currentGroupId = null;
@@ -223,7 +216,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // In produzione, dovremmo gestire la creazione del gruppo
   loadGroupMembers();
   loadPendingInvites();
-  
+
   // Event listener per reset modal quando viene chiuso
   const editAccountModal = document.getElementById('editAccountModal');
   if (editAccountModal) {
@@ -232,7 +225,7 @@ document.addEventListener('DOMContentLoaded', function() {
       document.getElementById('editAccountForm').reset();
     });
   }
-  
+
   // Event listener per reset del modal inviti
   const inviteModal = document.getElementById('inviteModal');
   if (inviteModal) {
@@ -242,7 +235,7 @@ document.addEventListener('DOMContentLoaded', function() {
       document.getElementById('generateLinkBtn').style.display = 'block';
     });
   }
-  
+
   // Event listener per il campo di conferma eliminazione
   const confirmDeleteText = document.getElementById('confirmDeleteText');
   if (confirmDeleteText) {
@@ -251,7 +244,7 @@ document.addEventListener('DOMContentLoaded', function() {
       confirmBtn.disabled = this.value !== 'ELIMINA';
     });
   }
-  
+
   // Event listener per reset del modal eliminazione
   const deleteAccountModal = document.getElementById('deleteAccountModal');
   if (deleteAccountModal) {
@@ -259,7 +252,7 @@ document.addEventListener('DOMContentLoaded', function() {
       document.getElementById('confirmDeleteText').value = '';
       document.getElementById('confirmDeleteBtn').disabled = true;
     });
-    
+
     // Quando si apre il modal, controlla se l'account è condiviso
     deleteAccountModal.addEventListener('show.bs.modal', function () {
       checkAccountSharing();
@@ -269,13 +262,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function showAlert(message, type = 'success') {
   const alertDiv = document.createElement('div');
-  alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+  alertDiv.className = `ps-alert ps-alert-${type} ps-alert-dismissible fade show`;
   alertDiv.innerHTML = `
     ${message}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    <button type="button" class="ps-btn-close" data-bs-dismiss="alert"></button>
   `;
   document.getElementById('alertContainer').appendChild(alertDiv);
-  
+
   setTimeout(() => {
     alertDiv.remove();
   }, 5000);
@@ -283,19 +276,19 @@ function showAlert(message, type = 'success') {
 
 function updateAccountName() {
   const name = document.getElementById('accountNameInput').value.trim();
-  
+
   if (!name) {
     showAlert('Il nome dell\'account è obbligatorio', 'warning');
     return;
   }
-  
+
   // Trova il pulsante di salvataggio
   const modal = document.getElementById('editAccountModal');
-  const saveBtn = modal.querySelector('.btn-primary');
+  const saveBtn = modal.querySelector('.ps-btn-primary');
   const originalText = saveBtn.innerHTML;
   saveBtn.disabled = true;
-  saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Salvando...';
-  
+  saveBtn.innerHTML = '<span class="ps-spinner-sm"></span> Salvando...';
+
   fetch(`/api/accounts/${accountId}`, {
     method: 'PUT',
     headers: {
@@ -307,13 +300,13 @@ function updateAccountName() {
   .then(data => {
     saveBtn.disabled = false;
     saveBtn.innerHTML = originalText;
-    
+
     if (data.error) {
       showAlert(data.error, 'danger');
     } else {
       showAlert('Nome account aggiornato con successo', 'success');
       document.getElementById('accountName').textContent = data.name;
-      
+
       // Chiudi il modal in modo completo
       closeModal('editAccountModal');
     }
@@ -329,17 +322,17 @@ function updateAccountName() {
 function closeModal(modalId) {
   const modalElement = document.getElementById(modalId);
   const modalInstance = bootstrap.Modal.getInstance(modalElement);
-  
+
   if (modalInstance) {
     modalInstance.hide();
   }
-  
+
   // Forza la rimozione del backdrop e cleanup
   setTimeout(() => {
     // Rimuovi tutti i backdrop rimasti
     const backdrops = document.querySelectorAll('.modal-backdrop');
     backdrops.forEach(backdrop => backdrop.remove());
-    
+
     // Rimuovi la classe modal-open dal body
     document.body.classList.remove('modal-open');
     document.body.style.overflow = '';
@@ -352,36 +345,36 @@ function loadGroupMembers() {
   .then(response => response.json())
   .then(data => {
     const list = document.getElementById('membersTable');
-    
+
     if (data.error) {
       list.innerHTML = `
-        <li class="list-group-item text-center text-danger">
+        <li class="ps-list-item text-center text-[var(--ps-expense)]">
           Errore: ${data.error}
         </li>
       `;
       return;
     }
-    
+
     if (data.users && data.users.length > 0) {
       list.innerHTML = '';
       data.users.forEach(user => {
         const roleText = user.role === 'owner' ? 'Proprietario' : 'Membro';
-        const badgeColor = user.role === 'owner' ? 'primary' : 'info';
+        const badgeClass = user.role === 'owner' ? 'ps-badge-brand' : 'ps-badge-neutral';
         const actionBtn = user.role !== 'owner'
-          ? `<button class="btn btn-sm btn-outline-danger" onclick="removeMember('${user.id}')">
+          ? `<button class="ps-btn ps-btn-sm ps-btn-outline-danger" onclick="removeMember('${user.id}')">
                <i class="bi bi-person-dash"></i> Rimuovi
              </button>`
           : '';
         const item = document.createElement('li');
-        item.className = 'list-group-item';
+        item.className = 'ps-list-item';
         item.innerHTML = `
-          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div class="flex justify-between items-center flex-wrap gap-2">
             <div>
-              <div class="fw-semibold"><i class="bi bi-person-circle me-1"></i>${user.email}</div>
-              <small class="text-muted">${user.name || 'N/A'}</small>
+              <div class="font-semibold"><i class="bi bi-person-circle mr-1"></i>${user.email}</div>
+              <small class="ps-muted">${user.name || 'N/A'}</small>
             </div>
-            <div class="d-flex align-items-center gap-2">
-              <span class="badge bg-${badgeColor}">${roleText}</span>
+            <div class="flex items-center gap-2">
+              <span class="${badgeClass}">${roleText}</span>
               ${actionBtn}
             </div>
           </div>
@@ -390,7 +383,7 @@ function loadGroupMembers() {
       });
     } else {
       list.innerHTML = `
-        <li class="list-group-item text-center text-muted">
+        <li class="ps-list-item text-center ps-muted">
           Nessun utente trovato
         </li>
       `;
@@ -400,7 +393,7 @@ function loadGroupMembers() {
     console.error('Errore caricamento membri:', error);
     const list = document.getElementById('membersTable');
     list.innerHTML = `
-      <li class="list-group-item text-center text-danger">
+      <li class="ps-list-item text-center text-[var(--ps-expense)]">
         Errore durante il caricamento dei membri
       </li>
     `;
@@ -413,19 +406,19 @@ function loadPendingInvites() {
   .then(data => {
     const list = document.getElementById('pendingInvitesTable');
     const noPendingMsg = document.getElementById('noPendingMessage');
-    
+
     if (data.invites && data.invites.length > 0) {
       list.innerHTML = '';
       data.invites.forEach(invite => {
         const item = document.createElement('li');
-        item.className = 'list-group-item';
+        item.className = 'ps-list-item';
         item.innerHTML = `
-          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div class="flex justify-between items-center flex-wrap gap-2">
             <div>
-              <div class="fw-semibold"><i class="bi bi-envelope me-1"></i>${invite.email}</div>
-              <small class="text-muted">${invite.created_at}</small>
+              <div class="font-semibold"><i class="bi bi-envelope mr-1"></i>${invite.email}</div>
+              <small class="ps-muted">${invite.created_at}</small>
             </div>
-            <button class="btn btn-sm btn-outline-danger" onclick="deletePendingInvite('${invite.token_uuid}')">
+            <button class="ps-btn ps-btn-sm ps-btn-outline-danger" onclick="deletePendingInvite('${invite.token_uuid}')">
               <i class="bi bi-trash"></i> Elimina
             </button>
           </div>
@@ -450,7 +443,7 @@ function deletePendingInvite(tokenUuid) {
   if (!confirm('Sei sicuro di voler eliminare questo invito?')) {
     return;
   }
-  
+
   fetch(`/api/pending-invites/${tokenUuid}`, {
     method: 'DELETE'
   })
@@ -471,30 +464,30 @@ function deletePendingInvite(tokenUuid) {
 
 function inviteUser() {
   const email = document.getElementById('inviteEmail').value.trim();
-  
+
   if (!email) {
     showAlert('Email è obbligatoria', 'warning');
     return;
   }
-  
+
   // Verifica formato email
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) {
     showAlert('Formato email non valido', 'warning');
     return;
   }
-  
+
   // Verifica che sia Gmail
   if (!email.toLowerCase().endsWith('@gmail.com')) {
     showAlert('Solo email Gmail sono accettate', 'warning');
     return;
   }
-  
+
   const generateBtn = document.getElementById('generateLinkBtn');
   const originalText = generateBtn.innerHTML;
   generateBtn.disabled = true;
-  generateBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generando...';
-  
+  generateBtn.innerHTML = '<span class="ps-spinner-sm"></span> Generando...';
+
   fetch('/api/generate-link', {
     method: 'POST',
     headers: {
@@ -506,7 +499,7 @@ function inviteUser() {
   .then(data => {
     generateBtn.disabled = false;
     generateBtn.innerHTML = originalText;
-    
+
     if (data.error) {
       showAlert(data.error, 'danger');
     } else {
@@ -515,7 +508,7 @@ function inviteUser() {
       document.getElementById('generatedLinkContainer').style.display = 'block';
       generateBtn.style.display = 'none';
       showAlert('Link di invito generato con successo!', 'success');
-      
+
       // Ricarica la lista degli inviti pendenti
       loadPendingInvites();
     }
@@ -532,7 +525,7 @@ function copyLink() {
   const linkInput = document.getElementById('generatedLink');
   linkInput.select();
   linkInput.setSelectionRange(0, 99999); // Per mobile
-  
+
   navigator.clipboard.writeText(linkInput.value).then(() => {
     showAlert('Link copiato negli appunti!', 'success');
   }).catch(err => {
@@ -544,7 +537,7 @@ function copyLink() {
 function shareLink() {
   const link = document.getElementById('generatedLink').value;
   const email = document.getElementById('inviteEmail').value;
-  
+
   // Verifica se il browser supporta la Web Share API
   if (navigator.share) {
     navigator.share({
@@ -570,9 +563,9 @@ function removeMember(memberId) {
   if (!confirm('Sei sicuro di voler rimuovere questo membro dal gruppo?')) {
     return;
   }
-  
+
   showAlert('Funzionalità in sviluppo', 'info');
-  
+
   /* Implementazione completa:
   fetch(`/api/memberships/${memberId}`, {
     method: 'DELETE'
@@ -600,7 +593,7 @@ function checkAccountSharing() {
   .then(data => {
     const sharedNote = document.getElementById('sharedAccountNote');
     const fullNote = document.getElementById('fullDeletionNote');
-    
+
     if (data.users && data.users.length > 1) {
       // Account condiviso
       sharedNote.style.display = 'list-item';
@@ -623,8 +616,8 @@ function deleteAccount() {
   const confirmBtn = document.getElementById('confirmDeleteBtn');
   const originalText = confirmBtn.innerHTML;
   confirmBtn.disabled = true;
-  confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Eliminando...';
-  
+  confirmBtn.innerHTML = '<span class="ps-spinner-sm"></span> Eliminando...';
+
   fetch('/api/user/delete-account', {
     method: 'DELETE',
     headers: {
@@ -639,10 +632,10 @@ function deleteAccount() {
       confirmBtn.innerHTML = originalText;
     } else {
       showAlert('Account eliminato con successo. Verrai reindirizzato...', 'success');
-      
+
       // Chiudi il modal
       closeModal('deleteAccountModal');
-      
+
       // Reindirizza al logout dopo 2 secondi
       setTimeout(() => {
         window.location.href = '/auth/logout';

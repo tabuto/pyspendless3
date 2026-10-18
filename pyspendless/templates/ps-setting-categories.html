@@ -1,43 +1,43 @@
-{% extends 'ps-nav.html' %}
+{% extends 'ps-nav-tw.html' %}
 
 {% block nav_content %}
-<div class="container-fluid mt-4">
+<div class="w-full px-4 mt-4">
   <h1 class="mb-4">Gestione Categorie</h1>
-  
+
   <!-- Alert per messaggi -->
   <div id="alertContainer"></div>
-  
+
   <!-- Tabs per separare Entrate/Uscite -->
-  <div class="card">
-    <div class="card-header">
-      <div class="d-flex justify-content-between align-items-center">
-        <ul class="nav nav-tabs card-header-tabs" id="categoryTabs" role="tablist">
-          <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="expense-tab" data-bs-toggle="tab" data-bs-target="#expense" type="button" role="tab">
-              <i class="bi bi-arrow-down-circle text-danger"></i> Uscite
+  <div class="ps-card">
+    <div class="ps-card-header">
+      <div class="flex justify-between items-center">
+        <ul class="ps-card-header-tabs" id="categoryTabs" role="tablist">
+          <li class="ps-tab" role="presentation">
+            <button class="ps-tab-btn active" id="expense-tab" data-bs-toggle="tab" data-bs-target="#expense" type="button" role="tab" aria-selected="true">
+              <i class="bi bi-arrow-down-circle ps-amount-expense"></i> Uscite
             </button>
           </li>
-          <li class="nav-item" role="presentation">
-            <button class="nav-link" id="income-tab" data-bs-toggle="tab" data-bs-target="#income" type="button" role="tab">
-              <i class="bi bi-arrow-up-circle text-success"></i> Entrate
+          <li class="ps-tab" role="presentation">
+            <button class="ps-tab-btn" id="income-tab" data-bs-toggle="tab" data-bs-target="#income" type="button" role="tab" aria-selected="false">
+              <i class="bi bi-arrow-up-circle ps-amount-income"></i> Entrate
             </button>
           </li>
         </ul>
         <div>
-          <button type="button" class="btn btn-sm btn-outline-secondary me-2" id="btnToggleSort">
+          <button type="button" class="ps-btn ps-btn-sm ps-btn-outline-secondary mr-2" id="btnToggleSort">
             <i class="bi bi-sort-alpha-down"></i> Ordine Alfabetico
           </button>
-          <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addCategoryModal">
+          <button type="button" class="ps-btn ps-btn-primary" data-bs-toggle="modal" data-bs-target="#addCategoryModal">
             <i class="bi bi-plus-circle"></i> Aggiungi Categoria
           </button>
         </div>
       </div>
     </div>
-    <div class="card-body">
-      <div class="tab-content" id="categoryTabContent">
+    <div class="ps-card-body">
+      <div class="ps-tabpanels" id="categoryTabContent">
         <!-- Tab Uscite -->
-        <div class="tab-pane fade show active" id="expense" role="tabpanel">
-          <table class="table table-striped">
+        <div class="ps-tabpanel active" id="expense" role="tabpanel">
+          <table class="ps-table">
             <thead>
               <tr>
                 <th style="width: 80px;">Ordine</th>
@@ -50,10 +50,10 @@
             </tbody>
           </table>
         </div>
-        
+
         <!-- Tab Entrate -->
-        <div class="tab-pane fade" id="income" role="tabpanel">
-          <table class="table table-striped">
+        <div class="ps-tabpanel" id="income" role="tabpanel">
+          <table class="ps-table">
             <thead>
               <tr>
                 <th style="width: 80px;">Ordine</th>
@@ -72,116 +72,109 @@
 </div>
 
 <!-- Modal Selezione Categoria Target per Eliminazione -->
-<div class="modal fade" id="deleteCategoryModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header bg-danger text-white">
-        <h5 class="modal-title">
-          <i class="bi bi-exclamation-triangle"></i> Elimina Categoria
-        </h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+<dialog class="ps-modal" id="deleteCategoryModal">
+  <div class="ps-modal-panel">
+    <div class="ps-modal-header" style="background-color: color-mix(in srgb, var(--ps-expense) 12%, var(--ps-surface)); color: var(--ps-expense);">
+      <h5 class="ps-modal-title">
+        <i class="bi bi-exclamation-triangle"></i> Elimina Categoria
+      </h5>
+      <button type="button" class="ps-btn-close" aria-label="Chiudi" data-bs-dismiss="modal"></button>
+    </div>
+    <div class="ps-modal-body">
+      <div class="ps-alert ps-alert-warning">
+        <i class="bi bi-info-circle"></i>
+        <strong>La categoria "<span id="deleteCategoryName"></span>" ha <span id="deleteMovementsCount"></span> movimenti associati.</strong>
       </div>
-      <div class="modal-body">
-        <div class="alert alert-warning">
-          <i class="bi bi-info-circle"></i>
-          <strong>La categoria "<span id="deleteCategoryName"></span>" ha <span id="deleteMovementsCount"></span> movimenti associati.</strong>
-        </div>
-        <p>Seleziona una categoria a cui spostare i movimenti prima di eliminare:</p>
-        <input type="hidden" id="deleteCategoryId">
-        <input type="hidden" id="deleteCategoryType">
-        <div class="mb-3">
-          <label for="targetCategorySelect" class="form-label">Categoria di destinazione</label>
-          <select class="form-select" id="targetCategorySelect" required>
-            <option value="">-- Seleziona una categoria --</option>
-          </select>
-          <small class="form-text text-muted">
-            I movimenti verranno spostati a questa categoria prima dell'eliminazione.
-          </small>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
-        <button type="button" class="btn btn-danger" onclick="confirmDeleteCategory()">
-          <i class="bi bi-trash"></i> Elimina e Sposta Movimenti
-        </button>
+      <p>Seleziona una categoria a cui spostare i movimenti prima di eliminare:</p>
+      <input type="hidden" id="deleteCategoryId">
+      <input type="hidden" id="deleteCategoryType">
+      <div class="mb-3">
+        <label for="targetCategorySelect" class="ps-label">Categoria di destinazione</label>
+        <select class="ps-select" id="targetCategorySelect" required>
+          <option value="">-- Seleziona una categoria --</option>
+        </select>
+        <small class="ps-help">
+          I movimenti verranno spostati a questa categoria prima dell'eliminazione.
+        </small>
       </div>
     </div>
+    <div class="ps-modal-footer">
+      <button type="button" class="ps-btn ps-btn-secondary" data-bs-dismiss="modal">Annulla</button>
+      <button type="button" class="ps-btn ps-btn-danger" onclick="confirmDeleteCategory()">
+        <i class="bi bi-trash"></i> Elimina e Sposta Movimenti
+      </button>
+    </div>
   </div>
-</div>
+</dialog>
 
 <!-- Modal Aggiungi Categoria -->
-<div class="modal fade" id="addCategoryModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Aggiungi Categoria</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <form id="addCategoryForm">
-          <div class="mb-3">
-            <label for="categoryName" class="form-label">Nome</label>
-            <input type="text" class="form-control" id="categoryName" required>
-          </div>
-          <div class="mb-3">
-            <label for="categoryType" class="form-label">Tipo</label>
-            <select class="form-select" id="categoryType" required>
-              <option value="expense">Uscita</option>
-              <option value="income">Entrata</option>
-              <option value="transfer">Trasferimento</option>
-            </select>
-          </div>
-          <div class="mb-3">
-            <label for="categoryOrderIndex" class="form-label">Ordine (opzionale)</label>
-            <input type="number" class="form-control" id="categoryOrderIndex" min="0" value="0">
-            <small class="form-text text-muted">Numero intero positivo per ordinamento personalizzato</small>
-          </div>
-        </form>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
-        <button type="button" class="btn btn-primary" onclick="addCategory()">Salva</button>
-      </div>
+<dialog class="ps-modal" id="addCategoryModal">
+  <div class="ps-modal-panel">
+    <div class="ps-modal-header">
+      <h5 class="ps-modal-title">Aggiungi Categoria</h5>
+      <button type="button" class="ps-btn-close" aria-label="Chiudi" data-bs-dismiss="modal"></button>
+    </div>
+    <div class="ps-modal-body">
+      <form id="addCategoryForm">
+        <div class="mb-3">
+          <label for="categoryName" class="ps-label">Nome</label>
+          <input type="text" class="ps-input" id="categoryName" required>
+        </div>
+        <div class="mb-3">
+          <label for="categoryType" class="ps-label">Tipo</label>
+          <select class="ps-select" id="categoryType" required>
+            <option value="expense">Uscita</option>
+            <option value="income">Entrata</option>
+            <option value="transfer">Trasferimento</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label for="categoryOrderIndex" class="ps-label">Ordine (opzionale)</label>
+          <input type="number" class="ps-input" id="categoryOrderIndex" min="0" value="0">
+          <small class="ps-help">Numero intero positivo per ordinamento personalizzato</small>
+        </div>
+      </form>
+    </div>
+    <div class="ps-modal-footer">
+      <button type="button" class="ps-btn ps-btn-secondary" data-bs-dismiss="modal">Annulla</button>
+      <button type="button" class="ps-btn ps-btn-primary" onclick="addCategory()">Salva</button>
     </div>
   </div>
-</div>
+</dialog>
 
 <!-- Modal Modifica Categoria -->
-<div class="modal fade" id="editCategoryModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Modifica Categoria</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <form id="editCategoryForm">
-          <input type="hidden" id="editCategoryId">
-          <input type="hidden" id="editCategoryOldName">
-          <div class="mb-3">
-            <label for="editCategoryName" class="form-label">Nome</label>
-            <input type="text" class="form-control" id="editCategoryName" required>
-            <small class="form-text text-muted">
-              <i class="bi bi-info-circle"></i> Se rinomini con un nome già esistente, le categorie verranno unite automaticamente.
-            </small>
-          </div>
-          <div class="mb-3">
-            <label for="editCategoryOrderIndex" class="form-label">Ordine</label>
-            <input type="number" class="form-control" id="editCategoryOrderIndex" min="0" required>
-          </div>
-        </form>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
-        <button type="button" class="btn btn-primary" onclick="updateCategory()">Salva</button>
-      </div>
+<dialog class="ps-modal" id="editCategoryModal">
+  <div class="ps-modal-panel">
+    <div class="ps-modal-header">
+      <h5 class="ps-modal-title">Modifica Categoria</h5>
+      <button type="button" class="ps-btn-close" aria-label="Chiudi" data-bs-dismiss="modal"></button>
+    </div>
+    <div class="ps-modal-body">
+      <form id="editCategoryForm">
+        <input type="hidden" id="editCategoryId">
+        <input type="hidden" id="editCategoryOldName">
+        <div class="mb-3">
+          <label for="editCategoryName" class="ps-label">Nome</label>
+          <input type="text" class="ps-input" id="editCategoryName" required>
+          <small class="ps-help">
+            <i class="bi bi-info-circle"></i> Se rinomini con un nome già esistente, le categorie verranno unite automaticamente.
+          </small>
+        </div>
+        <div class="mb-3">
+          <label for="editCategoryOrderIndex" class="ps-label">Ordine</label>
+          <input type="number" class="ps-input" id="editCategoryOrderIndex" min="0" required>
+        </div>
+      </form>
+    </div>
+    <div class="ps-modal-footer">
+      <button type="button" class="ps-btn ps-btn-secondary" data-bs-dismiss="modal">Annulla</button>
+      <button type="button" class="ps-btn ps-btn-primary" onclick="updateCategory()">Salva</button>
     </div>
   </div>
-</div>
+</dialog>
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 const accountId = {{ session.account_id }};
 let allCategories = [];
@@ -190,7 +183,7 @@ let sortAlphabetically = false;
 // Carica le categorie all'avvio
 document.addEventListener('DOMContentLoaded', function() {
   loadCategories();
-  
+
   // Toggle ordinamento alfabetico
   document.getElementById('btnToggleSort').addEventListener('click', function() {
     sortAlphabetically = !sortAlphabetically;
@@ -204,14 +197,18 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function showAlert(message, type = 'success') {
+  const alertClass = type === 'success' ? 'ps-alert-success'
+    : type === 'danger' ? 'ps-alert-danger'
+    : type === 'warning' ? 'ps-alert-warning'
+    : 'ps-alert-info';
   const alertDiv = document.createElement('div');
-  alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+  alertDiv.className = `ps-alert ${alertClass} ps-alert-dismissible fade show`;
   alertDiv.innerHTML = `
     ${message}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    <button type="button" class="ps-btn-close" data-bs-dismiss="alert" aria-label="Chiudi"></button>
   `;
   document.getElementById('alertContainer').appendChild(alertDiv);
-  
+
   setTimeout(() => {
     alertDiv.remove();
   }, 5000);
@@ -233,14 +230,14 @@ function loadCategories() {
 function renderCategories() {
   const expenseTbody = document.getElementById('expenseCategoriesTableBody');
   const incomeTbody = document.getElementById('incomeCategoriesTableBody');
-  
+
   expenseTbody.innerHTML = '';
   incomeTbody.innerHTML = '';
-  
+
   // Separa categorie per tipo
   let expenseCategories = allCategories.filter(c => c.type === 'expense');
   let incomeCategories = allCategories.filter(c => c.type === 'income');
-  
+
   // Ordina
   if (sortAlphabetically) {
     expenseCategories.sort((a, b) => a.name.localeCompare(b.name));
@@ -249,13 +246,13 @@ function renderCategories() {
     expenseCategories.sort((a, b) => a.order_index - b.order_index || a.name.localeCompare(b.name));
     incomeCategories.sort((a, b) => a.order_index - b.order_index || a.name.localeCompare(b.name));
   }
-  
+
   // Renderizza uscite
   expenseCategories.forEach(category => {
     const row = createCategoryRow(category);
     expenseTbody.appendChild(row);
   });
-  
+
   // Renderizza entrate
   incomeCategories.forEach(category => {
     const row = createCategoryRow(category);
@@ -267,18 +264,18 @@ function createCategoryRow(category) {
   const row = document.createElement('tr');
   row.innerHTML = `
     <td>
-      <input type="number" class="form-control form-control-sm" 
-             value="${category.order_index}" 
+      <input type="number" class="ps-input ps-input-sm"
+             value="${category.order_index}"
              min="0"
              onchange="updateCategoryOrder(${category.id}, this.value)"
              style="width: 70px;">
     </td>
     <td>${category.name}</td>
     <td>
-      <button class="btn btn-sm btn-warning" onclick='openEditModal(${category.id}, "${category.name}", "${category.type}", ${category.order_index})'>
+      <button class="ps-btn ps-btn-sm ps-btn-warning" onclick='openEditModal(${category.id}, "${category.name}", "${category.type}", ${category.order_index})'>
         <i class="bi bi-pencil"></i>
       </button>
-      <button class="btn btn-sm btn-danger" onclick="deleteCategory(${category.id})">
+      <button class="ps-btn ps-btn-sm ps-btn-danger" onclick="deleteCategory(${category.id})">
         <i class="bi bi-trash"></i>
       </button>
     </td>
@@ -293,7 +290,7 @@ function updateCategoryOrder(id, newOrder) {
     loadCategories();
     return;
   }
-  
+
   fetch(`/api/categories/${id}`, {
     method: 'PUT',
     headers: {
@@ -326,12 +323,12 @@ function addCategory() {
   const name = document.getElementById('categoryName').value;
   const type = document.getElementById('categoryType').value;
   const orderIndex = parseInt(document.getElementById('categoryOrderIndex').value) || 0;
-  
+
   if (!name) {
     showAlert('Il nome è obbligatorio', 'warning');
     return;
   }
-  
+
   fetch(`/api/accounts/${accountId}/categories`, {
     method: 'POST',
     headers: {
@@ -361,7 +358,7 @@ function openEditModal(id, name, type, orderIndex) {
   document.getElementById('editCategoryOldName').value = name;
   document.getElementById('editCategoryName').value = name;
   document.getElementById('editCategoryOrderIndex').value = orderIndex;
-  
+
   const modal = new bootstrap.Modal(document.getElementById('editCategoryModal'));
   modal.show();
 }
@@ -371,17 +368,17 @@ function updateCategory() {
   const oldName = document.getElementById('editCategoryOldName').value;
   const name = document.getElementById('editCategoryName').value;
   const orderIndex = parseInt(document.getElementById('editCategoryOrderIndex').value);
-  
+
   if (!name) {
     showAlert('Il nome è obbligatorio', 'warning');
     return;
   }
-  
+
   if (isNaN(orderIndex) || orderIndex < 0) {
     showAlert('L\'ordine deve essere un numero intero positivo', 'warning');
     return;
   }
-  
+
   // Se il nome è cambiato, mostra conferma
   if (name !== oldName) {
     const existingCategory = allCategories.find(c => c.name === name && c.id != id);
@@ -391,7 +388,7 @@ function updateCategory() {
       }
     }
   }
-  
+
   fetch(`/api/categories/${id}`, {
     method: 'PUT',
     headers: {
@@ -445,15 +442,15 @@ function openDeleteModal(categoryId, categoryName, categoryType, movementsCount)
   document.getElementById('deleteCategoryName').textContent = categoryName;
   document.getElementById('deleteCategoryType').value = categoryType;
   document.getElementById('deleteMovementsCount').textContent = movementsCount;
-  
+
   // Popola il dropdown con le categorie dello stesso tipo (esclusa quella da eliminare)
   const targetSelect = document.getElementById('targetCategorySelect');
   targetSelect.innerHTML = '<option value="">-- Seleziona una categoria --</option>';
-  
-  const sameTypeCategories = allCategories.filter(c => 
+
+  const sameTypeCategories = allCategories.filter(c =>
     c.type === categoryType && c.id !== categoryId
   );
-  
+
   if (sameTypeCategories.length === 0) {
     targetSelect.innerHTML = '<option value="">Nessuna categoria disponibile</option>';
     targetSelect.disabled = true;
@@ -467,7 +464,7 @@ function openDeleteModal(categoryId, categoryName, categoryType, movementsCount)
       targetSelect.appendChild(option);
     });
   }
-  
+
   const modal = new bootstrap.Modal(document.getElementById('deleteCategoryModal'));
   modal.show();
 }
@@ -475,12 +472,12 @@ function openDeleteModal(categoryId, categoryName, categoryType, movementsCount)
 function confirmDeleteCategory() {
   const categoryId = document.getElementById('deleteCategoryId').value;
   const targetCategoryId = document.getElementById('targetCategorySelect').value;
-  
+
   if (!targetCategoryId) {
     showAlert('Seleziona una categoria di destinazione', 'warning');
     return;
   }
-  
+
   // Elimina con migrazione dei movimenti
   fetch(`/api/categories/${categoryId}`, {
     method: 'DELETE',

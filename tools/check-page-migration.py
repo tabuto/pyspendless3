@@ -73,9 +73,12 @@ JINJA_VAR = re.compile(r"\{\{")
 # commento aggiunto durante la conversione fa fallire il confronto.
 DATA_ATTR = re.compile(r'(data-[a-z0-9-]+)=["\']([^"\']*)["\']')
 SCRIPT = re.compile(r"<script\b[^>]*>(.*?)</script>", re.S)
+# Gli attributi con valore vanno cercati CON l'uguale: senza, la sottostringa
+# "min" dentro `bootstrap.bundle.min.js` conta come attributo, e rimuovere quel
+# <script> -- cosa che la Fase 5 richiede -- sembra una perdita di validazione.
 VALIDAZIONE = re.compile(
-    r"(?<![-\w])(required|min|max|step|maxlength|minlength|rows|pattern|type)"
-    r"(?:=[\"\'][^\"\']*[\"\'])?")
+    r"(?<![-\w])(?:required(?![-\w])"
+    r"|(?:min|max|step|maxlength|minlength|rows|pattern|accept)=)")
 
 TAG = re.compile(r"<[^>]+>|\{#.*?#\}|\{%[^%]*%\}|\{\{[^}]*\}\}|<!--.*?-->", re.S)
 

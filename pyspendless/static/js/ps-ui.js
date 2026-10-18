@@ -124,9 +124,25 @@
     // viewport, il riquadro visibile è .ps-modal-panel dentro di esso.
     // target === this.el significa che il clic non ha toccato nessun
     // discendente, cioè è caduto sull'area di sfondo del dialog stesso.
-    if (e.target === this.el) {
-      this.hide();
+    if (e.target !== this.el) return;
+
+    // `data-bs-backdrop="static"` (semantica Bootstrap): il clic sullo sfondo
+    // NON chiude. Serve dove la chiusura accidentale perde qualcosa di
+    // irrecuperabile -- per esempio #showTokenModal, che mostra il token MCP
+    // appena creato una volta sola. Esc continua a chiudere, come in Bootstrap.
+    if (this.el.getAttribute("data-bs-backdrop") === "static") {
+      // piccolo feedback, come fa Bootstrap: il pannello "sobbalza"
+      var panel = qs(".ps-modal-panel", this.el);
+      if (panel) {
+        panel.classList.add("ps-modal-static");
+        setTimeout(function () {
+          panel.classList.remove("ps-modal-static");
+        }, 200);
+      }
+      return;
     }
+
+    this.hide();
   };
 
   PsModal.prototype.show = function (triggerEl) {

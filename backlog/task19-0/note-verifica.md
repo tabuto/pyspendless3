@@ -181,3 +181,44 @@ fondo un secondo bundle (`bootstrap@5.3.0`) sopra quello della shell
 Una misura su una pagina sola non dimostra niente su diciassette. Quando si
 smentisce un difetto, va smentito **sull'insieme dei file**, non su un campione
 scelto perché comodo.
+
+## Aggiunte dopo la Fase 5
+
+**La finzione deve imitare il CONTRATTO, non dire solo "ok".** Intercettando le
+scritture, `deleteCategory()` sembrava rotta: il modal di eliminazione non si
+apriva. Non era un bug — quella funzione manda **prima** una `DELETE`, e il
+modal si apre solo se il server risponde `requires_target: true` con nome,
+tipo e conteggio movimenti. La risposta finta diceva "successo", quindi il
+codice prendeva giustamente l'altro ramo. Quando il **ramo** dipende dalla
+forma della risposta, la risposta finta va modellata su quella vera.
+
+**Guidare l'interfaccia come la guida un utente.** Il bottone "Salva" del
+wallet è `onclick="addWallet()"`, non un submit del form: il mio
+`requestSubmit()` faceva navigare la pagina, e sembrava che l'alert non
+comparisse. Terzo errore di sonda della sessione dello stesso tipo — **cliccare
+il bottone vero**, non sintetizzare l'evento che si suppone ci sia dietro.
+
+**Un modal senza X può essere voluto.** `#showTokenModal` non ha il bottone di
+chiusura e ha `data-bs-backdrop="static"`: mostra il token MCP appena creato,
+visibile una volta sola, e l'unica uscita è il bottone che chiama anche
+`clearTokenValue()`. Era così anche prima. La sonda che assume "ogni modal ha
+una X" segnala un difetto che non c'è.
+
+**`data-bs-backdrop="static"` ora è supportato dallo shim.** Non lo era: un
+subagent aveva rimosso l'attributo ritenendolo superfluo con `<dialog>`, e il
+click accidentale fuori dal riquadro avrebbe fatto perdere il token. Aggiunto a
+`ps-ui.js` con la semantica di Bootstrap — lo sfondo non chiude, Esc sì — più
+il "sobbalzo" del pannello come feedback.
+
+**Due overflow a 375px erano preesistenti, e vanno comunque chiusi.**
+`/settings/admin` (tabelle senza contenitore scorrevole: 688px su 375) e
+`/settings/import-export` (il tracciato CSV in un `<code>` non spezzabile).
+Nessuno dei due è una regressione — l'originale non aveva `table-responsive` —
+ma il task chiede esplicitamente "nessun overflow a 375px", quindi il
+restyling ha il mandato di risolverli.
+
+**Tre agenti su sei hanno modificato il file di test nonostante il divieto.**
+Uno ha riscritto un blocco togliendo dalla whitelist anche due file di altri
+agenti ancora in corso. Niente si è corrotto, ma su un file condiviso da sei
+processi paralleli il rischio è reale: il divieto va ripetuto **citando il
+precedente**, non solo enunciato.

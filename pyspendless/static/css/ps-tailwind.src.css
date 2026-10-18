@@ -393,6 +393,15 @@
   .ps-modal-panel {
     @apply w-full max-w-lg opacity-0 scale-95 transition-all duration-150;
   }
+  /* Feedback per il backdrop statico: un clic fuori non chiude, ma si vede
+     che il modal ha "reagito". Stessa idea del .modal-static di Bootstrap. */
+  .ps-modal-panel.ps-modal-static {
+    animation: ps-modal-bump 200ms ease-out;
+  }
+  @keyframes ps-modal-bump {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.02); }
+  }
   .ps-modal[open] .ps-modal-panel {
     @apply opacity-100 scale-100;
   }

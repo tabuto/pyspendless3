@@ -1,43 +1,43 @@
-{% extends 'ps-nav.html' %}
+{% extends 'ps-nav-tw.html' %}
 
 {% block nav_content %}
-<div class="container-fluid mt-4">
+<div class="w-full px-4 mt-4">
   <h1 class="mb-4">Profilo</h1>
 
   <!-- Alert per messaggi -->
   <div id="alertContainer"></div>
 
-  <div class="row mb-4">
-    <div class="col-md-6">
-      <div class="card">
-        <div class="card-body">
-          <h5 class="card-title">Dati utente</h5>
-          <p class="card-text mb-1"><strong>Nome:</strong> {{ user.name if user else '-' }}</p>
-          <p class="card-text mb-1"><strong>Email:</strong> {{ user.email if user else '-' }}</p>
-          <p class="card-text mb-0"><strong>Account:</strong> {{ account.name if account else '-' }}</p>
+  <div class="grid grid-cols-12 gap-4 mb-4">
+    <div class="md:col-span-6 col-span-12">
+      <div class="ps-card">
+        <div class="ps-card-body">
+          <h5 class="ps-card-title">Dati utente</h5>
+          <p class="mb-1"><strong>Nome:</strong> {{ user.name if user else '-' }}</p>
+          <p class="mb-1"><strong>Email:</strong> {{ user.email if user else '-' }}</p>
+          <p class="mb-0"><strong>Account:</strong> {{ account.name if account else '-' }}</p>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="row">
-    <div class="col-12">
-      <div class="card">
-        <div class="card-body">
-          <div class="d-flex justify-content-between align-items-start mb-3">
+  <div class="grid grid-cols-12 gap-4">
+    <div class="col-span-12">
+      <div class="ps-card">
+        <div class="ps-card-body">
+          <div class="flex justify-between items-start mb-3">
             <div>
-              <h5 class="card-title mb-1">Token personali (connettore Claude)</h5>
-              <p class="text-muted mb-0">
+              <h5 class="ps-card-title mb-1">Token personali (connettore Claude)</h5>
+              <p class="ps-muted mb-0">
                 Servono ad autenticare il server MCP di PySpendless, per registrare spese
                 parlando a Claude.
               </p>
             </div>
-            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTokenModal">
+            <button type="button" class="ps-btn ps-btn-primary" data-bs-toggle="modal" data-bs-target="#addTokenModal">
               <i class="bi bi-plus-circle"></i> Genera token
             </button>
           </div>
 
-          <div class="alert alert-warning">
+          <div class="ps-alert ps-alert-warning">
             <strong>Attenzione:</strong>
             <ul class="mb-0">
               <li>Il token viene mostrato <strong>una sola volta</strong>: in database ne resta solo l'impronta, non è recuperabile in seguito.</li>
@@ -48,14 +48,14 @@
           </div>
 
           <div class="mb-3">
-            <label class="form-label">URL del server MCP da usare nel connettore</label>
-            <div class="input-group">
-              <input type="text" class="form-control" id="mcpUrl" value="{{ mcp_url }}" readonly>
-              <button class="btn btn-outline-secondary" type="button" onclick="copyValue('mcpUrl')">
+            <label class="ps-label">URL del server MCP da usare nel connettore</label>
+            <div class="ps-input-group">
+              <input type="text" class="ps-input" id="mcpUrl" value="{{ mcp_url }}" readonly>
+              <button class="ps-btn ps-btn-outline-secondary" type="button" onclick="copyValue('mcpUrl')">
                 <i class="bi bi-clipboard"></i> Copia
               </button>
             </div>
-            <div class="form-text">
+            <div class="ps-help">
               In Claude: Connettori &rarr; Aggiungi connettore personalizzato &rarr; questa URL, autenticazione
               &laquo;nessun accesso&raquo; e header <code>authorization</code> con valore
               <code>Bearer &lt;token&gt;</code>. In alternativa <code>x-api-token</code>,
@@ -63,15 +63,15 @@
             </div>
           </div>
 
-          <div class="table-responsive">
-            <table class="table table-striped align-middle">
+          <div class="overflow-x-auto">
+            <table class="ps-table">
               <thead>
                 <tr>
                   <th>Nome</th>
                   <th>Inizia con</th>
                   <th>Creato</th>
                   <th>Scade</th>
-                  <th class="text-end">Azioni</th>
+                  <th class="text-right">Azioni</th>
                 </tr>
               </thead>
               <tbody id="tokensContainer">
@@ -84,23 +84,23 @@
     </div>
   </div>
 
-  <div class="row mt-4">
-    <div class="col-12">
-      <div class="card">
-        <div class="card-body">
-          <h5 class="card-title mb-1">Connessioni</h5>
-          <p class="text-muted mb-3">
+  <div class="grid grid-cols-12 gap-4 mt-4">
+    <div class="col-span-12">
+      <div class="ps-card">
+        <div class="ps-card-body">
+          <h5 class="ps-card-title mb-1">Connessioni</h5>
+          <p class="ps-muted mb-3">
             App esterne (es. Alexa+) autorizzate ad accedere al tuo account PySpendless
             tramite OAuth2. Revocare una connessione non tocca i token personali qui sopra.
           </p>
-          <div class="table-responsive">
-            <table class="table table-striped align-middle">
+          <div class="overflow-x-auto">
+            <table class="ps-table">
               <thead>
                 <tr>
                   <th>App</th>
                   <th>Connesso dal</th>
                   <th>Scade</th>
-                  <th class="text-end">Azioni</th>
+                  <th class="text-right">Azioni</th>
                 </tr>
               </thead>
               <tbody id="oauthConnectionsContainer">
@@ -115,64 +115,59 @@
 </div>
 
 <!-- Modal Genera Token -->
-<div class="modal fade" id="addTokenModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Genera token</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <form id="addTokenForm">
-          <div class="mb-3">
-            <label for="tokenLabel" class="form-label">Nome descrittivo</label>
-            <input type="text" class="form-control" id="tokenLabel" maxlength="60" placeholder="Es. Claude telefono">
-            <div class="form-text">Serve solo a riconoscerlo nell'elenco.</div>
-          </div>
-        </form>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
-        <button type="button" class="btn btn-primary" onclick="createToken()">Genera</button>
-      </div>
+<dialog class="ps-modal" id="addTokenModal">
+  <div class="ps-modal-panel">
+    <div class="ps-modal-header">
+      <h5 class="ps-modal-title">Genera token</h5>
+      <button type="button" class="ps-btn-close" aria-label="Chiudi" data-bs-dismiss="modal"></button>
+    </div>
+    <div class="ps-modal-body">
+      <form id="addTokenForm">
+        <div class="mb-3">
+          <label for="tokenLabel" class="ps-label">Nome descrittivo</label>
+          <input type="text" class="ps-input" id="tokenLabel" maxlength="60" placeholder="Es. Claude telefono">
+          <div class="ps-help">Serve solo a riconoscerlo nell'elenco.</div>
+        </div>
+      </form>
+    </div>
+    <div class="ps-modal-footer">
+      <button type="button" class="ps-btn ps-btn-secondary" data-bs-dismiss="modal">Annulla</button>
+      <button type="button" class="ps-btn ps-btn-primary" onclick="createToken()">Genera</button>
     </div>
   </div>
-</div>
+</dialog>
 
 <!-- Modal Token generato -->
-<div class="modal fade" id="showTokenModal" tabindex="-1" data-bs-backdrop="static">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Token generato</h5>
+<dialog data-bs-backdrop="static" class="ps-modal" id="showTokenModal">
+  <div class="ps-modal-panel">
+    <div class="ps-modal-header">
+      <h5 class="ps-modal-title">Token generato</h5>
+    </div>
+    <div class="ps-modal-body">
+      <div class="ps-alert ps-alert-danger">
+        Copialo adesso: chiudendo questa finestra non sarà più visibile.
       </div>
-      <div class="modal-body">
-        <div class="alert alert-danger">
-          Copialo adesso: chiudendo questa finestra non sarà più visibile.
-        </div>
-        <div class="input-group">
-          <input type="text" class="form-control font-monospace" id="newTokenValue" readonly>
-          <button class="btn btn-outline-secondary" type="button" onclick="copyValue('newTokenValue')">
-            <i class="bi bi-clipboard"></i> Copia
-          </button>
-        </div>
-        <div class="form-text mt-2">
-          Nel connettore Claude, con l'header <code>authorization</code>, il valore da inserire è
-          <code>Bearer</code> seguito da uno spazio e dal token.
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-primary" data-bs-dismiss="modal" onclick="clearTokenValue()">
-          Ho copiato il token
+      <div class="ps-input-group">
+        <input type="text" class="ps-input font-mono" id="newTokenValue" readonly>
+        <button class="ps-btn ps-btn-outline-secondary" type="button" onclick="copyValue('newTokenValue')">
+          <i class="bi bi-clipboard"></i> Copia
         </button>
       </div>
+      <div class="ps-help mt-2">
+        Nel connettore Claude, con l'header <code>authorization</code>, il valore da inserire è
+        <code>Bearer</code> seguito da uno spazio e dal token.
+      </div>
+    </div>
+    <div class="ps-modal-footer">
+      <button type="button" class="ps-btn ps-btn-primary" data-bs-dismiss="modal" onclick="clearTokenValue()">
+        Ho copiato il token
+      </button>
     </div>
   </div>
-</div>
+</dialog>
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   loadTokens();
@@ -181,10 +176,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function showAlert(message, type = 'success') {
   const alertDiv = document.createElement('div');
-  alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+  alertDiv.className = `ps-alert ps-alert-${type} ps-alert-dismissible fade show`;
   alertDiv.innerHTML = `
     ${message}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    <button type="button" class="ps-btn-close" data-bs-dismiss="alert"></button>
   `;
   document.getElementById('alertContainer').appendChild(alertDiv);
 
@@ -232,7 +227,7 @@ function loadTokens() {
       if (tokens.length === 0) {
         container.innerHTML = `
           <tr>
-            <td colspan="5" class="text-muted text-center">Nessun token attivo</td>
+            <td colspan="5" class="ps-muted text-center">Nessun token attivo</td>
           </tr>
         `;
         return;
@@ -241,15 +236,15 @@ function loadTokens() {
       tokens.forEach(token => {
         const row = document.createElement('tr');
         const expiredBadge = token.expired
-          ? ' <span class="badge bg-danger">scaduto</span>'
+          ? ' <span class="ps-badge ps-badge-expense">scaduto</span>'
           : '';
         row.innerHTML = `
           <td>${escapeHtml(token.label)}</td>
           <td><code>${escapeHtml(token.prefix)}…</code></td>
           <td>${escapeHtml(token.created_at)}</td>
           <td>${escapeHtml(token.expires_at)}${expiredBadge}</td>
-          <td class="text-end">
-            <button class="btn btn-sm btn-danger" onclick="revokeToken('${encodeURIComponent(token.token_hash)}')">
+          <td class="text-right">
+            <button class="ps-btn ps-btn-sm ps-btn-danger" onclick="revokeToken('${encodeURIComponent(token.token_hash)}')">
               <i class="bi bi-trash"></i> Revoca
             </button>
           </td>
@@ -316,7 +311,7 @@ function loadOauthConnections() {
       if (connections.length === 0) {
         container.innerHTML = `
           <tr>
-            <td colspan="4" class="text-muted text-center">Nessuna connessione attiva</td>
+            <td colspan="4" class="ps-muted text-center">Nessuna connessione attiva</td>
           </tr>
         `;
         return;
@@ -328,8 +323,8 @@ function loadOauthConnections() {
           <td>${escapeHtml(connection.name)}</td>
           <td>${escapeHtml(connection.connected_since)}</td>
           <td>${escapeHtml(connection.expires_at)}</td>
-          <td class="text-end">
-            <button class="btn btn-sm btn-danger" onclick="revokeOauthConnection('${encodeURIComponent(connection.client_id)}')">
+          <td class="text-right">
+            <button class="ps-btn ps-btn-sm ps-btn-danger" onclick="revokeOauthConnection('${encodeURIComponent(connection.client_id)}')">
               <i class="bi bi-trash"></i> Revoca
             </button>
           </td>

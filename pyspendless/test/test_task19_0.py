@@ -295,7 +295,14 @@ NAV_LINKS_ORDER = [
 DYNAMIC_CLASS_PATTERNS = [
     re.compile(r"""class=["'][^"']*["']\s*\+"""),      # class="..." + var
     re.compile(r"""\+\s*["'][^"']*\bclass=""" ),        # + "...class=
-    re.compile(r"""class=["'][^"']*\$\{"""),            # class="...${var}
+    # Il pericolo e' un PREFISSO spezzato (`class="text-${x}"`), non una classe
+    # intera presa da una variabile (`class="${c}"` con c = 'ps-amount-income').
+    # Nel secondo caso i nomi completi compaiono comunque come letterali nel
+    # file, quindi lo scanner di Tailwind li trova -- ed e' la soluzione che il
+    # piano stesso raccomanda (§2.4: "usare classi .ps-* dichiarate in @layer
+    # components"). Il lookbehind esclude apice e spazio, cioe' i due casi in
+    # cui l'interpolazione NON si attacca a un frammento.
+    re.compile(r"""class=["'][^"']*[^"'\s]\$\{"""),      # class="text-${var}
     # Stesso rischio, lato Jinja: `class="alert alert-{{ category }}"` assembla
     # il nome della classe a pezzi, e il frammento `alert-` non e' una stringa
     # letterale completa. Il carattere prima di `{{` dev'essere alfanumerico o
@@ -513,9 +520,7 @@ class IgieneTemplate(unittest.TestCase):
         # in corso, la whitelist elenca i file non ancora toccati.
         whitelist_non_migrati = {
             # <-- togliere il file da qui quando viene migrato a Tailwind
-            "ps-show-mov.html", "ps-search-mov.html", "ps-setting-group.html",
-            "ps-setting-categories.html", "ps-setting-wallet.html",
-            "ps-setting-admin.html", "ps-setting-import-export.html",
+            "ps-show-mov.html", "ps-search-mov.html",
             "ps-dashboard-monthly.html", "ps-dashboard-yearly.html",
             "ps-reports.html",
             # template morti

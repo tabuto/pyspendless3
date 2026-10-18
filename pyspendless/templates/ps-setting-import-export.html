@@ -1,69 +1,69 @@
-{% extends 'ps-nav.html' %}
+{% extends 'ps-nav-tw.html' %}
 
 {% block nav_content %}
-<div class="container-fluid mt-4">
+<div class="w-full px-4 mt-4">
   <h1 class="mb-4">Import / Export Dati</h1>
   
   <!-- Alert per messaggi -->
   <div id="alertContainer"></div>
   
-  <div class="row">
-    <div class="col-md-6">
-      <div class="card">
-        <div class="card-header bg-success text-white">
-          <h3 class="card-title"><i class="bi bi-download"></i> Esporta Movimenti</h3>
+  <div class="grid grid-cols-12 gap-4">
+    <div class="md:col-span-6">
+      <div class="ps-card">
+        <div class="ps-card-header ps-badge-income text-white">
+          <h3 class="ps-card-title"><i class="bi bi-download"></i> Esporta Movimenti</h3>
         </div>
-        <div class="card-body">
+        <div class="ps-card-body">
           <p>Esporta tutti i tuoi movimenti in formato CSV per backup o analisi esterna.</p>
-          <p class="text-muted"><small>Il file CSV conterrà: Data, Categoria, Wallet, Entrata, Spesa, Note</small></p>
-          <button type="button" class="btn btn-success" onclick="exportMovements()">
+          <p class="ps-muted"><small>Il file CSV conterrà: Data, Categoria, Wallet, Entrata, Spesa, Note</small></p>
+          <button type="button" class="ps-btn ps-btn-success" onclick="exportMovements()">
             <i class="bi bi-file-earmark-arrow-down"></i> Scarica CSV
           </button>
         </div>
       </div>
     </div>
-    
-    <div class="col-md-6">
-      <div class="card">
-        <div class="card-header bg-primary text-white">
-          <h3 class="card-title"><i class="bi bi-upload"></i> Importa Movimenti</h3>
+
+    <div class="md:col-span-6">
+      <div class="ps-card">
+        <div class="ps-card-header ps-badge-brand text-white">
+          <h3 class="ps-card-title"><i class="bi bi-upload"></i> Importa Movimenti</h3>
         </div>
-        <div class="card-body">
+        <div class="ps-card-body">
           <p>Carica un file CSV per importare movimenti in massa.</p>
-          
-          <div class="alert alert-info">
+
+          <div class="ps-alert ps-alert-info">
             <strong>Formato CSV richiesto:</strong><br>
-            <code>Data,Categoria,Wallet,Entrata,Spesa,Note</code><br>
+            <code class="break-all">Data,Categoria,Wallet,Entrata,Spesa,Note</code><br>
             <small>Esempio: 2024-02-15,Spesa,WALLET123,100.00,,Acquisto</small>
           </div>
-          
+
           <div class="mb-3">
-            <label for="csvFile" class="form-label">Seleziona file CSV</label>
-            <input type="file" class="form-control" id="csvFile" accept=".csv">
+            <label for="csvFile" class="ps-label">Seleziona file CSV</label>
+            <input type="file" class="ps-input" id="csvFile" accept=".csv">
           </div>
-          
-          <button type="button" class="btn btn-primary" onclick="importMovements()">
+
+          <button type="button" class="ps-btn ps-btn-primary" onclick="importMovements()">
             <i class="bi bi-upload"></i> Carica e Importa
           </button>
-          
+
           <!-- Progress bar -->
           <div id="importProgress" class="mt-3" style="display: none;">
-            <div class="progress">
-              <div class="progress-bar progress-bar-striped progress-bar-animated" 
+            <div class="ps-progress">
+              <div class="ps-progress-bar ps-progress-striped ps-progress-animated"
                    role="progressbar" style="width: 100%">
                 Importazione in corso...
               </div>
             </div>
           </div>
-          
+
           <!-- Risultati importazione -->
           <div id="importResults" class="mt-3" style="display: none;">
-            <div class="alert alert-success">
+            <div class="ps-alert ps-alert-success">
               <h5>Importazione completata</h5>
               <p><strong>Movimenti importati:</strong> <span id="importedCount">0</span></p>
               <div id="errorsContainer" style="display: none;">
-                <p class="text-danger"><strong>Errori:</strong></p>
-                <ul id="errorsList" class="text-danger"></ul>
+                <p class="ps-amount-expense"><strong>Errori:</strong></p>
+                <ul id="errorsList" class="ps-amount-expense"></ul>
               </div>
             </div>
           </div>
@@ -71,14 +71,14 @@
       </div>
     </div>
   </div>
-  
-  <div class="row mt-4">
-    <div class="col-12">
-      <div class="card">
-        <div class="card-header bg-warning">
-          <h3 class="card-title"><i class="bi bi-exclamation-triangle"></i> Note Importanti</h3>
+
+  <div class="grid grid-cols-12 gap-4 mt-4">
+    <div class="col-span-12">
+      <div class="ps-card">
+        <div class="ps-card-header ps-balance-negative">
+          <h3 class="ps-card-title"><i class="bi bi-exclamation-triangle"></i> Note Importanti</h3>
         </div>
-        <div class="card-body">
+        <div class="ps-card-body">
           <ul>
             <li><strong>Anti-duplicati:</strong> Il sistema previene l'importazione di movimenti duplicati utilizzando un hash univoco basato su data, importo, categoria, wallet e nota.</li>
             <li><strong>Categorie e Wallet:</strong> Le categorie e i wallet devono esistere nel sistema prima dell'importazione. Se una categoria o un wallet non viene trovato, la riga verrà saltata.</li>
@@ -94,14 +94,13 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 function showAlert(message, type = 'success') {
   const alertDiv = document.createElement('div');
-  alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+  alertDiv.className = `ps-alert ps-alert-dismissible ps-alert-${type}`;
   alertDiv.innerHTML = `
     ${message}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    <button type="button" class="ps-btn-close" data-bs-dismiss="alert"></button>
   `;
   document.getElementById('alertContainer').appendChild(alertDiv);
   
@@ -114,7 +113,7 @@ function exportMovements() {
   // Mostra indicatore di caricamento
   const btn = event.target;
   const originalText = btn.innerHTML;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Esportazione...';
+  btn.innerHTML = '<span class="ps-spinner ps-spinner-sm"></span> Esportazione...';
   btn.disabled = true;
   
   fetch('/api/export/movements', {

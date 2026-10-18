@@ -272,12 +272,18 @@ function createCategoryRow(category) {
     </td>
     <td>${category.name}</td>
     <td>
-      <button class="ps-btn ps-btn-sm ps-btn-warning" onclick='openEditModal(${category.id}, "${category.name}", "${category.type}", ${category.order_index})'>
-        <i class="bi bi-pencil"></i>
-      </button>
-      <button class="ps-btn ps-btn-sm ps-btn-danger" onclick="deleteCategory(${category.id})">
-        <i class="bi bi-trash"></i>
-      </button>
+      <!-- I due bottoni stanno in un contenitore flex: come figli diretti
+           della cella erano inline-flex, e lo spazio bianco fra loro li
+           portava a 76px in una cella che ne ha 73 utili a 375px. Andavano
+           a capo, la riga raddoppiava e la pagina cresceva del 94%. -->
+      <div class="flex flex-nowrap gap-1">
+        <button class="ps-btn ps-btn-sm ps-btn-warning" onclick='openEditModal(${category.id}, "${category.name}", "${category.type}", ${category.order_index})'>
+          <i class="bi bi-pencil"></i>
+        </button>
+        <button class="ps-btn ps-btn-sm ps-btn-danger" onclick="deleteCategory(${category.id})">
+          <i class="bi bi-trash"></i>
+        </button>
+      </div>
     </td>
   `;
   return row;

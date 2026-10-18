@@ -117,6 +117,30 @@
   h5 { @apply text-base font-semibold leading-6; }
   h6 { @apply text-sm font-semibold leading-5; }
 
+  /* ⚠️ Stessa famiglia del difetto qui sopra: il preflight azzera anche i
+     marcatori di lista (ul,ol { list-style: none; padding: 0 }). Le liste di
+     contenuto — le avvertenze di /settings/profile, le note di
+     /settings/import-export, i dettagli di eliminazione di /settings/group —
+     nella versione Bootstrap avevano i pallini e dopo la conversione no: le
+     voci diventano righe indistinte, e un elenco smette di leggersi come un
+     elenco. Trovato in Fase 9 confrontando gli screenshot con la baseline,
+     non da un controllo statico.
+
+     Si ridanno qui, in `base`, cosi' vale anche per le pagine future. Le
+     liste che NON vogliono i marcatori sono quelle strutturali, e si
+     riconoscono dalla classe o dal contenitore: nav, paginazione, tab. */
+  ul, ol { list-style: revert; padding-left: revert; margin: revert; }
+  #navigation ul,
+  #navigation,
+  .ps-pagination,
+  .ps-card-header-tabs,
+  .ps-tabs,
+  .ps-list {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+  }
+
   html { color-scheme: light; }
   html.dark { color-scheme: dark; }
 
@@ -229,6 +253,55 @@
     color: var(--ps-brand);
     border-color: color-mix(in srgb, var(--ps-brand) 30%, var(--ps-border));
   }
+  /* ---- Intestazione di card "di accento" (Fase 9) ------------------------
+
+     Standard unico per le card che vogliono un'intestazione colorata.
+     Prima esistevano tre modi diversi di ottenerla, tutti sbagliati:
+
+       ps-card-header ps-badge-brand text-white    (group, import-export, reports)
+       ps-card-header ps-balance-negative          (import-export)
+       style="background-color: color-mix(...)"    (group, Zona Pericolosa)
+
+     I primi due riusano una classe BADGE come sfondo di intestazione, quindi
+     si portano dietro anche la geometria della pillola (rounded-full, px-2,
+     py-0.5, text-xs) su un elemento che ha gia' il padding della card.
+
+     E il `text-white` non arrivava mai al testo: .ps-card-title dichiara
+     `color: var(--ps-text)` e vince sull'ereditarieta'. Il risultato a
+     schermo era testo scuro su fondo saturo — su var(--ps-brand) fa 2.84:1,
+     sotto il minimo WCAG AA di 4.5:1 per testo normale (il titolo e' 16px/600,
+     quindi NON conta come "large text").
+
+     Perche' TINTO e non solido: e' la decisione D11, e la misura la conferma.
+     In dark gli accenti sono chiari (--ps-brand diventa #818cf8), quindi un
+     fondo solido obbligherebbe a invertire il colore del testo a ogni tema,
+     e nessuna singola scelta passa su tutti e cinque gli accenti. Col fondo
+     tinto il titolo resta --ps-text in entrambi i temi: 11.35:1 nel caso
+     peggiore, verificato su 5 accenti x 2 temi.
+
+     L'icona porta l'accento, e in light va scurita all'85%: a piena
+     saturazione `warning` si ferma a 2.81:1 contro il 3:1 richiesto per un
+     elemento grafico. All'85% il peggiore e' 3.77:1. In dark l'accento va
+     bene cosi' (minimo 5.01:1). */
+  .ps-card-header-accent {
+    background-color: color-mix(in srgb, var(--ps-accent) 12%, var(--ps-surface));
+    border-bottom-color: color-mix(in srgb, var(--ps-accent) 35%, var(--ps-border));
+  }
+  .ps-card-header-accent .ps-card-title i {
+    color: color-mix(in srgb, var(--ps-accent) 85%, black);
+    /* le classi badge portavano un gap-1 che teneva l'icona staccata dal
+       testo; tolte quelle, va ridato qui o l'icona si incolla al titolo. */
+    margin-right: 0.35rem;
+  }
+  .dark .ps-card-header-accent .ps-card-title i {
+    color: var(--ps-accent);
+  }
+  .ps-card-header-brand   { --ps-accent: var(--ps-brand); }
+  .ps-card-header-income  { --ps-accent: var(--ps-income); }
+  .ps-card-header-expense { --ps-accent: var(--ps-expense); }
+  .ps-card-header-info    { --ps-accent: var(--ps-info); }
+  .ps-card-header-warning { --ps-accent: var(--ps-warning); }
+
   .ps-card-header-tabs {
     @apply -mb-3 border-b-0 flex gap-1;
   }

@@ -32,7 +32,20 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 
 BASE = "http://localhost:5000"
 VIEWPORTS = [375, 768, 1440]
-THEME = "light"          # oggi esiste un solo tema; da Fase 2 anche "dark"
+THEME = "light"          # sovrascritto da --theme; vedi init_tema()
+
+
+def init_tema(ctx):
+    """Impone il tema al contesto PRIMA del primo paint.
+
+    Va applicato a OGNI contesto: lo script anti-FOUC in ps-base.html legge
+    localStorage['ps_theme'] nel <head>, quindi se la chiave non c'e' al
+    momento della navigazione la pagina esce in 'system' e lo scatto non
+    ritrae il tema richiesto. Il nome della chiave e' quello vero,
+    PS_FOUC_SNIPPET in ps-theme.js: con l'underscore, non col trattino."""
+    ctx.add_init_script(
+        "try { localStorage.setItem('ps_theme', '%s'); } catch (e) {}" % THEME)
+    return ctx
 SETTLE_MS = 2200         # Chart.js anima ~1s, DataTables + Tom Select meno
 
 # --- la matrice ------------------------------------------------------------
@@ -107,12 +120,25 @@ def shot(page, outdir, nome):
     return path
 
 
-def maintenance_html():
-    """
-    La pagina di manutenzione non e' raggiungibile dal server in esecuzione:
-    il gate legge MAINTENANCE_MODE a ogni richiesta. La rendiamo qui dentro,
-    con il test client e la variabile attiva, poi la diamo al browser con
-    set_content + <base>, cosi' /static si risolve sul server vero.
+_MAINT_FILE = os.path.join(_ROOT, "pyspendless", "static", "_preview.maintenance.html")
+
+
+def maintenance_url():
+    """URL della pagina di manutenzione, servita dall'ORIGINE VERA.
+
+    La pagina non e' raggiungibile dal server in esecuzione: il gate legge
+    MAINTENANCE_MODE a ogni richiesta. La si rende qui con il test client e
+    la variabile attiva, poi la si SCRIVE sotto /static e la si naviga da
+    localhost.
+
+    Prima si usava page.set_content(), ed era sbagliato: quel documento vive
+    su about:blank, dove localStorage non e' accessibile. Lo script anti-FOUC
+    finisce nel suo try/catch e la pagina esce SEMPRE in light, qualunque
+    tema si chieda -- quindi lo scatto "dark" della manutenzione ritraeva una
+    pagina chiara. Servita da /static e' la stessa origine dell'app, quindi
+    il tema e il cache-busting si comportano come in produzione.
+
+    Il file e' coperto da .gitignore (_preview.*.html) e viene rimosso dopo.
     """
     os.environ["MAINTENANCE_MODE"] = "1"
     try:
@@ -121,7 +147,9 @@ def maintenance_html():
         html = app.test_client().get("/home").get_data(as_text=True)
     finally:
         os.environ["MAINTENANCE_MODE"] = "0"
-    return html.replace("<head>", f'<head><base href="{BASE}/">', 1)
+    with open(_MAINT_FILE, "w", encoding="utf-8") as f:
+        f.write(html)
+    return BASE + "/static/" + os.path.basename(_MAINT_FILE)
 
 
 def cattura_pagine(browser, cookie, outdir):
@@ -130,7 +158,7 @@ def cattura_pagine(browser, cookie, outdir):
     for w in VIEWPORTS:
         print(f"\n[viewport {w}px]")
         for slug, path, auth in PAGES:
-            ctx = browser.new_context(viewport={"width": w, "height": 900})
+            ctx = init_tema(browser.new_context(viewport={"width": w, "height": 900}))
             if auth:
                 ctx.add_cookies([{"name": name, "value": value,
                                   "domain": "localhost", "path": "/"}])
@@ -149,10 +177,10 @@ def cattura_pagine(browser, cookie, outdir):
             fatti += 1
             ctx.close()
 
-        # manutenzione: HTML reso fuori banda, vedi maintenance_html()
-        ctx = browser.new_context(viewport={"width": w, "height": 900})
+        # manutenzione: HTML reso fuori banda, vedi maintenance_url()
+        ctx = init_tema(browser.new_context(viewport={"width": w, "height": 900}))
         page = ctx.new_page()
-        page.set_content(maintenance_html(), wait_until="domcontentloaded")
+        page.goto(maintenance_url(), wait_until="load")
         settle(page)
         shot(page, outdir, f"maintenance__{w}__{THEME}")
         fatti += 1
@@ -164,13 +192,14 @@ def cattura_stati(browser, cookie, outdir):
     name, value = cookie
 
     def nuovo(w=1440):
-        ctx = browser.new_context(viewport={"width": w, "height": 900})
+        ctx = init_tema(browser.new_context(viewport={"width": w, "height": 900}))
         ctx.add_cookies([{"name": name, "value": value,
                           "domain": "localhost", "path": "/"}])
         return ctx, ctx.new_page()
 
     fatti = 0
     print("\n[modal aperti, 1440px]")
+    mancanti = []
     for slug, path, modal_id in MODALS:
         ctx, page = nuovo()
         page.goto(BASE + path, wait_until="domcontentloaded")
@@ -181,16 +210,41 @@ def cattura_stati(browser, cookie, outdir):
             ctx.close()
             continue
         page.wait_for_timeout(900)
+        # Il modal e' aperto? Si guarda come RENDE, non se ha una classe.
+        # Prima qui c'era `classList.contains('show')`, che e' la convenzione
+        # del vecchio framework: dopo la migrazione i modal sono <dialog>
+        # aperti da ps-ui.js con showModal(), e quella classe non esiste piu'.
+        # I modal si aprivano per davvero, ma la sonda chiedeva la cosa
+        # sbagliata e li scartava in silenzio: 13 stati mancavano dalla
+        # matrice senza che niente protestasse.
+        # Si guarda anche `visibility`, non solo display e dimensioni: un
+        # elemento con visibility:collapse ha un box ma non si vede.
         visibile = page.evaluate(
-            "(id) => { const e = document.getElementById(id);"
-            " return !!e && e.classList.contains('show'); }", modal_id)
+            """(id) => {
+                const e = document.getElementById(id);
+                if (!e) return false;
+                const s = getComputedStyle(e), r = e.getBoundingClientRect();
+                const aperto = e.tagName === 'DIALOG' ? e.open
+                                                      : e.classList.contains('show');
+                return !!aperto && s.display !== 'none'
+                       && s.visibility !== 'hidden' && s.visibility !== 'collapse'
+                       && r.width > 0 && r.height > 0;
+            }""", modal_id)
         if not visibile:
+            mancanti.append(f"{slug}/{modal_id} ({esito})")
             print(f"  ! {slug}/{modal_id}: non si e' aperto ({esito}) — salto")
             ctx.close()
             continue
         shot(page, outdir, f"stato--modal-{modal_id}__1440__{THEME}")
         fatti += 1
         ctx.close()
+
+    if mancanti:
+        # Rumoroso di proposito: una matrice incompleta che tace e' peggio di
+        # una che fallisce, perche' il confronto con la baseline sembra
+        # superato mentre gli stati non ci sono.
+        print(f"\n  !! {len(mancanti)}/{len(MODALS)} modal NON catturati: " +
+              ", ".join(mancanti))
 
     print("\n[altri stati]")
 
@@ -305,7 +359,11 @@ def main():
     ap.add_argument("--states", action="store_true", help="solo gli stati")
     ap.add_argument("--out", default="docs/ui-baseline",
                     help="cartella di destinazione (default: docs/ui-baseline)")
+    ap.add_argument("--theme", default="light", choices=["light", "dark"],
+                    help="tema da imporre agli scatti (default: light)")
     args = ap.parse_args()
+    global THEME
+    THEME = args.theme
     fai_pagine = args.pages or not args.states
     fai_stati = args.states or not args.pages
 
@@ -326,7 +384,10 @@ def main():
             tot += cattura_stati(browser, (name, value), outdir)
         browser.close()
 
-    print(f"\n{tot} immagini in {outdir}")
+    if os.path.exists(_MAINT_FILE):
+        os.remove(_MAINT_FILE)
+
+    print(f"\n{tot} immagini in {outdir}  (tema: {THEME})")
 
 
 if __name__ == "__main__":

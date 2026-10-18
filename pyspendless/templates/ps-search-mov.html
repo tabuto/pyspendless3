@@ -92,16 +92,24 @@
                       -
                     {% endif %}
                   </td>
-                  <td class="text-center">
-                    <a href="/create?movement_id={{ mov.id }}" class="ps-btn ps-btn-sm ps-btn-primary" title="Modifica">
-                      <i class="bi bi-pencil"></i>
-                    </a>
-                    <a href="/create?repeat_from={{ mov.id }}" class="ps-btn ps-btn-sm ps-btn-secondary" title="Ripeti oggi">
-                      <i class="bi bi-arrow-repeat"></i>
-                    </a>
-                    <button class="ps-btn ps-btn-sm ps-btn-danger" onclick="deleteMovement('{{ mov.id }}')" title="Elimina">
-                      <i class="bi bi-trash"></i>
-                    </button>
+                  <td class="text-center whitespace-nowrap">
+                    {# I tre bottoni su UNA riga. Come figli diretti della cella
+                       erano inline-flex separati da spazio bianco, e in una
+                       cella da 78px (768px di viewport) si impilavano uno per
+                       riga: righe da 125px invece di ~60. La tabella e' dentro
+                       un contenitore overflow-x-auto, quindi allargare questa
+                       colonna fa scorrere la tabella, non sfondare la pagina. #}
+                    <div class="flex flex-nowrap gap-1 justify-center">
+                      <a href="/create?movement_id={{ mov.id }}" class="ps-btn ps-btn-sm ps-btn-primary" title="Modifica">
+                        <i class="bi bi-pencil"></i>
+                      </a>
+                      <a href="/create?repeat_from={{ mov.id }}" class="ps-btn ps-btn-sm ps-btn-secondary" title="Ripeti oggi">
+                        <i class="bi bi-arrow-repeat"></i>
+                      </a>
+                      <button class="ps-btn ps-btn-sm ps-btn-danger" onclick="deleteMovement('{{ mov.id }}')" title="Elimina">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </div>
                   </td>
                 </tr>
                 {% endfor %}

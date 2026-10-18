@@ -28,11 +28,25 @@ Tutte e dieci le fasi (0-9) sono completate. Bootstrap e AdminLTE non esistono
 più nel progetto: **18 template** su tre shell Tailwind, tema light/dark
 persistente, −33% di peso su `/movements`.
 
-Il criterio che dà senso all'intero task, **A9.11**, è verde e dimostrato:
-sull'intero branch `git diff --name-only main...HEAD` non tocca
-`app.py`, `models.py`, `repository.py`, `conf.py`, `report_*.py` né
-`oauth_server.py`. «Abbiamo cambiato solo la presentazione» è misurato, non
-asserito.
+Il criterio che dà senso all'intero task, **A9.11**, è verde e dimostrato.
+
+```bash
+git diff --name-only main..569a170 | grep -E '^pyspendless/(app|models|repository|conf|report_.*|oauth_server)\.py$'
+# nessun risultato
+```
+
+In 17 commit il task non tocca `app.py`, `models.py`, `repository.py`,
+`conf.py`, `report_*.py` né `oauth_server.py`. Gli unici file sotto
+`pyspendless/` fuori da `templates/`, `static/` e `test/` sono `README.md` e
+`SPECS.md`. «Abbiamo cambiato solo la presentazione» è misurato, non asserito.
+
+> **Il riferimento è `569a170`, non `HEAD`.** `569a170` è l'ultimo commit del
+> restyling. Il commit successivo bumpa `_APP_VERSION` in `app.py` a `0.3.0`:
+> è il **passo 1 della procedura di rilascio** di `CLAUDE.md`, non una modifica
+> della presentazione, e cade quindi fuori dal perimetro che A9.11 misura.
+> Misurare A9.11 su `HEAD` dopo il rilascio darebbe un rosso che non significa
+> nulla. Il gate è stato tenuto per tutta la durata del lavoro: è quello che il
+> criterio voleva dimostrare.
 
 Restano aperti, e **non** fanno parte di questo task:
 
@@ -349,6 +363,112 @@ prometterla: 59 glifi su 2.078 non significa 59/2078 del peso, perché un
 `woff2` ha tabelle condivise che non scalano col numero di glifi. Un subset si
 misura generandolo. È comunque un intervento a sé, non parte del restyling:
 va aperta una voce `MB-NNN`.
+
+### Verifica pesante A9.6-A9.9 — 2026-10-18
+
+| Criterio | Esito | Come |
+|---|---|---|
+| A9.5 rotte a 200 | **18/18** | sonda su test client |
+| A9.6 nessun 404 sugli asset | **0** | 108 combinazioni: 18 pagine × 2 temi × 3 larghezze |
+| A9.7 nessun errore in console | **0** | stesse 108 |
+| overflow a 375px | **0** | stesse 108 |
+| tema davvero applicato | **108/108** | classe `dark` sul root, non il valore richiesto |
+| A9.8 giro end-to-end | **24/24 × 2 temi** | cliccando i controlli veri |
+| DB invariato durante il giro | **8211 → 8211** | conteggio a inizio e fine della stessa esecuzione |
+| A9.9 coppie baseline/after | **67/67 appaiate**, nessuna oltre il 25% di scarto | confronto, non archiviazione |
+| contrasto intestazioni | **20/20** | WCAG sul renderizzato, due temi |
+
+**La sonda delle 108 combinazioni è stata messa alla prova.** Un 108/108 va
+sospettato: iniettando un `console.error`, un'eccezione non catturata, una
+richiesta 404 e un overflow indotto, la sonda li ha rilevati tutti e quattro.
+Un verde da strumento cieco vale meno di un rosso.
+
+#### Quattro difetti trovati dal CONFRONTO, che nessun controllo automatico vedeva
+
+Tutti e quattro passavano le 108 combinazioni: pagina 200, nessun errore in
+console, nessun overflow. Si vedono solo mettendo le immagini una accanto
+all'altra.
+
+1. **`col-span` senza fallback mobile** — `/settings/wallets` e
+   `/settings/import-export`. Il contenitore è `grid-cols-12` a ogni
+   larghezza e i figli hanno `md:col-span-4`: sotto il breakpoint non hanno
+   span e occupano **una colonna su dodici**. A 375px le card erano larghe
+   **14 pixel**, sovrapposte e illeggibili. Su wallet il difetto stava nel JS
+   (`card.className = 'md:col-span-4 mb-3'`): le stringhe di classe dentro il
+   JS sono markup travestito. Corretto, e **congelato in un test**
+   (`test_col_span_ha_sempre_un_fallback_mobile`), verificato capace di
+   fallire reintroducendo il difetto.
+
+2. **Marcatori di lista persi** — il preflight di Tailwind azzera
+   `list-style` su `ul`/`ol`, come azzerava gli heading in Fase 6. Le liste di
+   contenuto (avvertenze del profilo, note di import-export, dettagli di
+   eliminazione) rendevano come righe indistinte. Ripristinati in
+   `@layer base`, con esclusione esplicita degli elenchi **strutturali**
+   (`#navigation`, `.ps-pagination`, `.ps-card-header-tabs`, `.ps-tabs`,
+   `.ps-list`), che pallini non ne vogliono.
+
+3. **Azioni di tabella impilate** — `/settings/categories` a 375px e
+   `/ps-search-mov` a 768px. I bottoni erano figli diretti della cella, quindi
+   `inline-flex` separati da spazio bianco: in una cella da 97px con 73
+   utili, due bottoni da 36 più lo spazio sforavano di 3 pixel e andavano a
+   capo. Righe da 105px invece di 61, pagina più alta del **94%**. Messi in un
+   contenitore flex.
+
+4. **Intestazioni di card fuori standard** — vedi la voce dedicata più sotto.
+
+> **Lezione, di nuovo.** Il criterio A9.9 era stato dato per soddisfatto in
+> Fase 3 avendo solo *archiviato* gli screenshot: il difetto della scala degli
+> heading era in ogni immagine dalla Fase 3 in poi. Questa volta il confronto
+> è stato fatto, e ha trovato altri quattro difetti che sei fasi di controlli
+> automatici non avevano visto. Gli screenshot servono a confrontarli.
+
+#### Due difetti negli strumenti, trovati usandoli
+
+- **`ui-shots.py` scartava tutti e 13 i modal, in silenzio.** Il controllo di
+  apertura era `classList.contains('show')`, la convenzione del vecchio
+  framework: dopo la migrazione i modal sono `<dialog>` aperti da `ps-ui.js`
+  con `showModal()`, e quella classe non esiste più. I modal si aprivano per
+  davvero — verificato cliccando il trigger vero — ma la matrice aveva 13
+  buchi e nessuno protestava. Ora si guarda come l'elemento **rende**
+  (`open`, `display`, `visibility`, dimensioni) e i modal mancanti vengono
+  elencati a fine esecuzione.
+- **`ui-shots.py` non sapeva fare il dark**, e rendeva la manutenzione con
+  `set_content()`: su `about:blank` `localStorage` è inaccessibile, l'anti-FOUC
+  finisce nel `catch` e la pagina esce sempre chiara. Aggiunto `--theme`, e la
+  manutenzione è servita da `/static` — stessa origine dell'app.
+
+#### Intestazioni di card: un solo standard
+
+Sette intestazioni su `/settings/import-export`, `/reports` e
+`/settings/group` ottenevano un'intestazione colorata in tre modi diversi:
+riusando una classe **badge** (che porta con sé `rounded-full px-2 py-0.5
+text-xs`, geometria da pillola su un elemento che ha già il padding della
+card), riusando `ps-balance-negative`, o con uno `style` inline.
+
+E il `text-white` non arrivava mai al testo: `.ps-card-title` dichiara
+`color: var(--ps-text)` e vince sull'ereditarietà. Il risultato era testo
+scuro su fondo saturo — **2,84:1** su `--ps-brand`, sotto il minimo AA di
+4,5:1 (il titolo è 16px/600, quindi non è *large text*).
+
+Sostituite da `.ps-card-header-accent` più un modificatore di colore.
+**Tinto, non solido**, che è la decisione **D11**, e la misura la conferma: in
+dark gli accenti sono chiari (`--ps-brand` → `#818cf8`) e nessun singolo
+colore di testo passa su tutti e cinque gli accenti. Col fondo tinto il titolo
+resta `--ps-text` in entrambi i temi.
+
+| | peggiore light | peggiore dark | soglia |
+|---|---|---|---|
+| testo del titolo | 14,77:1 | 11,34:1 | 4,5 |
+| icona d'accento | 3,76:1 | 5,00:1 | 3,0 |
+
+L'icona in light è scurita all'85%: a piena saturazione `warning` si fermava a
+2,81:1. Anche la card «Informazioni» di `/settings/group`, presa a modello,
+era sotto soglia (**4,36:1**) ed è stata allineata.
+
+Restano tre **modal** con lo stesso `style` inline (`/settings/group`,
+`/settings/categories`, `_styleguide`): lì il titolo è `.ps-modal-title`,
+nella stessa regola di `.ps-card-title`, quindi resta `--ps-text` sul tinto
+(14,77:1 e 12,18:1). Leggibili, non urgenti, ma da riallineare.
 
 ### Due strumenti di verifica sono diventati tautologici
 

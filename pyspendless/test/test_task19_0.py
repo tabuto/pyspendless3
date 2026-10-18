@@ -549,6 +549,35 @@ class IgieneTemplate(unittest.TestCase):
         r"bootstrap(?!\.Modal|\.Tab|\.Collapse)|adminlte", re.I
     )
 
+    # Un `md:col-span-4` SENZA un `col-span-*` di base e' invisibile finche'
+    # non si guarda la pagina su mobile: sotto il breakpoint il figlio non ha
+    # span, e in un contenitore `grid-cols-12` occupa UNA colonna su dodici.
+    # A 375px fa card larghe 14 pixel, illeggibili e sovrapposte.
+    # Trovato in Fase 9 su /settings/wallets e /settings/import-export,
+    # confrontando gli screenshot con la baseline: nessun controllo
+    # automatico lo vedeva, la pagina resta 200, non ha overflow (le card si
+    # schiacciano DENTRO il contenitore) e non produce errori in console.
+    SPAN_PREFISSATO = re.compile(r"\b(?:sm|md|lg|xl|2xl):col-span-\d+")
+    SPAN_BASE = re.compile(r"(?<![-\w:])col-span-\d+")
+
+    def test_col_span_ha_sempre_un_fallback_mobile(self):
+        """Ogni col-span con breakpoint ha anche uno span di base."""
+        colpevoli = []
+        for nome in sorted(os.listdir(self.TEMPLATES)):
+            if not nome.endswith(".html"):
+                continue
+            with open(os.path.join(self.TEMPLATES, nome), encoding="utf-8") as f:
+                for i, riga in enumerate(f, 1):
+                    # vale anche per le stringhe di classe dentro il JS: sono
+                    # markup travestito, ed e' li' che si annidava il difetto
+                    if self.SPAN_PREFISSATO.search(riga) and not self.SPAN_BASE.search(riga):
+                        colpevoli.append(f"{nome}:{i}: {riga.strip()[:70]}")
+        self.assertEqual(
+            colpevoli, [],
+            "col-span con breakpoint ma senza fallback mobile: sotto il "
+            "breakpoint l'elemento occupa una sola colonna della griglia.\n  "
+            + "\n  ".join(colpevoli))
+
     def test_nessun_bootstrap_nei_migrati(self):
         """
         Da Fase 9: nessun template deve piu' referenziare il vecchio

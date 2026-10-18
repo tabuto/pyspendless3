@@ -134,7 +134,7 @@ function loadWallets() {
       wallets.forEach(wallet => {
         const balanceClass = wallet.balance >= 0 ? 'ps-amount-income' : 'ps-amount-expense';
         const card = document.createElement('div');
-        card.className = 'md:col-span-4 mb-3';
+        card.className = 'col-span-12 md:col-span-4 mb-3';
         const preferredBadge = wallet.is_preferred
           ? '<span class="ps-badge ps-badge-brand"><i class="bi bi-star-fill"></i> Preferito</span>'
           : '';

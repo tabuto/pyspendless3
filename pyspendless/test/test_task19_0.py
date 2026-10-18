@@ -522,13 +522,11 @@ class IgieneTemplate(unittest.TestCase):
         # il problema, quindi le concatenazioni esistono e vanno bene). Serve
         # da Fase 3 in poi, sui template gia' migrati. Finche' la migrazione e'
         # in corso, la whitelist elenca i file non ancora toccati.
-        whitelist_non_migrati = {
-            # <-- togliere il file da qui quando viene migrato a Tailwind
-            # template morti
-            "cards.html", "forms.html", "tables.html", "base.html",
-            "index.html", "login.html", "login_old.html", "loginv2.html",
-            "ps-setting-categories-old.html",
-        }
+        # Fase 9 (A9.4): vuota. I 9 template morti che la popolavano sono
+        # stati cancellati (attivita' 9.5, decisione D7 confermata), e tutti
+        # i 18 template resi girano su Tailwind. Se questo insieme torna a
+        # non essere vuoto, qualcosa e' rientrato dalla finestra.
+        whitelist_non_migrati = set()
         residui = [c for c in colpevoli
                    if c.split(":")[0] not in whitelist_non_migrati]
         self.assertEqual(
@@ -537,29 +535,47 @@ class IgieneTemplate(unittest.TestCase):
             f"(vedi §2.4 del piano): {residui}"
         )
 
+    # Il nome del vecchio framework compare in due ruoli diversi, e solo uno
+    # di questi e' un residuo:
+    #   - RIFERIMENTO al framework (CSS, CDN, classi)  -> da eliminare;
+    #   - chiamata a `bootstrap.Modal` / `.Tab` / `.Collapse`, che e' lo SHIM
+    #     di ps-ui.js  -> legittima: il JS di pagina non va riscritto (D4), e
+    #     lo shim esiste apposta perche' continui a funzionare.
+    # Il lookahead distingue i due casi, ed e' lo stesso che
+    # tools/check-page-migration.py applica dalla Fase 3. Senza, A9.1 sarebbe
+    # insoddisfacibile: i file correttamente migrati che chiamano lo shim
+    # (_styleguide, ps-recurrent-mov, ps-setting-*) risulterebbero residui.
+    FRAMEWORK_RESIDUO = re.compile(
+        r"bootstrap(?!\.Modal|\.Tab|\.Collapse)|adminlte", re.I
+    )
+
     def test_nessun_bootstrap_nei_migrati(self):
         """
-        Da Fase 9: nessun template deve piu' referenziare Bootstrap/AdminLTE.
-        Finche' la migrazione e' in corso il test e' informativo: elenca
-        quanti file li usano ancora, senza fallire.
+        Da Fase 9: nessun template deve piu' referenziare il vecchio
+        framework CSS/JS. Finche' la migrazione e' in corso il test e'
+        informativo: elenca i riferimenti rimasti, senza fallire.
         """
         residui = []
         for nome in sorted(os.listdir(self.TEMPLATES)):
             if not nome.endswith(".html"):
                 continue
             with open(os.path.join(self.TEMPLATES, nome), encoding="utf-8") as f:
-                testo = f.read()
-            if "bootstrap" in testo.lower() or "adminlte" in testo.lower():
-                residui.append(nome)
+                righe = f.readlines()
+            for i, riga in enumerate(righe, 1):
+                if self.FRAMEWORK_RESIDUO.search(riga):
+                    residui.append(nome + ":" + str(i) + ": " + riga.strip()[:70])
 
         if os.getenv("PS_FASE9") == "1":
             self.assertEqual(
                 residui, [],
-                f"Fase 9: Bootstrap/AdminLTE ancora referenziati in {residui}"
+                "Fase 9: riferimenti residui al vecchio framework:\n  "
+                + "\n  ".join(residui)
             )
         else:
-            print(f"\n[info] template che usano ancora Bootstrap/AdminLTE: "
-                  f"{len(residui)} -> {residui}")
+            print("\n[info] riferimenti residui al vecchio framework: "
+                  + str(len(residui)))
+            for r in residui:
+                print("        " + r)
 
 
 def main():

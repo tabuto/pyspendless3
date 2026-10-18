@@ -524,8 +524,6 @@ class IgieneTemplate(unittest.TestCase):
         # in corso, la whitelist elenca i file non ancora toccati.
         whitelist_non_migrati = {
             # <-- togliere il file da qui quando viene migrato a Tailwind
-            "ps-dashboard-monthly.html", "ps-dashboard-yearly.html",
-            "ps-reports.html",
             # template morti
             "cards.html", "forms.html", "tables.html", "base.html",
             "index.html", "login.html", "login_old.html", "loginv2.html",

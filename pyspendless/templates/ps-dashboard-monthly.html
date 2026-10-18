@@ -1,107 +1,93 @@
-{% extends 'ps-nav.html' %}
+{% extends 'ps-nav-tw.html' %}
 
 {% block nav_content %}
-<div class="app-content-header">
-  <div class="container-fluid">
-    <div class="row">
-      <div class="col-sm-6">
-        <h3 class="mb-0">Analisi Mensile</h3>
+<div class="w-full px-4 mt-4">
+  <h1 class="mb-4">Analisi Mensile</h1>
+
+  <!-- Filtri -->
+  <div class="ps-card mb-4">
+    <div class="ps-card-header">
+      <h5 class="ps-card-title mb-0">
+        <i class="bi bi-funnel"></i> Filtri
+      </h5>
+    </div>
+    <div class="ps-card-body">
+      <div class="grid grid-cols-12 gap-4">
+        <div class="col-span-12 md:col-span-3">
+          <label for="filterYear" class="ps-label">Anno</label>
+          <select class="ps-select" id="filterYear">
+            <option value="">Caricamento...</option>
+          </select>
+        </div>
+        <div class="col-span-12 md:col-span-3">
+          <label for="filterMonth" class="ps-label">Mese</label>
+          <select class="ps-select" id="filterMonth">
+            <option value="1">Gennaio</option>
+            <option value="2">Febbraio</option>
+            <option value="3">Marzo</option>
+            <option value="4">Aprile</option>
+            <option value="5">Maggio</option>
+            <option value="6">Giugno</option>
+            <option value="7">Luglio</option>
+            <option value="8">Agosto</option>
+            <option value="9">Settembre</option>
+            <option value="10">Ottobre</option>
+            <option value="11">Novembre</option>
+            <option value="12">Dicembre</option>
+          </select>
+        </div>
+        <div class="col-span-12 md:col-span-3 flex items-end">
+          <button class="ps-btn ps-btn-primary" id="btnUpdate">
+            <i class="bi bi-arrow-clockwise"></i> Aggiorna
+          </button>
+        </div>
       </div>
     </div>
   </div>
-</div>
 
-<div class="app-content">
-  <div class="container-fluid">
-    <!-- Filtri -->
-    <div class="row mb-3">
-      <div class="col-12">
-        <div class="card">
-          <div class="card-header">
-            <h5 class="card-title mb-0">
-              <i class="bi bi-funnel"></i> Filtri
-            </h5>
-          </div>
-          <div class="card-body">
-            <div class="row">
-              <div class="col-md-3">
-                <label for="filterYear" class="form-label">Anno</label>
-                <select class="form-select" id="filterYear">
-                  <option value="">Caricamento...</option>
-                </select>
-              </div>
-              <div class="col-md-3">
-                <label for="filterMonth" class="form-label">Mese</label>
-                <select class="form-select" id="filterMonth">
-                  <option value="1">Gennaio</option>
-                  <option value="2">Febbraio</option>
-                  <option value="3">Marzo</option>
-                  <option value="4">Aprile</option>
-                  <option value="5">Maggio</option>
-                  <option value="6">Giugno</option>
-                  <option value="7">Luglio</option>
-                  <option value="8">Agosto</option>
-                  <option value="9">Settembre</option>
-                  <option value="10">Ottobre</option>
-                  <option value="11">Novembre</option>
-                  <option value="12">Dicembre</option>
-                </select>
-              </div>
-              <div class="col-md-3 d-flex align-items-end">
-                <button class="btn btn-primary" id="btnUpdate">
-                  <i class="bi bi-arrow-clockwise"></i> Aggiorna
-                </button>
-              </div>
-            </div>
-          </div>
+  <!-- Grafici - Riga 1 -->
+  <div class="grid grid-cols-12 gap-4">
+    <div class="col-span-12 md:col-span-6">
+      <div class="ps-card">
+        <div class="ps-card-header">
+          <h5 class="ps-card-title mb-0">Entrate vs Uscite</h5>
+        </div>
+        <div class="ps-card-body">
+          <canvas id="chartIncomeExpense" height="200"></canvas>
         </div>
       </div>
     </div>
-
-    <!-- Grafici - Riga 1 -->
-    <div class="row">
-      <div class="col-md-6">
-        <div class="card">
-          <div class="card-header">
-            <h5 class="card-title mb-0">Entrate vs Uscite</h5>
-          </div>
-          <div class="card-body">
-            <canvas id="chartIncomeExpense" height="200"></canvas>
-          </div>
+    <div class="col-span-12 md:col-span-6">
+      <div class="ps-card">
+        <div class="ps-card-header">
+          <h5 class="ps-card-title mb-0">Spese per Categoria</h5>
         </div>
-      </div>
-      <div class="col-md-6">
-        <div class="card">
-          <div class="card-header">
-            <h5 class="card-title mb-0">Spese per Categoria</h5>
-          </div>
-          <div class="card-body">
-            <canvas id="chartExpenseByCategory" height="200"></canvas>
-          </div>
+        <div class="ps-card-body">
+          <canvas id="chartExpenseByCategory" height="200"></canvas>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Grafici - Riga 2 -->
-    <div class="row mt-3">
-      <div class="col-md-6">
-        <div class="card">
-          <div class="card-header">
-            <h5 class="card-title mb-0">Spese per Wallet</h5>
-          </div>
-          <div class="card-body">
-            <canvas id="chartExpenseByWallet" height="200"></canvas>
-          </div>
+  <!-- Grafici - Riga 2 -->
+  <div class="grid grid-cols-12 gap-4 mt-3">
+    <div class="col-span-12 md:col-span-6">
+      <div class="ps-card">
+        <div class="ps-card-header">
+          <h5 class="ps-card-title mb-0">Spese per Wallet</h5>
+        </div>
+        <div class="ps-card-body">
+          <canvas id="chartExpenseByWallet" height="200"></canvas>
         </div>
       </div>
-      <div class="col-md-6">
-        <div class="card">
-          <div class="card-header">
-            <h5 class="card-title mb-0">Entrate per Wallet</h5>
-          </div>
-          <div class="card-body">
-            <canvas id="chartIncomeByWallet" height="200"></canvas>
-          </div>
+    </div>
+    <div class="col-span-12 md:col-span-6">
+      <div class="ps-card">
+        <div class="ps-card-header">
+          <h5 class="ps-card-title mb-0">Entrate per Wallet</h5>
+        </div>
+        <div class="ps-card-body">
+          <canvas id="chartIncomeByWallet" height="200"></canvas>
         </div>
       </div>
     </div>
@@ -115,10 +101,32 @@
 Chart.register(ChartDataLabels);
 Chart.defaults.plugins.datalabels.display = false;
 
+// Tema dei grafici (task19-0, Fase 8): Chart.js disegna tick e griglie in
+// grigio scuro di default, illeggibili sul fondo '#0b1120' del tema dark.
+// Si rileggono dai token del design system, e il listener su
+// 'ps:themechange' piu' in basso aggiorna le istanze esistenti senza
+// ricaricare la pagina (stesso meccanismo di ps-show-mov.html).
+function psChartTheme() {
+  const s = getComputedStyle(document.documentElement);
+  Chart.defaults.color = s.getPropertyValue('--ps-text-muted').trim();
+  Chart.defaults.borderColor = s.getPropertyValue('--ps-border').trim();
+}
+psChartTheme();
+
+// Colori Entrate/Uscite: dal design system (verde = entrate, rosso = uscite),
+// non in chiaro, cosi' seguono il tema: stesso meccanismo di ps-show-mov.html.
+function readIncomeExpenseColors() {
+  const s = getComputedStyle(document.documentElement);
+  return [
+    s.getPropertyValue('--ps-income').trim(),
+    s.getPropertyValue('--ps-expense').trim()
+  ];
+}
+
 // Palette di colori standard
 const COLORS = [
-  '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
-  '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF9F40'
+  '#D45469', '#498AD4', '#D7A542', '#3DB8AB', '#9069D3',
+  '#DD873C', '#D45469', '#7F8A9F', '#3DB8AB', '#DD873C'
 ];
 
 // Variabili globali per i grafici
@@ -129,22 +137,22 @@ async function initFilters() {
   try {
     const response = await fetch('/api/filters/years');
     const years = await response.json();
-    
+
     const yearSelect = document.getElementById('filterYear');
     yearSelect.innerHTML = '';
-    
+
     if (years.length === 0) {
       yearSelect.innerHTML = '<option value="">Nessun dato disponibile</option>';
       return;
     }
-    
+
     years.forEach(year => {
       const option = document.createElement('option');
       option.value = year;
       option.textContent = year;
       yearSelect.appendChild(option);
     });
-    
+
     // Seleziona l'anno corrente se presente
     const currentYear = new Date().getFullYear();
     if (years.includes(currentYear)) {
@@ -152,11 +160,11 @@ async function initFilters() {
     } else {
       yearSelect.value = years[0];
     }
-    
+
     // Seleziona il mese corrente
     const currentMonth = new Date().getMonth() + 1;
     document.getElementById('filterMonth').value = currentMonth;
-    
+
   } catch (error) {
     console.error('Errore caricamento anni:', error);
   }
@@ -212,24 +220,24 @@ function createPieChart(ctx, labels, data, colors, showLabels = true) {
 async function updateCharts() {
   const year = document.getElementById('filterYear').value;
   const month = document.getElementById('filterMonth').value;
-  
+
   if (!year || !month) {
     alert('Seleziona anno e mese');
     return;
   }
-  
+
   try {
     const response = await fetch(`/api/stats/monthly?year=${year}&month=${month}`);
     const data = await response.json();
-    
+
     // Grafico Entrate vs Uscite
     const incomeExpenseLabels = ['Entrate', 'Uscite'];
     const incomeExpenseData = [
       data.income_vs_expense.income || 0,
       data.income_vs_expense.expense || 0
     ];
-    const incomeExpenseColors = ['#36A2EB', '#FF6384'];
-    
+    const incomeExpenseColors = readIncomeExpenseColors();
+
     if (chartIncomeExpense) {
       chartIncomeExpense.data.labels = incomeExpenseLabels;
       chartIncomeExpense.data.datasets[0].data = incomeExpenseData;
@@ -239,12 +247,12 @@ async function updateCharts() {
       const ctx = document.getElementById('chartIncomeExpense').getContext('2d');
       chartIncomeExpense = createPieChart(ctx, incomeExpenseLabels, incomeExpenseData, incomeExpenseColors);
     }
-    
+
     // Grafico Spese per Categoria
     const categoryLabels = Object.keys(data.expense_by_category);
     const categoryData = Object.values(data.expense_by_category);
     const categoryColors = categoryLabels.map((_, i) => COLORS[i % COLORS.length]);
-    
+
     if (chartExpenseByCategory) {
       chartExpenseByCategory.data.labels = categoryLabels;
       chartExpenseByCategory.data.datasets[0].data = categoryData;
@@ -254,12 +262,12 @@ async function updateCharts() {
       const ctx = document.getElementById('chartExpenseByCategory').getContext('2d');
       chartExpenseByCategory = createPieChart(ctx, categoryLabels, categoryData, categoryColors, false);
     }
-    
+
     // Grafico Spese per Wallet
     const walletExpenseLabels = Object.keys(data.expense_by_wallet);
     const walletExpenseData = Object.values(data.expense_by_wallet);
     const walletExpenseColors = walletExpenseLabels.map((_, i) => COLORS[i % COLORS.length]);
-    
+
     if (chartExpenseByWallet) {
       chartExpenseByWallet.data.labels = walletExpenseLabels;
       chartExpenseByWallet.data.datasets[0].data = walletExpenseData;
@@ -269,12 +277,12 @@ async function updateCharts() {
       const ctx = document.getElementById('chartExpenseByWallet').getContext('2d');
       chartExpenseByWallet = createPieChart(ctx, walletExpenseLabels, walletExpenseData, walletExpenseColors);
     }
-    
+
     // Grafico Entrate per Wallet
     const walletIncomeLabels = Object.keys(data.income_by_wallet);
     const walletIncomeData = Object.values(data.income_by_wallet);
     const walletIncomeColors = walletIncomeLabels.map((_, i) => COLORS[i % COLORS.length]);
-    
+
     if (chartIncomeByWallet) {
       chartIncomeByWallet.data.labels = walletIncomeLabels;
       chartIncomeByWallet.data.datasets[0].data = walletIncomeData;
@@ -284,7 +292,7 @@ async function updateCharts() {
       const ctx = document.getElementById('chartIncomeByWallet').getContext('2d');
       chartIncomeByWallet = createPieChart(ctx, walletIncomeLabels, walletIncomeData, walletIncomeColors);
     }
-    
+
   } catch (error) {
     console.error('Errore aggiornamento grafici:', error);
     alert('Errore durante il caricamento dei dati');
@@ -295,10 +303,24 @@ async function updateCharts() {
 document.addEventListener('DOMContentLoaded', async function() {
   await initFilters();
   await updateCharts();
-  
+
   document.getElementById('btnUpdate').addEventListener('click', updateCharts);
   document.getElementById('filterYear').addEventListener('change', updateCharts);
   document.getElementById('filterMonth').addEventListener('change', updateCharts);
+});
+
+// Cambio tema (toggle light/dark/system, ps-theme.js): rilegge i token CSS e
+// aggiorna le istanze esistenti sul posto, senza ricrearle e senza
+// ricaricare la pagina. La palette categoriale (COLORS) non dipende dal
+// tema, quindi non va rifatta qui; i colori Entrate/Uscite invece seguono
+// --ps-income/--ps-expense e vanno riassegnati al dataset.
+document.addEventListener('ps:themechange', function () {
+  psChartTheme();
+  if (chartIncomeExpense) {
+    chartIncomeExpense.data.datasets[0].backgroundColor = readIncomeExpenseColors();
+  }
+  [chartIncomeExpense, chartExpenseByCategory, chartExpenseByWallet, chartIncomeByWallet]
+    .forEach(c => c && c.update());
 });
 </script>
 {% endblock %}

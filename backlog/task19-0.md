@@ -52,7 +52,7 @@ Restano aperti, e **non** fanno parte di questo task:
 
 | Cosa | Dove |
 |---|---|
-| Il subset delle icone (216,6 KB per 59 glifi su 2.078) | voce `MB-NNN` da aprire — vedi "Misura finale" |
+| Il subset delle icone (216,6 KB per 59 glifi su 2.078) | **fatto**: MB-008 (221 KB → 8 KB); strascichi in MB-009 |
 | Verifica A9.6-A9.9 nei due temi su tre larghezze | richiede prima di estendere `ui-shots.py`, oggi bloccato su `THEME = "light"` |
 | Il rilascio | vedi D14 |
 | I due strumenti tautologici | vedi "Due strumenti di verifica sono diventati tautologici" |

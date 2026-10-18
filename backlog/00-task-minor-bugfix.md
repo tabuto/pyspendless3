@@ -50,12 +50,104 @@ il rimando.
 | MB-005 | evolutiva | Il server MCP usa il wallet preferito quando la chiamata non ne specifica uno (dipende da MB-004) | bassa | RISOLTA |
 | MB-006 | bug | La tabella movimenti ordina le date per giorno del mese: DataTables confronta `gg/mm/aaaa` come stringa | media | RISOLTA |
 | MB-007 | bug | Una categoria cambia colore fra la dashboard mensile e quella annuale: la palette è assegnata per posizione | bassa | RISOLTA |
+| MB-008 | evolutiva | Subset di Bootstrap Icons: 59 glifi su 2.078, da 221 KB a 8 KB (font + CSS) | media | RISOLTA |
+| MB-009 | evolutiva | Icone: togliere il fallback `.woff` (180 KB, mai scaricato) e aggiungere lo script che rigenera il subset | bassa | APERTA |
 
 ## Aperte
 
-_Nessuna voce aperta._
+### MB-009 — Icone: fallback `.woff` residuo e script di rigenerazione del subset
 
-## Risolte
+- **Tipo**: evolutiva
+- **Priorità**: bassa
+- **Dove**: `pyspendless/static/fonts/ps-icons.woff`,
+  `pyspendless/static/css/ps-icons.css` (clausola `src:`), `tools/` (nuovo script).
+- **Origine**: strascico di MB-008.
+
+**Problema** — due cose rimaste fuori da MB-008, volutamente:
+
+1. `ps-icons.woff` pesa ancora **180.288 byte** ed è il set completo (2.078
+   glifi). Nessun browser attuale lo scarica, perché tutti supportano `woff2`,
+   ma resta nel repo, e il `src:` del CSS continua a citarlo.
+2. Il subset è stato generato a mano. Il `.woff2` e il CSS contengono solo i 59
+   glifi usati: **aggiungere un'icona `bi-*` non presente nel subset la mostra
+   vuota**, senza errori in console né 404. Chi aggiunge un'icona non ha alcun
+   segnale.
+
+**Proposta**
+
+1. Cancellare `ps-icons.woff` e togliere `,url("../fonts/ps-icons.woff") format("woff")`
+   dal `src:` di `ps-icons.css`.
+2. Script `tools/build-icons.sh` (o `.py`) che: censisce le classi `bi-*`
+   usate in `templates/`, `static/js/` e nei `.py`; le mappa ai codepoint;
+   genera `ps-icons.woff2` con `pyftsubset` e riscrive `ps-icons.css`, sul
+   modello di `tools/build-css.sh`. Come in `build-css.sh`, deve **fallire**
+   se una classe usata non esiste nel set completo, o se l'output è
+   anormalmente piccolo.
+3. Decidere dove vive il font completo, fonte dello script: oggi sta solo nella
+   cronologia git (fino al commit `726cd6f`, versione Bootstrap Icons 1.13.1).
+   Alternative: scaricarlo da npm (`bootstrap-icons@1.13.1`) dentro lo script,
+   oppure versionarlo fuori da `static/` (~134 KB, non servito).
+4. Eventuale controllo in `pyspendless/test/`: ogni classe `bi-*` referenziata
+   nei template è definita in `ps-icons.css`.
+
+**Note / casi limite**
+
+- Il controllo del punto 4 è quello che chiude davvero il rischio del punto 2:
+  lo script rigenera, il test avvisa se ci si è dimenticati di lanciarlo.
+- `bi-chevron-right` / `bi-chevron-down` compaiono in `ps-nav.html` anche come
+  stringhe passate a `classList.add/remove`, non solo in `class="..."`: il
+  censimento deve cercare `bi-[a-z0-9-]+` ovunque, non solo negli attributi.
+
+### MB-008 — Subset di Bootstrap Icons · risolta il 2026-10-18
+
+- **Tipo**: evolutiva
+- **Priorità**: media
+- **Dove**: `pyspendless/static/fonts/ps-icons.woff2`,
+  `pyspendless/static/css/ps-icons.css`.
+- **Origine**: indicata in `task19-0.md` ("Misura finale") come il primo
+  guadagno di peso rimasto dopo il restyling.
+
+**Problema** — D9 del task19-0 aveva self-ostato Bootstrap Icons 1.13.1 **senza
+farne un subset**: `ps-icons.css` definiva 2.078 glifi, i template e il JS ne
+usano 59. La pagina caricava il 97% di un set senza usarlo, e le icone erano
+la risorsa più pesante: 36,5% del peso, più del framework CSS.
+
+**Soluzione applicata** — subset a 59 glifi, generato con `pyftsubset`
+(fonttools) a partire dal `woff2` completo:
+
+- Censimento delle classi `bi-*` in `templates/`, `static/js/` e nei `.py`:
+  **59**, tutte presenti nel set. Nessuna composta a runtime (le sole
+  manipolazioni dinamiche sono `chevron-right`/`chevron-down` in `ps-nav.html`).
+- Font: `--unicodes=<59 codepoint> --flavor=woff2 --layout-features='' --no-hinting
+  --desubroutinize`. Senza ligature e senza hinting, che un font di icone non usa.
+- CSS: regola base `.bi::before` e le sole 59 regole `.bi-xxx::before`.
+
+| File | Prima | Dopo |
+|---|---|---|
+| `ps-icons.woff2` | 134.044 B | **5.220 B** |
+| `ps-icons.css` | 86.934 B | **2.951 B** |
+| **totale** | **220.978 B** | **8.171 B** (-96%) |
+
+**Verifica**
+
+- Contorni e larghezze dei 59 glifi **identici** all'originale (confronto con
+  `RecordingPen`: 0 differenze su 59); `unitsPerEm` e ascent invariati, quindi
+  nessuno spostamento verticale delle icone.
+- Ogni classe usata è definita nel CSS, ogni codepoint del CSS esiste nel font.
+- Nel browser: font caricato a 5.220 byte, 59 icone renderizzate, nessun 404.
+  Non sono state riaperte le 18 pagine dietro login.
+
+**Note / casi limite**
+
+- **Aggiungere un'icona richiede di rigenerare il subset**: una `bi-*` fuori
+  dai 59 si vede vuota, senza errori. Vedi MB-009.
+- `ps-icons.woff` (180 KB, set completo) **non è stato toccato**: nessun
+  browser attuale lo scarica. Vedi MB-009.
+- Il **guadagno arriva solo dopo il bump di `_APP_VERSION`**: il CSS è
+  referenziato con `?v={{ app_version }}`, e finché la versione non cambia i
+  browser con la cache calda continuano a usare CSS e font vecchi. Sono
+  comunque coerenti fra loro, quindi nessun glifo si rompe.
+- Il CSS compilato di Tailwind non è coinvolto: `build-css.sh` non serve.
 
 ### MB-007 — Colori delle categorie incoerenti fra le dashboard · risolta il 2026-10-18
 

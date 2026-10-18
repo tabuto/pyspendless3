@@ -6,7 +6,7 @@ Criterio A2.3 / definition of done della Fase 2: "il confronto fra le
 destinazioni estratte dalla nav vecchia e dalla nuova da' differenza vuota".
 
 La nav vecchia si legge dall'app viva (`/home`, che estende `ps-nav.html`).
-La nuova si legge rendendo un template che estende `ps-nav-tw.html` — di norma
+La nuova si legge rendendo un template che estende `ps-nav.html` — di norma
 `_shell-probe.html`, che non e' instradato.
 
 L'estrazione e' delimitata a `<ul id="navigation">`, **la stessa delimitazione

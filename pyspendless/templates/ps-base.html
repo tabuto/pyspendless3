@@ -1,33 +1,35 @@
 <!DOCTYPE html>
 <!--
-  pyspendless/templates/ps-base-tw.html
+  pyspendless/templates/ps-base.html
   ============================================================================
-  Task 19-0 (Fase 2) — Nuova base Tailwind, parallela a ps-base.html.
+  Base Tailwind dell'applicazione. Nata in Fase 2 del task19-0 come
+  ps-base-tw.html, accanto alla vecchia base; la Fase 9 ha cancellato quella
+  e tolto il suffisso, che non distingueva piu' nulla.
 
   NB (come in _styleguide.html): qui dentro i delimitatori Jinja non si
   scrivono per esteso. Jinja analizza anche i commenti HTML, quindi una
   parentesi graffa seguita da percento dentro un commento rende il file NON
   COMPILABILE. Sotto si parla di "block NOME", mai del delimitatore vero.
 
-  I nomi dei block sono IDENTICI a quelli di ps-base.html: title, head,
-  page_title, body_class, header, content, footer, scripts. È ciò che rende
-  la migrazione di una pagina esistente un cambio di una riga: nel tag extends
-  del template figlio basta sostituire 'ps-base.html' con 'ps-base-tw.html'.
+  Block esposti: title, head, page_title, body_class, header, content,
+  footer, scripts. I nomi erano identici a quelli della vecchia base: e' cio'
+  che ha reso la migrazione di ogni pagina un cambio di una riga sola.
 
-  Differenze consapevoli rispetto a ps-base.html (vedi report finale di
-  Fase 2 per il dettaglio):
-    - P4 (title duplicato): qui c'è UN SOLO tag title. Il block page_title
-      resta dichiarato (nessuna pagina lo usa oggi: grep confermato) ma non è
+  Tre differenze volute rispetto alla base precedente, tutte correzioni di
+  difetti preesistenti (dettaglio nel report finale di Fase 2):
+    - P4, title duplicato: qui c'e' UN SOLO tag title. Il block page_title
+      resta dichiarato (nessuna pagina lo usa: grep confermato) ma non e'
       avvolto in un tag title proprio, quindi non produce un secondo
-      elemento. Se in futuro un template lo riempisse, il testo apparirebbe
-      come testo libero nell'head: accettabile perché il block è vestigiale.
-    - La navbar residua del framework precedente, con link a /login (oggi
-      dentro il block header) non esiste più: il block header qui ha default
-      vuoto.
-    - Il block content non è avvolto in un contenitore con padding
-      (container-fluid su ps-base.html): la nuova shell (ps-nav-tw.html) ha
-      bisogno di un layout a tutta larghezza (sidebar aderente al bordo).
-      Aggiungere un contenitore con padding qui romperebbe quel layout.
+      elemento. Se un template lo riempisse, il testo apparirebbe come testo
+      libero nell'head: accettabile perche' il block e' vestigiale.
+    - P7, la navbar residua del framework precedente con link a /login, che
+      stampava un "PySpendless" isolato su ogni pagina: non esiste piu', il
+      block header ha default vuoto.
+    - Il block content non e' avvolto in un contenitore con padding (la base
+      precedente usava container-fluid): la shell autenticata ps-nav.html ha
+      bisogno di un layout a tutta larghezza, con la sidebar aderente al
+      bordo. Aggiungere qui un contenitore con padding romperebbe quel
+      layout.
   ============================================================================
 -->
 <html lang="it">

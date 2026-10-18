@@ -14,7 +14,7 @@
   ha scritto questo file deciderlo.
 
   Per questo è un documento HTML AUTONOMO, non estende (`extends`) nessun
-  layout. Nasce così in Fase 1, quando ps-base-tw.html non esisteva ancora e
+  layout. Nasce così in Fase 1, quando la base Tailwind non esisteva ancora e
   l'unica base disponibile era quella dei due framework precedenti: estenderla
   avrebbe significato caricarli insieme a Tailwind sulla stessa pagina —
   esattamente la coesistenza che il piano vieta
@@ -22,7 +22,7 @@
 
   Resta autonomo anche dopo la Fase 9, che ha cancellato la vecchia gerarchia:
   la testa (meta, script anti-FOUC, link CSS) è scritta nella stessa forma di
-  ps-base-tw.html, quindi la vetrina continua a mostrare i componenti nel loro
+  ps-base.html, quindi la vetrina continua a mostrare i componenti nel loro
   contesto reale senza dipendere da un layout che potrebbe cambiare.
 
   Non usa variabili Jinja che dipendono dal contesto di richiesta
@@ -40,7 +40,7 @@
   <!-- ========================================================================
        Script anti-FOUC — DEVE girare prima del primo paint, quindi inline,
        prima del <link> al CSS, non async né defer (piano §4.2). In Fase 2
-       va copiato *esattamente così* nel <head> di ps-base-tw.html: la fonte
+       va copiato *esattamente così* nel <head> di ps-base.html: la fonte
        di verità è PS_FOUC_SNIPPET in ps-theme.js, questo è il suo incollato.
        ==================================================================== -->
   <script>

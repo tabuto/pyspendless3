@@ -1,8 +1,8 @@
-{% extends 'ps-nav-tw.html' %}
+{% extends 'ps-nav.html' %}
 
 {#
   I <link> di DataTables e Tom Select vanno nel block "head" (prima di
-  ps-tailwind.css nel <head> di ps-base-tw.html) cosi' lo skin Tailwind,
+  ps-tailwind.css nel <head> di ps-base.html) cosi' lo skin Tailwind,
   caricato dopo, vince la cascata senza bisogno di !important. Oggi questi
   <link> stavano dentro il body, dopo il nav_content: posizione legittima per
   un <link> (il browser la applica comunque), ma qui sfruttiamo lo spostamento

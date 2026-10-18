@@ -17,7 +17,7 @@
  * evitare). Questo file viene caricato più avanti (anche defer va bene) e si
  * occupa solo del toggle e della sincronizzazione dopo il primo paint.
  *
- * Lo snippet da incollare nel <head> della nuova shell (ps-base-tw.html,
+ * Lo snippet da incollare nel <head> della nuova shell (ps-base.html,
  * Fase 2), SUBITO prima del <link rel="stylesheet" href=".../ps-tailwind.css">,
  * è il valore della costante PS_FOUC_SNIPPET poco più sotto (unica fonte di
  * verità, per evitare che un commento e il codice reale divergano nel tempo
@@ -44,7 +44,7 @@
  */
 
 // Fonte di verità unica per lo snippet anti-FOUC: Fase 2 lo copia inline nel
-// <head> di ps-base-tw.html. Esposto qui solo come stringa di riferimento,
+// <head> di ps-base.html. Esposto qui solo come stringa di riferimento,
 // per evitare che le due versioni (questo commento e il file reale) divergano
 // nel tempo senza che nessuno se ne accorga.
 var PS_FOUC_SNIPPET =

@@ -57,12 +57,28 @@ COPERTE_DA_PATTERN = [
 ]
 
 
-def _gia_migrato(testo):
-    """Un template che estende una shell `-tw` e' gia' convertito: le sue
-    classi sono la DESTINAZIONE, non la sorgente. Cercarle in tabella non ha
-    senso e produrrebbe falsi 'non coperte' su ogni utility Tailwind."""
+# Le tre shell dell'app. Fino alla Fase 9 si chiamavano ps-*-tw.html e il
+# discriminante era il suffisso; ora che la vecchia gerarchia e' cancellata il
+# suffisso non distingue piu' nulla ed e' stato tolto (attivita' 9.3). Il
+# discriminante e' l'appartenenza a questo insieme: un endswith("-tw.html")
+# qui darebbe sempre falso, e ogni pagina risulterebbe non migrata.
+SHELL = {"ps-base.html", "ps-nav.html", "ps-auth.html"}
+
+
+def _gia_migrato(nome, testo):
+    """Un template gia' convertito ha classi che sono la DESTINAZIONE, non la
+    sorgente: cercarle in tabella produrrebbe falsi 'non coperte' su ogni
+    utility Tailwind.
+
+    Due casi, e il secondo e' nato in Fase 9. Un template di contenuto si
+    riconosce dall'extends. Una shell no: ps-base.html e' radice e non estende
+    nulla, e fino alla Fase 9 il nome ps-base.html apparteneva alla VECCHIA
+    shell, che era legittimamente sorgente. Dopo il rename lo stesso nome
+    indica la shell Tailwind, quindi va riconosciuta per nome."""
+    if nome in SHELL:
+        return True
     m = re.search(r"\{%\s*extends\s+['\"]([^'\"]+)['\"]", testo)
-    return bool(m and m.group(1).endswith("-tw.html"))
+    return bool(m and m.group(1) in SHELL)
 
 
 def classi_nei_template():
@@ -75,7 +91,7 @@ def classi_nei_template():
             print(f"[attenzione] template assente: {nome}.html", file=sys.stderr)
             continue
         testo = open(p, encoding="utf-8").read()
-        if _gia_migrato(testo):
+        if _gia_migrato(nome + ".html", testo):
             saltati.append(nome + ".html")
             continue
         for m in re.finditer(r'class="([^"]*)"', testo):

@@ -62,6 +62,14 @@ RESIDUI = [
     ("icone FontAwesome", re.compile(_P + r"fa[sbr]?\b|" + _P + r"fa-[a-z0-9-]+")),
 ]
 
+# Le tre shell dell'app. Fino alla Fase 9 si chiamavano ps-*-tw.html e il
+# discriminante di 'pagina migrata' era il suffisso; ora che la vecchia
+# gerarchia e' cancellata il suffisso non distingue piu' nulla ed e' stato
+# tolto (attivita' 9.3). Il discriminante e' l'appartenenza a questo
+# insieme: un endswith("-tw.html") qui darebbe sempre falso, e ogni pagina
+# risulterebbe non migrata.
+SHELL = {"ps-base.html", "ps-nav.html", "ps-auth.html"}
+
 ID = re.compile(r'(?<![-\w])id=["\']([^"\']+)["\']')
 NAME = re.compile(r'(?<![-\w])name=["\']([^"\']+)["\']')
 URLFOR = re.compile(r"url_for\(\s*['\"]([^'\"]+)['\"]")
@@ -147,7 +155,7 @@ def main():
     # --- estende la shell nuova ---
     m = re.search(r"\{%\s*extends\s+['\"]([^'\"]+)['\"]", dopo)
     estende = m.group(1) if m else None
-    check("estende una shell -tw", bool(estende and estende.endswith("-tw.html")),
+    check("estende la shell Tailwind", bool(estende and estende in SHELL),
           f"estende: {estende}")
 
     # --- nessun residuo ---

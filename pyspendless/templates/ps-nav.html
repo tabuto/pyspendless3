@@ -1,28 +1,28 @@
-{% extends 'ps-base-tw.html' %}
+{% extends 'ps-base.html' %}
 
 {#
-  pyspendless/templates/ps-nav-tw.html
+  pyspendless/templates/ps-nav.html
   ============================================================================
-  Task 19-0 (Fase 2) — Shell autenticata: header + sidebar + <main>.
+  Shell autenticata: header + sidebar + <main>. Nata in Fase 2 del task19-0
+  come ps-nav-tw.html; la Fase 9 ha cancellato la shell precedente e tolto il
+  suffisso.
 
-  Questo file sovrascrive il block "content" di ps-base-tw.html con l'intero
-  shell (header + sidebar + <main>), ed espone al suo interno il block
-  "nav_content" — STESSO NOME di ps-nav.html — perché le pagine vere
-  (ps-home-tw.html, ecc.) lo riempiano.
+  Sovrascrive il block "content" di ps-base.html con l'intero shell, ed
+  espone al suo interno il block "nav_content" perche' le pagine vere lo
+  riempiano. Il nome del block e' quello della vecchia shell: e' il motivo
+  per cui migrare una pagina e' costato una riga.
 
   Layout mobile-first (D12): drawer off-canvas sotto `lg` (1024px, breakpoint
-  Tailwind di default), sidebar fissa da `lg` in su. Il drawer è il
-  componente generico di ps-ui.js (PsDrawer), usato qui per la prima volta
-  fuori dalla styleguide.
+  Tailwind di default), sidebar fissa da `lg` in su. Il drawer e' il
+  componente generico di ps-ui.js (PsDrawer).
 
   Le 13 destinazioni e il loro ordine sono il contratto di
   pyspendless/test/test_task19_0.py (NAV_LINKS_ORDER): non riordinare, non
-  rimuovere. "Profilo" (Impostazioni) non è nell'elenco delle 13 perché il
-  test lo ignora semplicemente (non è in NAV_LINKS_ORDER) — ma esiste anche
-  oggi in ps-nav.html, quindi resta: rimuoverlo sarebbe un cambio funzionale,
-  non un restyling.
+  rimuovere. "Profilo" (Impostazioni) non e' fra le 13 perche' il test lo
+  ignora, non perche' sia facoltativo: esisteva anche nella shell precedente,
+  quindi resta. Rimuoverlo sarebbe un cambio funzionale, non un restyling.
 
-  id="navigation" sul <ul> della sidebar è CONTRATTO (delimita l'estrazione
+  id="navigation" sul <ul> della sidebar e' CONTRATTO (delimita l'estrazione
   dei link in test_nav_destinazioni, altrimenti il link Account dell'header e
   i link delle card di /home falserebbero l'ordine). dashboardSubmenu e
   settingsSubmenu sono contratto allo stesso modo.

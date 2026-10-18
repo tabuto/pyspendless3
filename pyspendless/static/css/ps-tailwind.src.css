@@ -569,7 +569,7 @@
   }
 
   /* ---- Drawer sidebar (off-canvas, Fase 2) ----------------------------------
-     Non ancora collegato a nessuna pagina: la shell che lo usa è ps-nav-tw.html
+     Non ancora collegato a nessuna pagina: la shell che lo usa è ps-nav.html
      (Fase 2). Qui vive solo il componente, dimostrato in _styleguide.html.
   */
   .ps-drawer-backdrop {
@@ -595,7 +595,7 @@
     overflow: hidden;
   }
 
-  /* ---- Nav link della shell (Fase 2, ps-nav-tw.html) ------------------------
+  /* ---- Nav link della shell (Fase 2, ps-nav.html) ------------------------
      Shell AdminLTE "non si traduce, si riscrive" (fase-1.md §1.3): qui vive
      lo stile unico condiviso da voci di primo livello e sottomenu dei due
      treeview (Dashboard, Impostazioni).
@@ -626,7 +626,7 @@
 
      Ordine di caricamento (ps-show-mov.html, block "head"): gli stylesheet
      di DataTables/Tom Select arrivano PRIMA di questo file nel <head>
-     (ps-base-tw.html), quindi su selettori di pari specificita' questo file
+     (ps-base.html), quindi su selettori di pari specificita' questo file
      vince la cascata senza bisogno di !important. I pochi punti dove la
      libreria usa !important sui propri stati (hover/current/disabled della
      paginazione) sono gli unici dove serve !important anche qui, per

@@ -106,7 +106,12 @@ def _validate_authorize_params(args):
     if not code_challenge or args.get('code_challenge_method') != 'S256':
         _reject_via_redirect(redirect_uri, state, 'invalid_request', 'PKCE S256 obbligatorio.')
 
-    resource = args.get('resource')
+    # `resource` (RFC 8707) lo manda un client MCP, non Alexa: l'Account Linking
+    # di una Custom Skill parla OAuth2 puro e non conosce il concetto di risorsa
+    # protetta. Se il parametro manca si assume l'unica risorsa esistente
+    # (/mcp-oauth2), così il codice emesso resta legato a quella in ogni caso;
+    # se c'è deve coincidere, esattamente come prima.
+    resource = args.get('resource') or RESOURCE_URI
     if resource != RESOURCE_URI:
         _reject_via_redirect(redirect_uri, state, 'invalid_target', 'Parametro resource non valido.')
 
@@ -227,10 +232,15 @@ def _authenticate_client(flask_request):
 
 def _token_authorization_code(client_id, form):
     code = form.get('code')
+    # `redirect_uri` qui è facoltativo: RFC 6749 §4.1.3 lo impone solo se era
+    # nell'authorize, e non è documentato con certezza cosa manda Alexa nella
+    # richiesta di token. Se c'è viene confrontato con quello legato al codice;
+    # se manca, il codice resta comunque legato al client autenticato (secret
+    # obbligatorio) e al PKCE.
     redirect_uri = form.get('redirect_uri')
     code_verifier = form.get('code_verifier')
 
-    if not code or not redirect_uri or not code_verifier:
+    if not code or not code_verifier:
         return jsonify({'error': 'invalid_request'}), 400
 
     db = get_db_session()

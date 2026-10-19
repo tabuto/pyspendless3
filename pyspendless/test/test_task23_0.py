@@ -155,6 +155,15 @@ def check_token_repository_oauth(checker):
     checker.check('resource diversa da quella dell\'authorize viene rifiutata',
                   token_repo.redeem_oauth_code(code2, TEST_CLIENT_ID, TEST_REDIRECT_URI, verifier, 'http://altro/mcp') is None)
 
+    # Client che non ripete redirect_uri nella richiesta di token (vedi
+    # _token_authorization_code): il confronto si salta, il PKCE no.
+    code3 = token_repo.create_oauth_code(user.id, account.id, TEST_CLIENT_ID, TEST_REDIRECT_URI, challenge, resource)
+    checker.check('redirect_uri=None (non ripetuto dal client) viene accettato',
+                  token_repo.redeem_oauth_code(code3, TEST_CLIENT_ID, None, verifier, resource) is not None)
+    code4 = token_repo.create_oauth_code(user.id, account.id, TEST_CLIENT_ID, TEST_REDIRECT_URI, challenge, resource)
+    checker.check('redirect_uri=None non salta il controllo PKCE',
+                  token_repo.redeem_oauth_code(code4, TEST_CLIENT_ID, None, wrong_verifier, resource) is None)
+
     access = token_repo.create_oauth_access_token(user.id, account.id, TEST_CLIENT_ID, 'movements', resource)
     checker.check('create_oauth_access_token espone expires_in=3600', access['expires_in'] == 3600)
     validated = token_repo.validate_oauth_access_token(access['access_token'])
@@ -438,6 +447,37 @@ def check_end_to_end_oauth_flow(checker):
             checker.check('token OAuth rifiutato su /mcp come 200+isError, non 401',
                           resp.status_code == 200 and body.get('result', {}).get('isError') is True, (resp.status_code, body))
             checker.check('nessun WWW-Authenticate su /mcp', 'WWW-Authenticate' not in resp.headers)
+
+            # Flusso come lo manda Alexa (Account Linking di una Custom Skill):
+            # nessun parametro `resource` sull'authorize e nessun `redirect_uri`
+            # ripetuto nella richiesta di token. Deve arrivare fino a tools/call.
+            alexa_query = authorize_query()
+            del alexa_query['resource']
+            resp = client.get('/oauth/authorize', query_string=alexa_query)
+            checker.check('authorize senza resource (come Alexa) -> pagina di consenso',
+                          resp.status_code == 200 and b'Consenti' in resp.data, resp.status_code)
+            with client.session_transaction() as sess:
+                csrf_token = sess.get('oauth_csrf')
+            resp = client.post('/oauth/authorize/confirm', data={'csrf_token': csrf_token, 'decision': 'allow'})
+            location = resp.headers.get('Location', '')
+            alexa_code = parse_qs(urlparse(location).query).get('code', [None])[0]
+            checker.check('authorize senza resource -> redirect con code', bool(alexa_code), location)
+
+            resp = client.post('/oauth/token', data={
+                'grant_type': 'authorization_code', 'code': alexa_code, 'code_verifier': verifier
+            }, headers={'Authorization': 'Basic {}'.format(basic_auth)})
+            alexa_token = resp.get_json() or {}
+            checker.check('token senza redirect_uri ripetuto -> access_token + refresh_token',
+                          resp.status_code == 200 and alexa_token.get('access_token')
+                          and alexa_token.get('refresh_token'), alexa_token)
+
+            resp = client.post('/mcp-oauth2', json={
+                'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
+                'params': {'name': 'list_categories', 'arguments': {}}
+            }, headers={'Authorization': 'Bearer {}'.format(alexa_token.get('access_token'))})
+            body = resp.get_json() or {}
+            checker.check('token del flusso Alexa vale su /mcp-oauth2 (resource implicita)',
+                          resp.status_code == 200 and body.get('result', {}).get('isError') is False, body)
 
             resp = client.post('/oauth/token', data={'grant_type': 'client_credentials', 'scope': 'service'},
                                 headers={'Authorization': 'Basic {}'.format(basic_auth)})

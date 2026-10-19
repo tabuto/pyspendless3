@@ -1,8 +1,13 @@
 # Task 23.0: OAuth 2.x per il server MCP (endpoint `/mcp-oauth2`) — integrazione con Alexa+ (retrocompatibile con Claude)
 
-**Stato**: implementato lato server + test automatici (vedi sotto). Non ancora
-rilasciato (manuale, su richiesta esplicita) né collegato ad Alexa+ (fase
-"Lato Alexa", successiva al deploy).
+**Stato**: server implementato, **rilasciato in produzione** (v0.3.0, metadata e
+401 verificati dal vivo) e Lambda del bridge Alexa già creata su AWS. Resta da
+creare la skill sulla console Amazon, impostare le variabili `OAUTH_ALEXA_*` sul
+server e rilasciare la patch «`resource` facoltativa» (vedi "Stato
+dell'integrazione Alexa"). La strada scelta **non** è l'add-on MCP di Alexa+ ma
+una **Custom Skill con Lambda bridge** (`alexa-mcp-lambda/`): Alexa+ non è
+disponibile in italiano, mentre una Custom Skill con Account Linking funziona su
+qualunque Echo e si distribuisce ai familiari via Beta Testing.
 **Repo**: `tabuto/pyspendless3`, branch `main`.
 **Dipende da**: task20-0 (server MCP), task22-0 (wallet preferito per utente).
 
@@ -34,8 +39,9 @@ rilasciato (manuale, su richiesta esplicita) né collegato ad Alexa+ (fase
   reale + DB `.env`: **non eseguito in questa sessione** per un problema
   preesistente e indipendente dal task — il DB locale di sviluppo non ha
   ancora la colonna `preferred_wallet_id` del task22-0, da migrare a parte).
-- Variabili d'ambiente OAuth (`OAUTH_ALEXA_*`) non ancora impostate in
-  `.env`/`.env_pa`: da fare prima del test dal vivo e del deploy.
+- Variabili d'ambiente OAuth (`OAUTH_ALEXA_*`): impostate in locale il
+  19/10/2026, ancora da riportare sul server (vedi "Stato dell'integrazione
+  Alexa").
 
 ## Obiettivo
 Rendere il server MCP di PySpendless collegabile ad **Alexa+** (add-on MCP), che richiede
@@ -177,17 +183,78 @@ come task22-0):
    (chiamata a `list_categories`) **e** che l'aggiunta di un connettore nuovo con la stessa URL
    `/mcp` non apra alcun flusso OAuth.
 
-## Lato Alexa (dopo il rilascio del server)
-1. Account sviluppatore Amazon, installazione `alexa-ai` CLI, `alexa-ai configure` (Login with
-   Amazon).
-2. `alexa-ai new mcp --name "PySpendless" --locale it-IT --mcp-server-url
-   https://tabuto.pythonanywhere.com/mcp-oauth2`.
-3. Compilare `addon-package/addon.json`: descrizioni, 3-4 frasi di esempio, URL privacy/termini
-   (pagina statica HTTPS), 6 icone, 1 carousel 600x900, configurazione OAuth (endpoint,
-   client id/secret).
-4. Registrare in `OAUTH_ALEXA_REDIRECT_URIS` i redirect URI forniti da Amazon.
-5. `alexa-ai deploy` (stage di sviluppo) → test nel web simulator, poi sull'Echo.
-6. Restare in stage di sviluppo (uso personale); `alexa-ai submit` solo se serve la distribuzione.
+## Stato dell'integrazione Alexa (sessione del 19/10/2026)
+
+Scelta di architettura: **Custom Skill it-IT + Lambda bridge**, non l'add-on MCP
+di Alexa+ (non disponibile in italiano). La Lambda parla JSON-RPC a
+`/mcp-oauth2` usando l'access token che Alexa le passa nella envelope
+(`context.System.user.accessToken`), ottenuto via Account Linking.
+
+Fatto e verificato:
+- **Server in produzione**: `/version` = 0.3.0, `/mcp-oauth2` senza token → 401
+  con `WWW-Authenticate: Bearer resource_metadata="..."`, metadata su
+  `/.well-known/oauth-protected-resource/mcp-oauth2` e
+  `/.well-known/oauth-authorization-server/oauth` → 200. Radice `.well-known`
+  invariata (404 JSON), Claude non coinvolto.
+- **Lambda `alexa-mcp-bridge`** (eu-west-1, `arn:aws:lambda:eu-west-1:662578989604:function:alexa-mcp-bridge`,
+  python3.13, timeout 10s): esiste, è Active, il codice caricato coincide con
+  `lambda_function.py` in repo. Aggiunta la variabile d'ambiente
+  `MCP_SERVER_URL=https://tabuto.pythonanywhere.com/mcp-oauth2` (prima assente:
+  funzionava per il default nel codice).
+- **Invocazioni di prova** con envelope Alexa sintetiche (`aws lambda invoke`):
+  `LaunchRequest` → frase di benvenuto; `AddMovementIntent` senza accessToken →
+  `LinkAccountCard`; con accessToken finto → la Lambda raggiunge il server di
+  produzione, riceve 401 e risponde `LinkAccountCard`. Il percorso di rete
+  AWS → PythonAnywhere funziona.
+- **Patch «`resource` facoltativa»** (questa sessione, da rilasciare): l'Account
+  Linking di una Custom Skill è OAuth2 puro e **non manda `resource`** (RFC 8707
+  è cosa da client MCP), quindi `/oauth/authorize` lo rifiutava con
+  `invalid_target`: era il blocco certo del flusso. Ora se manca si assume
+  `{BASE_URL}/mcp-oauth2`; se c'è deve coincidere come prima. In più
+  `redirect_uri` nella richiesta di token è diventato facoltativo (RFC 6749
+  §4.1.3 lo impone solo se era nell'authorize, e non è documentato cosa manda
+  Alexa): se c'è viene confrontato, se manca il codice resta legato al client
+  autenticato e al PKCE. File: `oauth_server.py`, `repository.py`
+  (`redeem_oauth_code`), `test/test_task23_0.py` (62 controlli, verde).
+- **Variabili OAuth**: aggiunte a `pyspendless/.env` e `pyspendless/.env_pa`
+  locali — `OAUTH_ALEXA_CLIENT_ID=alexa-pyspendless`,
+  `OAUTH_ALEXA_CLIENT_SECRET` (64 hex generati con `openssl rand -hex 32`,
+  stesso valore nei due file), `OAUTH_ALEXA_REDIRECT_URIS` vuota in attesa dei
+  redirect URI della console. Attenzione: `conf.py` carica **solo `.env`**, non
+  `.env_pa`, quindi sul server la copia che conta è `pyspendless/.env`.
+
+Da fare (in questo ordine):
+1. Rilasciare la patch «`resource` facoltativa» (procedura di rilascio in
+   CLAUDE.md: bump `_APP_VERSION`, commit, tag, push, `git pull` + Reload su PA).
+2. Console Alexa (`developer.amazon.com`) → **Create Skill**: nome "PySpendless",
+   locale *Italian (IT)*, modello *Custom*, hosting *Provision your own*.
+   Interaction Model → JSON Editor → `alexa-mcp-lambda/interaction-model.it-IT.json`
+   → Save → Build. Endpoint → *AWS Lambda ARN*, regione *Europe (Ireland)*, ARN
+   della Lambda qui sopra.
+3. **Account Linking** (valori in `alexa-mcp-lambda/README.md` §4): Auth Code
+   Grant, authorize/token su `https://tabuto.pythonanywhere.com/oauth/...`,
+   client id/secret dalle variabili, HTTP Basic, scope `profile`, **PKCE S256
+   attivo** (obbligatorio: senza `code_challenge` il server rifiuta).
+4. Copiare dalla stessa pagina i 3 **Redirect URI** (`pitangui.amazon.com`,
+   `layla.amazon.com`, `alexa.amazon.co.jp`, contengono il vendor id) in
+   `OAUTH_ALEXA_REDIRECT_URIS` (separati da virgola) nel `.env` **sul server**,
+   insieme a client id e secret → Reload della web app.
+5. Collegare il trigger: `aws lambda add-permission --function-name
+   alexa-mcp-bridge --statement-id alexa-skills-kit-trigger --action
+   lambda:InvokeFunction --principal alexa-appkit.amazon.com --event-source-token
+   <SKILL_ID>` (serve lo Skill ID `amzn1.ask.skill.…` dalla console).
+6. Test nel simulatore (stage Development): `apri spese di famiglia`, poi
+   `registra 20 euro per spesa alimentare` → collegamento account (login Google
+   di PySpendless + pagina di consenso) → la spesa finisce sul wallet preferito
+   dell'utente. Poi prova sull'Echo, poi Beta Testing per i familiari.
+
+Rischi noti ancora aperti:
+- Il login di PySpendless passa da Google OAuth: se l'app Alexa aprisse il
+  collegamento in una webview incorporata, Google può rifiutare con
+  `disallowed_useragent`. Le versioni recenti dell'app usano il browser di
+  sistema; se succede, si collega l'account da `alexa.amazon.it` in un browser.
+- Latenza di PythonAnywhere gratuito: la Lambda ha timeout 10s, Alexa ~8s. Se le
+  risposte arrivano lente la skill risponde con la frase di errore generica.
 
 ## Rilascio e rollback
 - Nuova versione (`_APP_VERSION`) + tag, deploy con il workflow esistente; verificare

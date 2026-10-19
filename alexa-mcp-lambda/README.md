@@ -76,8 +76,14 @@ aws lambda update-function-code \
      (obbligatorio: il server rifiuta richieste senza `code_challenge`)
 5. Salvando, Alexa mostra 3 **Redirect URI** (dominio `pitangui.amazon.com`,
    `layla.amazon.com`, `alexa.amazon.co.jp`). Copiali tutti e impostali,
-   separati da virgola, in `OAUTH_ALEXA_REDIRECT_URIS` dentro `.env_pa` sul
-   server, poi fai **Reload** della web app su PythonAnywhere.
+   separati da virgola, in `OAUTH_ALEXA_REDIRECT_URIS` sul server, poi fai
+   **Reload** della web app su PythonAnywhere.
+
+   > Attenzione: `pyspendless/conf.py` carica **solo `pyspendless/.env`**.
+   > `.env_pa` è la copia di riferimento dei valori di produzione, ma il file
+   > che l'app legge davvero sul server è `.env`: le tre `OAUTH_ALEXA_*` vanno
+   > scritte là (o copiate da `.env_pa` a `.env`), altrimenti il client resta
+   > non registrato e `/oauth/authorize` risponde «client_id non riconosciuto».
 6. **Permissions** → non serve nulla di speciale per questi 2 tool.
 
 ## Collegare il trigger Alexa Skills Kit alla Lambda

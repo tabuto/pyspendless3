@@ -1445,7 +1445,7 @@ class TokenRepository:
         self,
         code: str,
         client_id: str,
-        redirect_uri: str,
+        redirect_uri: Optional[str],
         code_verifier: str,
         resource: str
     ) -> Optional[Dict[str, Any]]:
@@ -1453,6 +1453,9 @@ class TokenRepository:
         Riscatta un OAUTH_CODE: valida hash/type/status/scadenza (via
         `_validate_hashed_secret_token`), poi che client_id/redirect_uri/resource
         coincidano con quelli dell'authorize originale e che il PKCE sia corretto.
+        `redirect_uri=None` significa "il client non l'ha ripetuto nella richiesta
+        di token": il confronto viene saltato (il codice resta legato al client
+        autenticato e al PKCE), vedi `_token_authorization_code`.
         Monouso: lo marca USED (mark_as_used, generico) solo alla redenzione
         riuscita.
 
@@ -1472,7 +1475,7 @@ class TokenRepository:
 
         if payload.get('client_id') != client_id:
             return None
-        if payload.get('redirect_uri') != redirect_uri:
+        if redirect_uri is not None and payload.get('redirect_uri') != redirect_uri:
             return None
         if payload.get('resource') != resource:
             return None

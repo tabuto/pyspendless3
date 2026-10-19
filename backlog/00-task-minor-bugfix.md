@@ -48,12 +48,214 @@ il rimando.
 | MB-003 | evolutiva | Versione applicativa: variabile privata in `app.py`, API `/version`, visibile nel footer | bassa | RISOLTA |
 | MB-004 | evolutiva | Gestione del wallet preferito (`order_index = 0` riservato, unico, impostabile solo dall'azione dedicata) | media | RISOLTA |
 | MB-005 | evolutiva | Il server MCP usa il wallet preferito quando la chiamata non ne specifica uno (dipende da MB-004) | bassa | RISOLTA |
+| MB-006 | bug | La tabella movimenti ordina le date per giorno del mese: DataTables confronta `gg/mm/aaaa` come stringa | media | RISOLTA |
+| MB-007 | bug | Una categoria cambia colore fra la dashboard mensile e quella annuale: la palette è assegnata per posizione | bassa | RISOLTA |
+| MB-008 | evolutiva | Subset di Bootstrap Icons: 59 glifi su 2.078, da 221 KB a 8 KB (font + CSS) | media | RISOLTA |
+| MB-009 | evolutiva | Icone: togliere il fallback `.woff` (180 KB, mai scaricato) e aggiungere lo script che rigenera il subset | bassa | APERTA |
 
 ## Aperte
 
-_Nessuna voce aperta._
+### MB-009 — Icone: fallback `.woff` residuo e script di rigenerazione del subset
 
-## Risolte
+- **Tipo**: evolutiva
+- **Priorità**: bassa
+- **Dove**: `pyspendless/static/fonts/ps-icons.woff`,
+  `pyspendless/static/css/ps-icons.css` (clausola `src:`), `tools/` (nuovo script).
+- **Origine**: strascico di MB-008.
+
+**Problema** — due cose rimaste fuori da MB-008, volutamente:
+
+1. `ps-icons.woff` pesa ancora **180.288 byte** ed è il set completo (2.078
+   glifi). Nessun browser attuale lo scarica, perché tutti supportano `woff2`,
+   ma resta nel repo, e il `src:` del CSS continua a citarlo.
+2. Il subset è stato generato a mano. Il `.woff2` e il CSS contengono solo i 59
+   glifi usati: **aggiungere un'icona `bi-*` non presente nel subset la mostra
+   vuota**, senza errori in console né 404. Chi aggiunge un'icona non ha alcun
+   segnale.
+
+**Proposta**
+
+1. Cancellare `ps-icons.woff` e togliere `,url("../fonts/ps-icons.woff") format("woff")`
+   dal `src:` di `ps-icons.css`.
+2. Script `tools/build-icons.sh` (o `.py`) che: censisce le classi `bi-*`
+   usate in `templates/`, `static/js/` e nei `.py`; le mappa ai codepoint;
+   genera `ps-icons.woff2` con `pyftsubset` e riscrive `ps-icons.css`, sul
+   modello di `tools/build-css.sh`. Come in `build-css.sh`, deve **fallire**
+   se una classe usata non esiste nel set completo, o se l'output è
+   anormalmente piccolo.
+3. Decidere dove vive il font completo, fonte dello script: oggi sta solo nella
+   cronologia git (fino al commit `726cd6f`, versione Bootstrap Icons 1.13.1).
+   Alternative: scaricarlo da npm (`bootstrap-icons@1.13.1`) dentro lo script,
+   oppure versionarlo fuori da `static/` (~134 KB, non servito).
+4. Eventuale controllo in `pyspendless/test/`: ogni classe `bi-*` referenziata
+   nei template è definita in `ps-icons.css`.
+
+**Note / casi limite**
+
+- Il controllo del punto 4 è quello che chiude davvero il rischio del punto 2:
+  lo script rigenera, il test avvisa se ci si è dimenticati di lanciarlo.
+- `bi-chevron-right` / `bi-chevron-down` compaiono in `ps-nav.html` anche come
+  stringhe passate a `classList.add/remove`, non solo in `class="..."`: il
+  censimento deve cercare `bi-[a-z0-9-]+` ovunque, non solo negli attributi.
+
+### MB-008 — Subset di Bootstrap Icons · risolta il 2026-10-18
+
+- **Tipo**: evolutiva
+- **Priorità**: media
+- **Dove**: `pyspendless/static/fonts/ps-icons.woff2`,
+  `pyspendless/static/css/ps-icons.css`.
+- **Origine**: indicata in `task19-0.md` ("Misura finale") come il primo
+  guadagno di peso rimasto dopo il restyling.
+
+**Problema** — D9 del task19-0 aveva self-ostato Bootstrap Icons 1.13.1 **senza
+farne un subset**: `ps-icons.css` definiva 2.078 glifi, i template e il JS ne
+usano 59. La pagina caricava il 97% di un set senza usarlo, e le icone erano
+la risorsa più pesante: 36,5% del peso, più del framework CSS.
+
+**Soluzione applicata** — subset a 59 glifi, generato con `pyftsubset`
+(fonttools) a partire dal `woff2` completo:
+
+- Censimento delle classi `bi-*` in `templates/`, `static/js/` e nei `.py`:
+  **59**, tutte presenti nel set. Nessuna composta a runtime (le sole
+  manipolazioni dinamiche sono `chevron-right`/`chevron-down` in `ps-nav.html`).
+- Font: `--unicodes=<59 codepoint> --flavor=woff2 --layout-features='' --no-hinting
+  --desubroutinize`. Senza ligature e senza hinting, che un font di icone non usa.
+- CSS: regola base `.bi::before` e le sole 59 regole `.bi-xxx::before`.
+
+| File | Prima | Dopo |
+|---|---|---|
+| `ps-icons.woff2` | 134.044 B | **5.220 B** |
+| `ps-icons.css` | 86.934 B | **2.951 B** |
+| **totale** | **220.978 B** | **8.171 B** (-96%) |
+
+**Verifica**
+
+- Contorni e larghezze dei 59 glifi **identici** all'originale (confronto con
+  `RecordingPen`: 0 differenze su 59); `unitsPerEm` e ascent invariati, quindi
+  nessuno spostamento verticale delle icone.
+- Ogni classe usata è definita nel CSS, ogni codepoint del CSS esiste nel font.
+- Nel browser: font caricato a 5.220 byte, 59 icone renderizzate, nessun 404.
+  Non sono state riaperte le 18 pagine dietro login.
+
+**Note / casi limite**
+
+- **Aggiungere un'icona richiede di rigenerare il subset**: una `bi-*` fuori
+  dai 59 si vede vuota, senza errori. Vedi MB-009.
+- `ps-icons.woff` (180 KB, set completo) **non è stato toccato**: nessun
+  browser attuale lo scarica. Vedi MB-009.
+- Il **guadagno arriva solo dopo il bump di `_APP_VERSION`**: il CSS è
+  referenziato con `?v={{ app_version }}`, e finché la versione non cambia i
+  browser con la cache calda continuano a usare CSS e font vecchi. Sono
+  comunque coerenti fra loro, quindi nessun glifo si rompe.
+- Il CSS compilato di Tailwind non è coinvolto: `build-css.sh` non serve.
+
+### MB-007 — Colori delle categorie incoerenti fra le dashboard · risolta il 2026-10-18
+
+- **Tipo**: bug
+- **Priorità**: bassa
+- **Dove**: `pyspendless/templates/ps-dashboard-monthly.html` e
+  `ps-dashboard-yearly.html`, funzione `psCategoryColor()`.
+- **Trovata**: misurando la baseline dei grafici prima della conversione della
+  Fase 8 del task19-0.
+
+**Problema** — il colore di una fetta veniva scelto con
+`COLORS[i % COLORS.length]`, dove `i` è la **posizione** dell'etichetta
+nell'array. Le due dashboard ordinano le categorie per importo, e gli importi
+di un mese non sono quelli di un anno: la stessa categoria finiva quindi in
+posizioni diverse, e cambiava colore passando da un grafico all'altro.
+
+Misurato sul DB di sviluppo: su **17 categorie presenti in entrambe le
+dashboard, 13 avevano un colore diverso**.
+
+| Categoria | mensile | annuale |
+|---|---|---|
+| Altro | `#FF6384` | `#FFCE56` |
+| Food And Drink | `#9966FF` | `#4BC0C0` |
+| Household | `#C9CBCF` | `#36A2EB` |
+
+Confrontare la torta mensile con quella annuale era fuorviante: due fette
+dello stesso colore non erano la stessa categoria.
+
+**Soluzione applicata** — il colore dipende dal **nome** della categoria:
+
+```js
+function psCategoryColor(nome) {
+  var h = 0;
+  for (var i = 0; i < nome.length; i++) h = (h * 31 + nome.charCodeAt(i)) >>> 0;
+  return COLORS[h % COLORS.length];
+}
+```
+
+Stessa funzione nei due file, quindi la mappa categoria → colore è identica
+ovunque, e stabile anche fra un mese e l'altro. Dopo la correzione le
+discordanze sono **0 su 17**.
+
+**Note / casi limite**
+
+- La palette ha **7 tinte distinte in 10 posizioni** (le posizioni 0 e 6, 3 e
+  8, 5 e 9 sono uguali), quindi con 17 o 27 categorie **le collisioni dentro
+  lo stesso grafico restano inevitabili**. Misurate prima di applicare: da 10
+  a 11 collisioni sul grafico mensile, da 20 a 21 sull'annuale. La correzione
+  non peggiora la distinguibilità interna in modo apprezzabile, e in cambio
+  rende il colore stabile fra i grafici. Se un giorno si vorranno fette tutte
+  distinte, serve una palette più ampia — è un intervento diverso.
+- I **totali dei nove grafici sono invariati**: la correzione tocca solo la
+  scelta del colore.
+- Tenuta **separata dalla Fase 8** di proposito: è una correzione di
+  comportamento, non di presentazione. Se qualcosa si rompe nei grafici, i due
+  commit restano distinguibili.
+
+### MB-006 — Ordinamento per data della tabella movimenti · risolta il 2026-10-17
+
+- **Tipo**: bug
+- **Priorità**: media
+- **Dove**: `pyspendless/templates/ps-show-mov.html:194` (cella della colonna
+  "Data"); configurazione DataTables alla riga 323 dello stesso file.
+- **Trovata**: verifica empirica 0.4 della Fase 0 del task19-0.
+
+**Problema** — la colonna "Data" è renderizzata `gg/mm/aaaa`. DataTables ne
+rileva il tipo automaticamente, il plugin `date-eu` non è caricato e
+`Date.parse("13/09/2026")` dà `NaN`: il tipo ricade quindi su `string` e
+`order: [[0, 'desc']]` produce un **confronto lessicografico**, cioè un
+ordinamento per giorno del mese, poi mese, poi anno.
+
+Il difetto è rimasto invisibile perché la vista di default filtra il **mese
+corrente**, e dentro un singolo mese l'ordine per giorno coincide con quello
+cronologico. Si manifesta appena si allarga l'intervallo:
+
+| Intervallo | Prime righe a video | Corretto? |
+|---|---|---|
+| solo settembre 2026 | 30/09, 30/09, 29/09, 29/09, 28/09 … | sì, per caso |
+| ago-ott 2026 | **31/08**, 31/08, 31/08, 30/09, 30/09, **30/08**, 29/09 … | no |
+| 2025-2026 | **31/10/2025**, 31/10/2025, **31/08/2026**, 31/08/2025 … | no |
+
+Su due anni di dati 247 righe su 257 risultavano fuori posto. Il server
+ordina già correttamente (`move_date DESC`, `repository.py:611`): il
+riordino sbagliato è interamente client-side, quindi la card-list mobile —
+renderizzata da Jinja senza DataTables — non ne era affetta.
+
+**Soluzione applicata** — attributo `data-order` con la data in formato ISO
+sulla cella, che DataTables usa come dato di ordinamento al posto del testo
+visualizzato:
+
+```jinja
+<td data-order="{{ mov.move_date.isoformat() }}">{{ mov.move_date.strftime('%d/%m/%Y') }}</td>
+```
+
+Una riga, nessuna dipendenza aggiunta, nessun plugin da caricare. Dopo la
+modifica il tipo rilevato da DataTables passa da `string` a `date` e l'ordine
+a video coincide esattamente con quello del server su tutti e tre gli
+intervalli di prova.
+
+**Note / casi limite**
+
+- Le colonne "Entrata" e "Uscita" rendono `€ 1234.56` e **non** hanno il
+  problema: DataTables le rileva come `num-fmt,` e le ordina correttamente.
+  Verificato ordinando per "Uscita" e confrontando con `ORDER BY expense DESC`.
+- Il formato visualizzato non cambia: resta `gg/mm/aaaa`.
+- `data-order` va conservato dalla Fase 6 del task19-0, che riscrive questa
+  tabella. È il motivo per cui la correzione è stata tenuta **separata** dal
+  restyling invece di esserne assorbita.
 
 ### MB-004 — Gestione del wallet preferito · risolta il 2026-09-12, integrata il 2026-09-14
 

@@ -1,45 +1,45 @@
 {% extends 'ps-nav.html' %}
 
 {% block nav_content %}
-<div class="container mt-4">
+<div class="mx-auto max-w-7xl px-4 mt-4">
   <h1>Benvenuto su PySpendless!</h1>
   {% if user_email %}
-    <div class="alert alert-success">Login effettuato come: <strong>{{ user_email }}</strong></div>
+    <div class="ps-alert ps-alert-success">Login effettuato come: <strong>{{ user_email }}</strong></div>
   {% endif %}
   <p>Gestisci le tue spese personali e condivise in modo semplice e sicuro.</p>
-  
-  <div class="row mt-4 row-cols-1 row-cols-md-3 g-3">
-    <div class="col">
-      <div class="card h-100">
-        <div class="card-body d-flex flex-column">
-          <h5 class="card-title mb-3"><i class="bi bi-plus-circle text-primary me-2"></i>Nuovo Movimento</h5>
-          <a href="{{ url_for('create') }}" class="btn btn-primary mt-auto">Crea Movimento</a>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+    <div class="col-span-1">
+      <div class="ps-card h-full">
+        <div class="ps-card-body flex flex-col">
+          <h5 class="ps-card-title mb-3"><i class="bi bi-plus-circle mr-2 text-[var(--ps-brand)]"></i>Nuovo Movimento</h5>
+          <a href="{{ url_for('create') }}" class="ps-btn ps-btn-primary mt-auto">Crea Movimento</a>
         </div>
       </div>
     </div>
-    <div class="col">
-      <div class="card h-100">
-        <div class="card-body d-flex flex-column">
-          <h5 class="card-title mb-3"><i class="bi bi-list-ul text-info me-2"></i>Visualizza Movimenti</h5>
-          <a href="{{ url_for('movements') }}" class="btn btn-info mt-auto">Vedi Movimenti</a>
+    <div class="col-span-1">
+      <div class="ps-card h-full">
+        <div class="ps-card-body flex flex-col">
+          <h5 class="ps-card-title mb-3"><i class="bi bi-list-ul mr-2 text-[var(--ps-info)]"></i>Visualizza Movimenti</h5>
+          <a href="{{ url_for('movements') }}" class="ps-btn ps-btn-info mt-auto">Vedi Movimenti</a>
         </div>
       </div>
     </div>
-    <div class="col">
-      <div class="card h-100">
-        <div class="card-body d-flex flex-column">
-          <h5 class="card-title mb-3"><i class="bi bi-gear text-secondary me-2"></i>Impostazioni</h5>
-          <div class="btn-group-vertical w-100 mt-auto" role="group">
-            <a href="{{ url_for('settings_categories') }}" class="btn btn-outline-secondary btn-sm">
+    <div class="col-span-1">
+      <div class="ps-card h-full">
+        <div class="ps-card-body flex flex-col">
+          <h5 class="ps-card-title mb-3"><i class="bi bi-gear mr-2 ps-muted"></i>Impostazioni</h5>
+          <div class="flex flex-col w-full mt-auto" role="group">
+            <a href="{{ url_for('settings_categories') }}" class="ps-btn ps-btn-outline-secondary ps-btn-sm">
               <i class="bi bi-tag"></i> Categorie
             </a>
-            <a href="{{ url_for('settings_wallets') }}" class="btn btn-outline-secondary btn-sm">
+            <a href="{{ url_for('settings_wallets') }}" class="ps-btn ps-btn-outline-secondary ps-btn-sm">
               <i class="bi bi-wallet"></i> Wallet
             </a>
-            <a href="{{ url_for('settings_group') }}" class="btn btn-outline-secondary btn-sm">
+            <a href="{{ url_for('settings_group') }}" class="ps-btn ps-btn-outline-secondary ps-btn-sm">
               <i class="bi bi-building"></i> Account
             </a>
-            <a href="{{ url_for('settings_import_export') }}" class="btn btn-outline-secondary btn-sm">
+            <a href="{{ url_for('settings_import_export') }}" class="ps-btn ps-btn-outline-secondary ps-btn-sm">
               <i class="bi bi-arrow-down-up"></i> Import/Export
             </a>
           </div>

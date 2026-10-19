@@ -1,24 +1,208 @@
 {% extends 'ps-base.html' %}
 
+{#
+  pyspendless/templates/ps-nav.html
+  ============================================================================
+  Shell autenticata: header + sidebar + <main>. Nata in Fase 2 del task19-0
+  come ps-nav-tw.html; la Fase 9 ha cancellato la shell precedente e tolto il
+  suffisso.
+
+  Sovrascrive il block "content" di ps-base.html con l'intero shell, ed
+  espone al suo interno il block "nav_content" perche' le pagine vere lo
+  riempiano. Il nome del block e' quello della vecchia shell: e' il motivo
+  per cui migrare una pagina e' costato una riga.
+
+  Layout mobile-first (D12): drawer off-canvas sotto `lg` (1024px, breakpoint
+  Tailwind di default), sidebar fissa da `lg` in su. Il drawer e' il
+  componente generico di ps-ui.js (PsDrawer).
+
+  Le 13 destinazioni e il loro ordine sono il contratto di
+  pyspendless/test/test_task19_0.py (NAV_LINKS_ORDER): non riordinare, non
+  rimuovere. "Profilo" (Impostazioni) non e' fra le 13 perche' il test lo
+  ignora, non perche' sia facoltativo: esisteva anche nella shell precedente,
+  quindi resta. Rimuoverlo sarebbe un cambio funzionale, non un restyling.
+
+  id="navigation" sul <ul> della sidebar e' CONTRATTO (delimita l'estrazione
+  dei link in test_nav_destinazioni, altrimenti il link Account dell'header e
+  i link delle card di /home falserebbero l'ordine). dashboardSubmenu e
+  settingsSubmenu sono contratto allo stesso modo.
+#}
+
 {% block content %}
-<div class="app-wrapper">
-  <!--begin::Header-->
-  <nav class="app-header navbar navbar-expand bg-body">
-    <div class="container-fluid">
-      <!--begin::Start Navbar Links-->
-      <ul class="navbar-nav">
-        <li class="nav-item">
-          <a class="nav-link" data-lte-toggle="sidebar" href="#" role="button">
-            <i class="bi bi-list"></i>
+<div class="min-h-screen lg:flex">
+
+  <!-- Backdrop del drawer: solo <lg, visibile solo quando il drawer è aperto
+       (ps-ui.js aggiunge .ps-drawer-open a backdrop e drawer insieme). -->
+  <div class="ps-drawer-backdrop lg:hidden" data-ps-dismiss="drawer" data-ps-target="#sidebarDrawer"></div>
+
+  <!-- Sidebar: off-canvas <lg, statica (parte del layout a colonne) da lg in su.
+       Le utility lg:* vivono nel layer "utilities" di Tailwind v4, che ha
+       precedenza sul layer "components" di .ps-drawer indipendentemente
+       dall'ordine nel markup: per questo bastano per "disattivare" il
+       posizionamento fixed/translate sopra i 1024px. -->
+  <aside
+    id="sidebarDrawer"
+    class="ps-drawer flex flex-col lg:static lg:inset-auto lg:z-auto lg:w-64 lg:shrink-0 lg:translate-x-0"
+  >
+    <div class="flex items-center gap-2 border-b px-4 py-4" style="border-color: var(--ps-border);">
+      <a href="{{ url_for('home') }}" class="flex items-center gap-2 no-underline" style="color: var(--ps-text);">
+        <i class="bi bi-wallet2 text-2xl" style="color: var(--ps-brand);" aria-hidden="true"></i>
+        <span class="text-lg font-light">PySpendless</span>
+      </a>
+    </div>
+    <nav class="flex-1 overflow-y-auto px-2 py-3">
+      <ul role="navigation" aria-label="Main navigation" id="navigation" class="space-y-1">
+        <li>
+          <a href="{{ url_for('home') }}" class="ps-nav-link">
+            <i class="bi bi-house-door" aria-hidden="true"></i>
+            <span>Home</span>
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('create') }}" class="ps-nav-link">
+            <i class="bi bi-plus-circle" aria-hidden="true"></i>
+            <span>Crea Movimento</span>
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('movements') }}" class="ps-nav-link">
+            <i class="bi bi-list-ul" aria-hidden="true"></i>
+            <span>Visualizza Movimenti</span>
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('search_movements') }}" class="ps-nav-link">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <span>Cerca Movimenti</span>
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('recurrent_movements_page') }}" class="ps-nav-link">
+            <i class="bi bi-arrow-repeat" aria-hidden="true"></i>
+            <span>Spese Ricorrenti</span>
+          </a>
+        </li>
+        <li>
+          <button type="button" class="ps-nav-link" onclick="toggleDashboardMenu(event)" aria-expanded="false" aria-controls="dashboardSubmenu">
+            <i class="bi bi-graph-up" aria-hidden="true"></i>
+            <span class="flex-1">Dashboard</span>
+            <i class="nav-arrow bi bi-chevron-right" aria-hidden="true"></i>
+          </button>
+          <ul class="mt-1 space-y-1" id="dashboardSubmenu" style="display: none;">
+            <li>
+              <a href="{{ url_for('dashboard_monthly') }}" class="ps-nav-link pl-10">
+                <i class="bi bi-calendar-month" aria-hidden="true"></i>
+                <span>Analisi Mensile</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('dashboard_yearly') }}" class="ps-nav-link pl-10">
+                <i class="bi bi-calendar-range" aria-hidden="true"></i>
+                <span>Analisi Annuale</span>
+              </a>
+            </li>
+          </ul>
+        </li>
+        <li>
+          <a href="{{ url_for('reports_page') }}" class="ps-nav-link">
+            <i class="bi bi-file-earmark-bar-graph" aria-hidden="true"></i>
+            <span>Reports</span>
+          </a>
+        </li>
+        <li>
+          <button type="button" class="ps-nav-link" onclick="toggleSettingsMenu(event)" aria-expanded="false" aria-controls="settingsSubmenu">
+            <i class="bi bi-gear" aria-hidden="true"></i>
+            <span class="flex-1">Impostazioni</span>
+            <i class="nav-arrow bi bi-chevron-right" aria-hidden="true"></i>
+          </button>
+          <ul class="mt-1 space-y-1" id="settingsSubmenu" style="display: none;">
+            <li>
+              <a href="{{ url_for('settings_categories') }}" class="ps-nav-link pl-10">
+                <i class="bi bi-tag" aria-hidden="true"></i>
+                <span>Categorie</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('settings_wallets') }}" class="ps-nav-link pl-10">
+                <i class="bi bi-wallet" aria-hidden="true"></i>
+                <span>Wallet</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('settings_group') }}" class="ps-nav-link pl-10">
+                <i class="bi bi-people" aria-hidden="true"></i>
+                <span>Account</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('settings_import_export') }}" class="ps-nav-link pl-10">
+                <i class="bi bi-arrow-down-up" aria-hidden="true"></i>
+                <span>Import/Export</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('settings_profile') }}" class="ps-nav-link pl-10">
+                <i class="bi bi-person-badge" aria-hidden="true"></i>
+                <span>Profilo</span>
+              </a>
+            </li>
+            {% if is_admin %}
+            <li>
+              <a href="{{ url_for('settings_admin') }}" class="ps-nav-link pl-10">
+                <i class="bi bi-shield-lock" aria-hidden="true"></i>
+                <span>Admin</span>
+              </a>
+            </li>
+            {% endif %}
+          </ul>
+        </li>
+        <li class="mt-3">
+          <a href="{{ url_for('logout') }}" class="ps-nav-link ps-nav-link-danger">
+            <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+            <span>Logout</span>
           </a>
         </li>
       </ul>
-      <!--end::Start Navbar Links-->
-      <!--begin::End Navbar Links-->
-      <ul class="navbar-nav ms-auto">
-        <li class="nav-item">
-          <a href="{{ url_for('settings_group') }}" class="nav-link" title="Account">
-            <i class="bi bi-person-circle"></i> 
+    </nav>
+  </aside>
+
+  <!-- Colonna header + contenuto -->
+  <div class="flex min-h-screen flex-1 flex-col lg:min-w-0">
+    <header class="flex items-center justify-between gap-3 border-b px-4 py-3" style="border-color: var(--ps-border); background-color: var(--ps-surface);">
+      <button
+        type="button"
+        class="ps-btn-outline-secondary ps-btn-sm lg:hidden"
+        data-ps-toggle="drawer"
+        data-ps-target="#sidebarDrawer"
+        aria-label="Apri il menu di navigazione"
+        aria-controls="sidebarDrawer"
+      >
+        <i class="bi bi-list" aria-hidden="true"></i>
+      </button>
+
+      <div class="ml-auto flex items-center gap-2">
+        <!-- Toggle tema (Fase 1: psTheme / ps-theme.js). Unico elemento di UI
+             nuovo introdotto da tutto il task19-0 (vedi fase-2.md §2.2). -->
+        <div class="flex items-center gap-1 rounded-lg border p-1" style="border-color: var(--ps-border);" role="group" aria-label="Selettore tema">
+          <button type="button" class="ps-btn-outline-secondary ps-btn-sm" style="border:0;" onclick="psTheme.set('light')" aria-label="Tema chiaro" title="Chiaro">
+            <i class="bi bi-sun" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="ps-btn-outline-secondary ps-btn-sm" style="border:0;" onclick="psTheme.set('dark')" aria-label="Tema scuro" title="Scuro">
+            <i class="bi bi-moon" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="ps-btn-outline-secondary ps-btn-sm" style="border:0;" onclick="psTheme.set('system')" aria-label="Tema di sistema" title="Sistema">
+            <i class="bi bi-circle-half" aria-hidden="true"></i>
+          </button>
+        </div>
+
+        <a
+          href="{{ url_for('settings_group') }}"
+          title="Account"
+          class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium no-underline transition-colors hover:bg-[var(--ps-surface-2)]"
+          style="color: var(--ps-text);"
+        >
+          <i class="bi bi-person-circle text-lg" aria-hidden="true"></i>
+          <span>
             {% if session.user_email %}
               {{ session.user_email.split('@')[0] }}
             {% elif session.user_name %}
@@ -26,194 +210,70 @@
             {% else %}
               User
             {% endif %}
-          </a>
-        </li>
-      </ul>
-      <!--end::End Navbar Links-->
-    </div>
-  </nav>
-  <!--end::Header-->
-  
-  <aside class="app-sidebar bg-body-secondary shadow" data-bs-theme="dark">
-    <!--begin::Sidebar Brand-->
-    <div class="sidebar-brand">
-      <a href="{{ url_for('home') }}" class="brand-link">
-        <i class="bi bi-wallet2 brand-image opacity-75" style="font-size: 2rem;"></i>
-        <span class="brand-text fw-light">PySpendless</span>
-      </a>
-    </div>
-    <div class="sidebar-wrapper">
-      <nav class="mt-2">
-        <!--begin::Sidebar Menu-->
-        <ul class="nav sidebar-menu flex-column" role="navigation" aria-label="Main navigation" id="navigation">
-          <li class="nav-item">
-            <a href="{{ url_for('home') }}" class="nav-link">
-              <i class="nav-icon bi bi-house-door"></i>
-              <p>Home</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="{{ url_for('create') }}" class="nav-link">
-              <i class="nav-icon bi bi-plus-circle"></i>
-              <p>Crea Movimento</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="{{ url_for('movements') }}" class="nav-link">
-              <i class="nav-icon bi bi-list-ul"></i>
-              <p>Visualizza Movimenti</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="{{ url_for('search_movements') }}" class="nav-link">
-              <i class="nav-icon bi bi-search"></i>
-              <p>Cerca Movimenti</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a href="{{ url_for('recurrent_movements_page') }}" class="nav-link">
-              <i class="nav-icon bi bi-arrow-repeat"></i>
-              <p>Spese Ricorrenti</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <button type="button" class="nav-link w-100 text-start border-0 bg-transparent" onclick="toggleDashboardMenu(event)">
-              <i class="nav-icon bi bi-graph-up"></i>
-              <p>
-                Dashboard
-                <i class="nav-arrow bi bi-chevron-right"></i>
-              </p>
-            </button>
-            <ul class="nav nav-treeview" id="dashboardSubmenu" style="display: none;">
-              <li class="nav-item">
-                <a href="{{ url_for('dashboard_monthly') }}" class="nav-link">
-                  <i class="nav-icon bi bi-calendar-month"></i>
-                  <p>Analisi Mensile</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="{{ url_for('dashboard_yearly') }}" class="nav-link">
-                  <i class="nav-icon bi bi-calendar-range"></i>
-                  <p>Analisi Annuale</p>
-                </a>
-              </li>
-            </ul>
-          </li>
-          <li class="nav-item">
-            <a href="{{ url_for('reports_page') }}" class="nav-link">
-              <i class="nav-icon bi bi-file-earmark-bar-graph"></i>
-              <p>Reports</p>
-            </a>
-          </li>
-          <li class="nav-item">
-            <button type="button" class="nav-link w-100 text-start border-0 bg-transparent" onclick="toggleSettingsMenu(event)">
-              <i class="nav-icon bi bi-gear"></i>
-              <p>
-                Impostazioni
-                <i class="nav-arrow bi bi-chevron-right"></i>
-              </p>
-            </button>
-            <ul class="nav nav-treeview" id="settingsSubmenu" style="display: none;">
-              <li class="nav-item">
-                <a href="{{ url_for('settings_categories') }}" class="nav-link">
-                  <i class="nav-icon bi bi-tag"></i>
-                  <p>Categorie</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="{{ url_for('settings_wallets') }}" class="nav-link">
-                  <i class="nav-icon bi bi-wallet"></i>
-                  <p>Wallet</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="{{ url_for('settings_group') }}" class="nav-link">
-                  <i class="nav-icon bi bi-people"></i>
-                  <p>Account</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="{{ url_for('settings_import_export') }}" class="nav-link">
-                  <i class="nav-icon bi bi-arrow-down-up"></i>
-                  <p>Import/Export</p>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a href="{{ url_for('settings_profile') }}" class="nav-link">
-                  <i class="nav-icon bi bi-person-badge"></i>
-                  <p>Profilo</p>
-                </a>
-              </li>
-              {% if is_admin %}
-              <li class="nav-item">
-                <a href="{{ url_for('settings_admin') }}" class="nav-link">
-                  <i class="nav-icon bi bi-shield-lock"></i>
-                  <p>Admin</p>
-                </a>
-              </li>
-              {% endif %}
-            </ul>
-          </li>
-          <li class="nav-item mt-3">
-            <a href="{{ url_for('logout') }}" class="nav-link text-danger">
-              <i class="nav-icon bi bi-box-arrow-right"></i>
-              <p>Logout</p>
-            </a>
-          </li>
-        </ul>
-        <!--end::Sidebar Menu-->
-      </nav>
-    </div>
-  </aside>
-  <main class="app-main">
-    {% block nav_content %}{% endblock %}
-  </main>
+          </span>
+        </a>
+      </div>
+    </header>
+
+    <main class="flex-1">
+      {% block nav_content %}{% endblock %}
+    </main>
+  </div>
 </div>
 
 <script>
+// Stesse due funzioni, stesso comportamento di ps-nav.html:167-218 (bug
+// compresi): toggle su display inline (non classList), chevron sostituito
+// per intero (non ruotato via CSS), classe "menu-open" applicata al <li>
+// anche se oggi non ha più un corrispettivo CSS (era solo del framework
+// amministrativo precedente).
 function toggleSettingsMenu(event) {
   event.preventDefault();
   event.stopPropagation();
-  
+
   const submenu = document.getElementById('settingsSubmenu');
   const arrow = event.currentTarget.querySelector('.nav-arrow');
   const parentLi = event.currentTarget.parentElement;
-  
+
   if (submenu.style.display === 'none' || submenu.style.display === '') {
     submenu.style.display = 'block';
     arrow.classList.remove('bi-chevron-right');
     arrow.classList.add('bi-chevron-down');
     parentLi.classList.add('menu-open');
+    event.currentTarget.setAttribute('aria-expanded', 'true');
   } else {
     submenu.style.display = 'none';
     arrow.classList.remove('bi-chevron-down');
     arrow.classList.add('bi-chevron-right');
     parentLi.classList.remove('menu-open');
+    event.currentTarget.setAttribute('aria-expanded', 'false');
   }
-  
+
   return false;
 }
 
 function toggleDashboardMenu(event) {
   event.preventDefault();
   event.stopPropagation();
-  
+
   const submenu = document.getElementById('dashboardSubmenu');
   const arrow = event.currentTarget.querySelector('.nav-arrow');
   const parentLi = event.currentTarget.parentElement;
-  
+
   if (submenu.style.display === 'none' || submenu.style.display === '') {
     submenu.style.display = 'block';
     arrow.classList.remove('bi-chevron-right');
     arrow.classList.add('bi-chevron-down');
     parentLi.classList.add('menu-open');
+    event.currentTarget.setAttribute('aria-expanded', 'true');
   } else {
     submenu.style.display = 'none';
     arrow.classList.remove('bi-chevron-down');
     arrow.classList.add('bi-chevron-right');
     parentLi.classList.remove('menu-open');
+    event.currentTarget.setAttribute('aria-expanded', 'false');
   }
-  
+
   return false;
 }
 </script>

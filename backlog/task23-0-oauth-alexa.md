@@ -222,31 +222,49 @@ Fatto e verificato:
   stesso valore nei due file), `OAUTH_ALEXA_REDIRECT_URIS` vuota in attesa dei
   redirect URI della console. Attenzione: `conf.py` carica **solo `.env`**, non
   `.env_pa`, quindi sul server la copia che conta è `pyspendless/.env`.
+- **Produzione verificata dal vivo** dopo il Reload con le variabili caricate:
+  authorize con i parametri esatti di Alexa (senza `resource`) → `302 /login`;
+  vendor id diverso → `400 redirect_uri non registrato`; senza PKCE → redirect
+  ad Alexa con `error=invalid_request` e `state` preservato.
+- **Modello di interazione rifatto**: il primo build sulla console è fallito con
+  «cannot include both a phrase slot and another intent slot» su tutte e sei le
+  utterance di `AddMovementIntent`. `AMAZON.SearchQuery` è un *phrase slot* e
+  non può stare in una frase insieme a un altro slot, mentre `category`,
+  `wallet` e `note` erano tutti `SearchQuery` e convivevano con `{amount}`. Ora
+  `category`/`wallet` sono slot type custom (`CategoryName`, `WalletName`, seme
+  generico da sostituire con i valori veri dell'account) e `note` è fuori dal
+  modello; `lambda_function.py` non cambia (legge `note` solo se presente).
+  Dettagli e limiti residui in `alexa-mcp-lambda/README.md`.
 
-Da fare (in questo ordine):
-1. Rilasciare la patch «`resource` facoltativa» (procedura di rilascio in
-   CLAUDE.md: bump `_APP_VERSION`, commit, tag, push, `git pull` + Reload su PA).
-2. Console Alexa (`developer.amazon.com`) → **Create Skill**: nome "PySpendless",
-   locale *Italian (IT)*, modello *Custom*, hosting *Provision your own*.
-   Interaction Model → JSON Editor → `alexa-mcp-lambda/interaction-model.it-IT.json`
-   → Save → Build. Endpoint → *AWS Lambda ARN*, regione *Europe (Ireland)*, ARN
-   della Lambda qui sopra.
-3. **Account Linking** (valori in `alexa-mcp-lambda/README.md` §4): Auth Code
-   Grant, authorize/token su `https://tabuto.pythonanywhere.com/oauth/...`,
-   client id/secret dalle variabili, HTTP Basic, scope `profile`, **PKCE S256
-   attivo** (obbligatorio: senza `code_challenge` il server rifiuta).
-4. Copiare dalla stessa pagina i 3 **Redirect URI** (`pitangui.amazon.com`,
-   `layla.amazon.com`, `alexa.amazon.co.jp`, contengono il vendor id) in
-   `OAUTH_ALEXA_REDIRECT_URIS` (separati da virgola) nel `.env` **sul server**,
-   insieme a client id e secret → Reload della web app.
-5. Collegare il trigger: `aws lambda add-permission --function-name
-   alexa-mcp-bridge --statement-id alexa-skills-kit-trigger --action
-   lambda:InvokeFunction --principal alexa-appkit.amazon.com --event-source-token
-   <SKILL_ID>` (serve lo Skill ID `amzn1.ask.skill.…` dalla console).
-6. Test nel simulatore (stage Development): `apri spese di famiglia`, poi
-   `registra 20 euro per spesa alimentare` → collegamento account (login Google
-   di PySpendless + pagina di consenso) → la spesa finisce sul wallet preferito
-   dell'utente. Poi prova sull'Echo, poi Beta Testing per i familiari.
+Fatto il 20/10/2026 (punti 1-6 della lista originale, tutti chiusi):
+1. Patch «`resource` facoltativa» rilasciata: `v0.3.1` in produzione, mergiata
+   in `origin/main` (PR #2).
+2. Skill creata, **Skill ID `amzn1.ask.skill.cc3d1431-701a-4f36-acf0-af88083e400a`**,
+   locale it-IT, modello Custom, hosting *Provision your own*, endpoint
+   `arn:aws:lambda:eu-west-1:662578989604:function:alexa-mcp-bridge` nel campo
+   *Default Region*. Un primo tentativo era stato creato **Alexa-hosted**: in
+   quel caso l'endpoint è bloccato sul reflector di Amazon
+   (`arn:aws:lambda:us-east-1:318883658404:function:ReflectorTemplateSkill`), la
+   Lambda nostra non viene mai invocata e l'hosting non si cambia — la skill va
+   ricreata. Il vendor id non cambia, quindi i redirect URI e il `.env` del
+   server restano validi; cambia solo lo Skill ID.
+3. Account Linking configurato con PKCE S256.
+4. `OAUTH_ALEXA_*` impostate nel `.env` sul server + Reload. Redirect URI del
+   vendor `MMFCHA6BHYFHR`.
+5. Trigger: `statement-id alexa-skills-kit-trigger-v2` vincolato allo Skill ID
+   nuovo, quello della skill ricreata rimosso. Nota: la console **valida la
+   resource policy della Lambda** quando salvi l'endpoint, quindi il permesso va
+   aggiunto prima, altrimenti risponde `SkillManifestError`.
+6. Provato dal vivo: la skill si apre e gli intent arrivano alla Lambda
+   (CloudWatch: nove invocazioni, 330-760 ms per quelle che interrogano il
+   server, nessuna eccezione).
+
+Da fare:
+- Sostituire il seme generico di `CategoryName`/`WalletName` con le categorie e
+  i wallet veri dell'account, e rifare il Build Model.
+- Prova sull'Echo fisico, poi Beta Testing per i familiari (richiede prima i
+  metadati di distribuzione: descrizioni, frasi di esempio, icone, URL di
+  privacy e termini).
 
 Rischi noti ancora aperti:
 - Il login di PySpendless passa da Google OAuth: se l'app Alexa aprisse il

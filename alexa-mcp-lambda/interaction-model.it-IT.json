@@ -20,6 +20,14 @@
           "samples": []
         },
         {
+          "name": "AMAZON.YesIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NoIntent",
+          "samples": []
+        },
+        {
           "name": "AddMovementIntent",
           "slots": [
             {
@@ -28,28 +36,45 @@
             },
             {
               "name": "category",
-              "type": "AMAZON.SearchQuery"
+              "type": "CategoryName"
             },
             {
               "name": "wallet",
-              "type": "AMAZON.SearchQuery"
-            },
-            {
-              "name": "note",
-              "type": "AMAZON.SearchQuery"
+              "type": "WalletName"
             },
             {
               "name": "kind",
               "type": "KindType"
+            },
+            {
+              "name": "note",
+              "type": "AMAZON.SearchQuery",
+              "samples": [
+                "{note}",
+                "la nota è {note}",
+                "nota {note}",
+                "scrivi {note}",
+                "metti {note}",
+                "la descrizione è {note}"
+              ]
             }
           ],
           "samples": [
             "registra {amount} euro per {category}",
+            "registra {amount} euro di {category}",
             "registra una spesa di {amount} euro per {category}",
             "registra una {kind} di {amount} euro per {category}",
             "aggiungi {amount} euro di {category}",
+            "aggiungi una spesa di {amount} euro per {category}",
+            "segna {amount} euro per {category}",
+            "segna {amount} euro di {category}",
+            "ho speso {amount} euro per {category}",
+            "ho speso {amount} euro di {category}",
+            "spesa di {amount} euro per {category}",
             "segna {amount} euro per {category} sul wallet {wallet}",
-            "registra {amount} euro per {category} con nota {note}"
+            "registra {amount} euro per {category} sul wallet {wallet}",
+            "registra {amount} euro per {category} su {wallet}",
+            "registra una {kind} di {amount} euro per {category} sul wallet {wallet}"
           ]
         },
         {
@@ -62,9 +87,14 @@
           ],
           "samples": [
             "elenca le categorie",
+            "elenca le mie categorie",
             "che categorie ho",
+            "quali categorie ho",
+            "quali categorie di {kind} ho",
             "quali categorie di {kind} ho disponibili",
+            "elenca le categorie di {kind}",
             "elenca i wallet",
+            "quali wallet ho",
             "che categorie e wallet ho"
           ]
         }
@@ -75,13 +105,124 @@
           "values": [
             {
               "name": {
-                "value": "spesa"
+                "value": "spesa",
+                "synonyms": ["uscita", "pagamento"]
               }
             },
             {
               "name": {
-                "value": "entrata"
+                "value": "entrata",
+                "synonyms": ["incasso", "guadagno"]
               }
+            }
+          ]
+        },
+        {
+          "name": "CategoryName",
+          "values": [
+            { "name": { "value": "spesa alimentare" } },
+            { "name": { "value": "supermercato" } },
+            { "name": { "value": "benzina" } },
+            { "name": { "value": "carburante" } },
+            { "name": { "value": "trasporti" } },
+            { "name": { "value": "auto" } },
+            { "name": { "value": "assicurazione" } },
+            { "name": { "value": "bollette" } },
+            { "name": { "value": "luce" } },
+            { "name": { "value": "gas" } },
+            { "name": { "value": "acqua" } },
+            { "name": { "value": "telefono" } },
+            { "name": { "value": "internet" } },
+            { "name": { "value": "affitto" } },
+            { "name": { "value": "mutuo" } },
+            { "name": { "value": "casa" } },
+            { "name": { "value": "manutenzione" } },
+            { "name": { "value": "farmacia" } },
+            { "name": { "value": "medico" } },
+            { "name": { "value": "dentista" } },
+            { "name": { "value": "scuola" } },
+            { "name": { "value": "libri" } },
+            { "name": { "value": "abbigliamento" } },
+            { "name": { "value": "cura della persona" } },
+            { "name": { "value": "parrucchiere" } },
+            { "name": { "value": "sport" } },
+            { "name": { "value": "palestra" } },
+            { "name": { "value": "ristorante" } },
+            { "name": { "value": "bar" } },
+            { "name": { "value": "svago" } },
+            { "name": { "value": "cinema" } },
+            { "name": { "value": "abbonamenti" } },
+            { "name": { "value": "tecnologia" } },
+            { "name": { "value": "regali" } },
+            { "name": { "value": "vacanze" } },
+            { "name": { "value": "animali" } },
+            { "name": { "value": "tasse" } },
+            { "name": { "value": "varie" } },
+            { "name": { "value": "stipendio" } },
+            { "name": { "value": "bonus" } },
+            { "name": { "value": "rimborso" } },
+            { "name": { "value": "vendita" } }
+          ]
+        },
+        {
+          "name": "WalletName",
+          "values": [
+            { "name": { "value": "contanti" } },
+            { "name": { "value": "portafoglio" } },
+            { "name": { "value": "carta" } },
+            { "name": { "value": "carta di credito" } },
+            { "name": { "value": "bancomat" } },
+            { "name": { "value": "prepagata" } },
+            { "name": { "value": "postepay" } },
+            { "name": { "value": "conto corrente" } },
+            { "name": { "value": "banca" } }
+          ]
+        }
+      ]
+    },
+    "dialog": {
+      "delegationStrategy": "SKILL_RESPONSE",
+      "intents": [
+        {
+          "name": "AddMovementIntent",
+          "delegationStrategy": "SKILL_RESPONSE",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "amount",
+              "type": "AMAZON.NUMBER",
+              "elicitationRequired": false,
+              "confirmationRequired": false,
+              "prompts": {}
+            },
+            {
+              "name": "category",
+              "type": "CategoryName",
+              "elicitationRequired": false,
+              "confirmationRequired": false,
+              "prompts": {}
+            },
+            {
+              "name": "wallet",
+              "type": "WalletName",
+              "elicitationRequired": false,
+              "confirmationRequired": false,
+              "prompts": {}
+            },
+            {
+              "name": "kind",
+              "type": "KindType",
+              "elicitationRequired": false,
+              "confirmationRequired": false,
+              "prompts": {}
+            },
+            {
+              "name": "note",
+              "type": "AMAZON.SearchQuery",
+              "elicitationRequired": false,
+              "confirmationRequired": false,
+              "prompts": {}
             }
           ]
         }

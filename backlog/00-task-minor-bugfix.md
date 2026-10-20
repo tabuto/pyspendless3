@@ -52,6 +52,7 @@ il rimando.
 | MB-007 | bug | Una categoria cambia colore fra la dashboard mensile e quella annuale: la palette è assegnata per posizione | bassa | RISOLTA |
 | MB-008 | evolutiva | Subset di Bootstrap Icons: 59 glifi su 2.078, da 221 KB a 8 KB (font + CSS) | media | RISOLTA |
 | MB-009 | evolutiva | Icone: togliere il fallback `.woff` (180 KB, mai scaricato) e aggiungere lo script che rigenera il subset | bassa | APERTA |
+| MB-010 | evolutiva | Skill Alexa: la nota della spesa chiesta in un turno di dialogo dedicato (phrase slot, `Dialog.ElicitSlot`) | media | RISOLTA |
 
 ## Aperte
 
@@ -97,6 +98,50 @@ il rimando.
 - `bi-chevron-right` / `bi-chevron-down` compaiono in `ps-nav.html` anche come
   stringhe passate a `classList.add/remove`, non solo in `class="..."`: il
   censimento deve cercare `bi-[a-z0-9-]+` ovunque, non solo negli attributi.
+
+### MB-010 — Skill Alexa: nota della spesa chiesta a voce · risolta il 2026-10-20
+
+- **Tipo**: evolutiva
+- **File toccati**: `alexa-mcp-lambda/lambda_function.py`,
+  `alexa-mcp-lambda/interaction-model.it-IT.json`,
+  `alexa-mcp-lambda/test_dialog.py` (nuovo), `alexa-mcp-lambda/README.md`
+
+**Problema** — a voce si potevano registrare solo importo, categoria, tipo e
+wallet: la nota del movimento (il campo **Nota** del form, `Movement.note`) non
+era raggiungibile. Non per un limite del server — `add_movement` accettava già
+l'argomento `note` — ma del modello di interazione: `note` era
+`AMAZON.SearchQuery`, cioè un *phrase slot*, e Alexa rifiuta ogni sample
+utterance che contenga un phrase slot insieme a un altro slot. «registra
+{amount} euro per {category} con nota {note}» non compila.
+
+**Soluzione** — la nota si raccoglie in un **turno dedicato**, dove è l'unico
+slot in gioco e il vincolo non si applica (la carrier phrase è obbligatoria
+nelle utterance dell'intent, ma non nei sample a livello di slot: `{note}` da
+solo è legale). Il primo turno non registra niente, mette il movimento in
+`pending_movement` negli attributi di sessione e chiede «Vuoi aggiungere una
+nota?»; «sì» risponde con `Dialog.ElicitSlot` su `note` e `updatedIntent` che
+riporta gli slot già riempiti; «no» registra subito. Aggiunto il dialog model
+nell'interaction model, obbligatorio per usare quella direttiva
+(`delegationStrategy: SKILL_RESPONSE`, tutti gli slot a `elicitationRequired:
+false`: i prompt li dice il codice).
+
+**Note / casi limite** — tre trappole coperte:
+
+- mentre Alexa elicita uno `AMAZON.SearchQuery` *qualunque* frase finisce nello
+  slot, quindi un «no» detto in quel turno arriverebbe come nota con testo «no»:
+  `NOTE_DECLINED` e `NOTE_CANCELLED` intercettano rifiuti e annullamenti;
+- se la sessione finisce con un movimento ancora in attesa,
+  `SessionEndedRequestHandler` lo registra senza nota — perdere una spesa già
+  dettata sarebbe peggio, e il doppione lo blocca il controllo anti-duplicato
+  del server;
+- `AMAZON.YesIntent`/`NoIntent` senza nulla in sospeso avevano bisogno di un
+  handler proprio: altrimenti il dispatcher solleva un'eccezione e l'utente
+  sente «si è verificato un errore». Difetto trovato da `test_dialog.py`, che
+  copre il flusso con 36 controlli su envelope sintetiche e un finto server MCP.
+
+Nello stesso giro: `_slot_value` legge il valore **canonico** dalle resolutions
+invece del parlato grezzo, così i sinonimi di `KindType` («uscita», «incasso»)
+vengono interpretati, e la Lambda logga a INFO intent, argomenti ed esito.
 
 ### MB-008 — Subset di Bootstrap Icons · risolta il 2026-10-18
 

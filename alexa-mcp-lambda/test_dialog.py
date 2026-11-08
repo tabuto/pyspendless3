@@ -26,13 +26,35 @@ ACCESS_TOKEN = "token-di-prova"
 chiamate = []
 
 
+# Categorie e wallet "dell'utente": servono a verificare che finiscano nelle
+# entità dinamiche. Nessuno di questi nomi è nell'interaction model statico.
+CATEGORIE_UTENTE = ["baby", "mutuo casa nuova", "cibo gatti"]
+WALLET_UTENTE = [{"name": "Conto famiglia", "code": "FAM"}]
+
+
 class _FintaRisposta:
     status_code = 200
+
+    def __init__(self, tool):
+        self.tool = tool
 
     def raise_for_status(self):
         return None
 
     def json(self):
+        if self.tool == "list_categories":
+            return {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {
+                    "content": [{"type": "text", "text": "Categorie di spesa: baby, ..."}],
+                    "isError": False,
+                    "structuredContent": {
+                        "categories": [{"name": n, "type": "expense"} for n in CATEGORIE_UTENTE],
+                        "wallets": [dict(w, currency="EUR", is_default=True) for w in WALLET_UTENTE],
+                    },
+                },
+            }
         return {
             "jsonrpc": "2.0",
             "id": 1,
@@ -45,7 +67,7 @@ class _FintaRisposta:
 
 def _finta_post(url, headers=None, json=None, timeout=None):
     chiamate.append(json["params"])
-    return _FintaRisposta()
+    return _FintaRisposta(json["params"]["name"])
 
 
 lambda_function.requests.post = _finta_post
@@ -289,6 +311,71 @@ def main():
             "entrata di 500 euro" in parla(r9b), parla(r9b))
     pend = attributi(r9b).get("pending_movement") or {}
     v.check("kind=income nel movimento in attesa", pend.get("kind") == "income", pend)
+
+    print("\n10. Entità dinamiche: le categorie dell'utente, non quelle del modello")
+    chiamate.clear()
+    r10 = lambda_function.handler(
+        envelope({"type": "LaunchRequest", "requestId": "r-launch", "timestamp": "2026-10-20T10:00:00Z",
+                  "locale": "it-IT"}),
+        None,
+    )
+    v.check("l'apertura chiama list_categories",
+            len(chiamate) == 1 and chiamate[0]["name"] == "list_categories", chiamate)
+    dirs = direttive(r10)
+    dyn = [d for d in dirs if d["type"] == "Dialog.UpdateDynamicEntities"]
+    v.check("una direttiva Dialog.UpdateDynamicEntities", len(dyn) == 1, dirs)
+    v.check("comportamento REPLACE", dyn and dyn[0].get("updateBehavior") == "REPLACE", dyn)
+    tipi = {t["name"]: [e["name"]["value"] for e in t["values"]] for t in (dyn[0]["types"] if dyn else [])}
+    v.check("CategoryName sostituito con le categorie dell'utente",
+            tipi.get("CategoryName") == CATEGORIE_UTENTE, tipi)
+    v.check("WalletName contiene nome e codice del wallet",
+            tipi.get("WalletName") == ["Conto famiglia", "FAM"], tipi)
+    v.check("niente categorie del seme statico fra le entità",
+            "spesa alimentare" not in (tipi.get("CategoryName") or []), tipi)
+    v.check("la sessione ricorda che sono caricate",
+            attributi(r10).get("entities_loaded") is True, attributi(r10))
+    v.check("l'apertura parla comunque", "PySpendless" in parla(r10), parla(r10))
+    sessione10 = attributi(r10)
+
+    print("\n11. Fallback: carica le entità e chiede di ripetere (invocazione in un colpo solo)")
+    chiamate.clear()
+    r11 = lambda_function.handler(envelope(intent_request("AMAZON.FallbackIntent")), None)
+    dyn = [d for d in direttive(r11) if d["type"] == "Dialog.UpdateDynamicEntities"]
+    v.check("il primo fallback carica le entità", len(dyn) == 1, direttive(r11))
+    v.check("e chiede di ripetere", "ripetere" in parla(r11).lower(), parla(r11))
+
+    chiamate.clear()
+    r11b = lambda_function.handler(envelope(intent_request("AMAZON.FallbackIntent"), sessione10), None)
+    v.check("se sono già caricate non richiama il server", not chiamate, chiamate)
+    v.check("e suggerisce una frase valida", "registra 20 euro" in parla(r11b), parla(r11b))
+
+    print("\n12. Entità dinamiche: casi di degrado")
+    chiamate.clear()
+    r12 = lambda_function.handler(
+        envelope({"type": "LaunchRequest", "requestId": "r-launch2", "timestamp": "2026-10-20T10:00:00Z",
+                  "locale": "it-IT"}, access_token=None),
+        None,
+    )
+    v.check("senza account collegato non chiama il server", not chiamate, chiamate)
+    v.check("nessuna direttiva di entità", not direttive(r12), direttive(r12))
+    v.check("ma l'apertura risponde", "PySpendless" in parla(r12), parla(r12))
+
+    def _post_che_esplode(url, headers=None, json=None, timeout=None):
+        raise lambda_function.requests.RequestException("rete giù")
+
+    post_buono = lambda_function.requests.post
+    lambda_function.requests.post = _post_che_esplode
+    try:
+        r12b = lambda_function.handler(
+            envelope({"type": "LaunchRequest", "requestId": "r-launch3",
+                      "timestamp": "2026-10-20T10:00:00Z", "locale": "it-IT"}),
+            None,
+        )
+        v.check("server irraggiungibile: l'apertura non va in errore",
+                "PySpendless" in parla(r12b), parla(r12b))
+        v.check("e non spedisce entità vuote", not direttive(r12b), direttive(r12b))
+    finally:
+        lambda_function.requests.post = post_buono
 
     print("\n" + "-" * 60)
     print("{} controlli superati, {} falliti".format(v.ok, v.ko))

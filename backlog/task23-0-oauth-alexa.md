@@ -1,10 +1,9 @@
 # Task 23.0: OAuth 2.x per il server MCP (endpoint `/mcp-oauth2`) — integrazione con Alexa+ (retrocompatibile con Claude)
 
-**Stato**: server implementato, **rilasciato in produzione** (v0.3.0, metadata e
-401 verificati dal vivo) e Lambda del bridge Alexa già creata su AWS. Resta da
-creare la skill sulla console Amazon, impostare le variabili `OAUTH_ALEXA_*` sul
-server e rilasciare la patch «`resource` facoltativa» (vedi "Stato
-dell'integrazione Alexa"). La strada scelta **non** è l'add-on MCP di Alexa+ ma
+**Stato**: **funzionante end-to-end**. Server in produzione (`v0.3.1`), skill
+creata e collegata, spese registrabili a voce dall'Echo. Restano la prova finale
+sul campo e il Beta Testing per i familiari (vedi "Stato dell'integrazione
+Alexa"). La strada scelta **non** è l'add-on MCP di Alexa+ ma
 una **Custom Skill con Lambda bridge** (`alexa-mcp-lambda/`): Alexa+ non è
 disponibile in italiano, mentre una Custom Skill con Account Linking funziona su
 qualunque Echo e si distribuisce ai familiari via Beta Testing.
@@ -39,9 +38,8 @@ qualunque Echo e si distribuisce ai familiari via Beta Testing.
   reale + DB `.env`: **non eseguito in questa sessione** per un problema
   preesistente e indipendente dal task — il DB locale di sviluppo non ha
   ancora la colonna `preferred_wallet_id` del task22-0, da migrare a parte).
-- Variabili d'ambiente OAuth (`OAUTH_ALEXA_*`): impostate in locale il
-  19/10/2026, ancora da riportare sul server (vedi "Stato dell'integrazione
-  Alexa").
+- Variabili d'ambiente OAuth (`OAUTH_ALEXA_*`): impostate in locale e **sul
+  server** il 19-20/10/2026 (vedi "Stato dell'integrazione Alexa").
 
 ## Obiettivo
 Rendere il server MCP di PySpendless collegabile ad **Alexa+** (add-on MCP), che richiede
@@ -260,8 +258,8 @@ Fatto il 20/10/2026 (punti 1-6 della lista originale, tutti chiusi):
    server, nessuna eccezione).
 
 Da fare:
-- Sostituire il seme generico di `CategoryName`/`WalletName` con le categorie e
-  i wallet veri dell'account, e rifare il Build Model.
+- ~~Sostituire il seme generico di `CategoryName`/`WalletName`~~: risolto da
+  MB-011 con le entità dinamiche (caricate a runtime, per utente).
 - Prova sull'Echo fisico, poi Beta Testing per i familiari (richiede prima i
   metadati di distribuzione: descrizioni, frasi di esempio, icone, URL di
   privacy e termini).

@@ -1,7 +1,7 @@
 # alexa-mcp-lambda
 
-Funzione Lambda che fa da backend per una Alexa Custom Skill ("spese di
-famiglia") e inoltra le richieste al server MCP di PySpendless esposto su
+Funzione Lambda che fa da backend per una Alexa Custom Skill (invocation name
+`spendless`) e inoltra le richieste al server MCP di PySpendless esposto su
 `https://tabuto.pythonanywhere.com/mcp-oauth2` (endpoint OAuth2, task23-0).
 
 Sottoprogetto isolato: dipendenze e virtualenv propri, separati da quelli di
@@ -58,9 +58,20 @@ aws lambda update-function-code \
    modello **Custom**, metodo di hosting **Provision your own**.
 2. **Interaction Model** → **JSON Editor** → incolla il contenuto di
    `interaction-model.it-IT.json` di questa cartella → **Save** → **Build Model**.
-   L'invocation name proposto è `spese di famiglia`: cambialo pure se preferisci
-   altro, purché rispetti le regole Amazon (minuscolo, niente parole riservate
-   tipo nomi di dispositivi Alexa).
+   L'invocation name è `spendless`, quindi la frase di attivazione è «Alexa,
+   apri spendless». Era `spese di famiglia`, cambiato il 20/10/2026: nel
+   simulatore funzionava, ma sul dispositivo e nell'app no — «spese» è la parola
+   della lista della spesa, e nell'arbitraggio vocale (che il simulatore salta,
+   perché punta diritto allo stage Development) le funzionalità native di Alexa
+   vincono sulle skill.
+
+   Due regole Amazon da tenere a mente se lo si cambia di nuovo: le **launch
+   phrase** (`apri`, `chiedi a`, `avvia`…) non possono starci dentro — sono il
+   verbo, non il nome — e i nomi di **una sola parola** sono ammessi solo per
+   marchi propri. La seconda regola la verifica la *certificazione*, non il
+   build: per una skill che resta in Development o Beta per uso familiare
+   `spendless` passa, ma se un giorno la si pubblicasse servirebbe un nome di
+   due parole (`spendless famiglia`, `il mio spendless`).
 3. **Endpoint** → scegli **AWS Lambda ARN**, regione **Europe (Ireland)**, e
    incolla l'ARN restituito da `aws lambda create-function` (sopra).
 4. **Account Linking** (sezione nel menu Build), con i valori:
@@ -139,9 +150,23 @@ Come è fatto:
   Lambda resta senza stato proprio, nessun database di appoggio.
 - «Sì» risponde con `Dialog.ElicitSlot` su `note`, con `updatedIntent` che
   riporta importo, categoria, wallet e tipo già riempiti: Alexa non li richiede.
-  La direttiva **pretende un dialog model** nell'interaction model — c'è,
-  con `delegationStrategy: SKILL_RESPONSE` e tutti gli slot a
-  `elicitationRequired: false`, perché i prompt li diciamo noi dal codice.
+- La direttiva **pretende un dialog model** nell'interaction model, e i sample a
+  livello di slot sono rifiutati senza di esso:
+
+  ```
+  Slot "note" in intent "AddMovementIntent" includes samples,
+  which is not supported in a skill without a dialog model
+  ```
+
+  Attenzione a come lo si scrive: un dialog model con **tutti** gli slot a
+  `elicitationRequired: false` è formalmente valido secondo lo schema, ma la
+  console lo pota — non chiede niente, quindi per lei non esiste — e il build
+  torna a lamentare i sample. Perciò `note` ha `elicitationRequired: true` con un
+  prompt vero (`Elicit.Slot.Note` nell'array `prompts`), che tiene in vita il
+  dialog model. Non cambia il comportamento: con `delegationStrategy:
+  SKILL_RESPONSE` il controllo resta alla skill a ogni turno, e `Dialog.ElicitSlot`
+  usa comunque la frase che gli passiamo noi, non i prompt del modello (lo dice
+  la documentazione della direttiva).
 - «No» registra subito senza nota.
 - Mentre Alexa elicita uno `AMAZON.SearchQuery`, *qualunque* frase finisce nello
   slot: un «no» detto in quel turno arriverebbe come nota con testo «no». Per
@@ -169,14 +194,54 @@ turno al successivo come fa Alexa.
 cd alexa-mcp-lambda && .venv/bin/python test_dialog.py
 ```
 
-I valori dei due slot type custom in repo sono un **seme generico** di categorie
-e wallet italiani: gli slot type custom non sono una whitelist chiusa (Alexa
-restituisce anche valori fuori elenco, e il server fa poi un confronto
-normalizzato con fuzzy match in `resolve_category`/`resolve_wallet`), ma il
-riconoscimento vocale è molto più preciso sui valori elencati. Conviene quindi
-sostituirli con le categorie e i wallet veri dell'account — si leggono con
-`elenca le categorie` dalla skill stessa, o dalle pagine Impostazioni di
-PySpendless — e rifare il **Build Model**.
+## Categorie per utente: entità dinamiche, non valori nel modello
+
+I valori di `CategoryName` e `WalletName` nel JSON sono un **segnaposto
+strutturale**, un elenco generico di categorie italiane. Non sono i dati veri e
+non devono diventarlo: l'interaction model è **globale per la skill**, mentre
+categorie e wallet appartengono a ogni singolo account PySpendless — scolpire
+quelle di un utente nel modello romperebbe il riconoscimento per tutti gli
+altri familiari.
+
+Il meccanismo giusto è `Dialog.UpdateDynamicEntities`: a ogni apertura della
+skill la Lambda chiama `list_categories`, legge il campo `structuredContent`
+della risposta MCP (che il server già produce: `categories[].name`,
+`wallets[].name/.code`) e sostituisce i valori dei due slot type per la durata
+della sessione, con `updateBehavior: REPLACE`. Vedi `load_dynamic_entities()`.
+
+Perché serve davvero: in teoria gli slot type custom non sono una whitelist
+chiusa — Alexa restituisce anche valori fuori elenco, e il server fa poi un
+confronto normalizzato con fuzzy match in
+`resolve_category`/`resolve_wallet` — ma in pratica, se il valore detto non
+somiglia a nessuno di quelli noti, l'NLU **non associa affatto la frase
+all'intent**: arriva `FallbackIntent` e la skill risponde «non ho capito». È
+successo con `registra 85 su baby`, dove `baby` non era fra i valori statici.
+
+Limiti e comportamenti da conoscere:
+
+- Le entità dinamiche valgono **per la sessione** (o 30 minuti), e vengono
+  caricate sulla `LaunchRequest`: il flusso normale («Alexa, apri spendless»,
+  poi la frase) è sempre coperto.
+- Un'invocazione **in un colpo solo** («Alexa, chiedi a spendless di registrare
+  85 su baby») arriva prima che le entità esistano, quindi può non essere
+  riconosciuta. Per quello `FallbackIntentHandler`, la prima volta in una
+  sessione, le carica e chiede di ripetere: al secondo tentativo la categoria è
+  nota. Il flag `entities_loaded` in sessione evita di richiamare il server a
+  ogni fallback.
+- Se l'account non è collegato o il server non risponde, il caricamento viene
+  salvato: la skill si apre comunque e si degrada ai valori statici.
+- L'apertura costa una chiamata HTTP in più (~0,4-0,6 s verso PythonAnywhere),
+  una sola per sessione.
+
+Quando si cambiano categorie in PySpendless **non serve toccare la skill né
+rifare il Build Model**: la prossima apertura le rilegge da sola.
+
+Le utterance di `AddMovementIntent` coprono le preposizioni `per`/`di`/`su`/`in`
+e l'importo sia con sia senza la parola «euro» (`registra 85 su baby` e
+`registra 85 euro per baby` vanno entrambe). Una nota sull'ambiguità: `su` è
+riservato alla **categoria**, il wallet si indica solo nominandolo
+(`sul wallet contanti`, `con il wallet contanti`) — con entrambe le forme
+`su {category}` e `su {wallet}` l'NLU non avrebbe modo di distinguerle.
 
 Altri limiti noti del modello:
 
@@ -190,8 +255,8 @@ Altri limiti noti del modello:
 
 1. Nel developer console, tab **Test** → abilita test in stage "Development"
    (su una skill appena creata parte da *Off*).
-2. Simulatore: `apri spese di famiglia`, poi `registra 20 euro per spesa
-   alimentare`, poi `sì` e la nota a voce.
+2. Simulatore: `apri spendless`, poi `registra 20 euro per spesa alimentare`,
+   poi `sì` e la nota a voce.
 3. Alla prima chiamata autenticata ti chiederà di collegare l'account (Account
    Linking): segui il link, fai login su PySpendless, autorizza.
 4. Per i familiari: **Beta Testing** (tab Distribution) → invita via email,

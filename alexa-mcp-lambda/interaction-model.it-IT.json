@@ -1,7 +1,7 @@
 {
   "interactionModel": {
     "languageModel": {
-      "invocationName": "spese di famiglia",
+      "invocationName": "spendless",
       "intents": [
         {
           "name": "AMAZON.CancelIntent",
@@ -62,18 +62,41 @@
           "samples": [
             "registra {amount} euro per {category}",
             "registra {amount} euro di {category}",
+            "registra {amount} euro su {category}",
+            "registra {amount} euro in {category}",
+            "registra {amount} per {category}",
+            "registra {amount} di {category}",
+            "registra {amount} su {category}",
+            "registra {amount} in {category}",
             "registra una spesa di {amount} euro per {category}",
             "registra una {kind} di {amount} euro per {category}",
+            "registra una {kind} di {amount} euro su {category}",
+            "aggiungi {amount} euro per {category}",
             "aggiungi {amount} euro di {category}",
+            "aggiungi {amount} euro su {category}",
+            "aggiungi {amount} per {category}",
+            "aggiungi {amount} su {category}",
             "aggiungi una spesa di {amount} euro per {category}",
             "segna {amount} euro per {category}",
             "segna {amount} euro di {category}",
+            "segna {amount} euro su {category}",
+            "segna {amount} per {category}",
+            "segna {amount} su {category}",
+            "metti {amount} euro su {category}",
+            "metti {amount} su {category}",
             "ho speso {amount} euro per {category}",
             "ho speso {amount} euro di {category}",
+            "ho speso {amount} per {category}",
+            "ho speso {amount} su {category}",
             "spesa di {amount} euro per {category}",
-            "segna {amount} euro per {category} sul wallet {wallet}",
+            "spesa di {amount} euro su {category}",
+            "{amount} euro per {category}",
+            "{amount} euro su {category}",
+            "{amount} per {category}",
+            "{amount} su {category}",
             "registra {amount} euro per {category} sul wallet {wallet}",
-            "registra {amount} euro per {category} su {wallet}",
+            "registra {amount} euro per {category} con il wallet {wallet}",
+            "segna {amount} euro per {category} sul wallet {wallet}",
             "registra una {kind} di {amount} euro per {category} sul wallet {wallet}"
           ]
         },
@@ -220,13 +243,30 @@
             {
               "name": "note",
               "type": "AMAZON.SearchQuery",
-              "elicitationRequired": false,
+              "elicitationRequired": true,
               "confirmationRequired": false,
-              "prompts": {}
+              "prompts": {
+                "elicitation": "Elicit.Slot.Note"
+              }
             }
           ]
         }
       ]
-    }
+    },
+    "prompts": [
+      {
+        "id": "Elicit.Slot.Note",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "Dimmi la nota."
+          },
+          {
+            "type": "PlainText",
+            "value": "Qual è la nota da aggiungere?"
+          }
+        ]
+      }
+    ]
   }
 }

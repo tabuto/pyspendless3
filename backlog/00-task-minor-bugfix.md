@@ -53,6 +53,7 @@ il rimando.
 | MB-008 | evolutiva | Subset di Bootstrap Icons: 59 glifi su 2.078, da 221 KB a 8 KB (font + CSS) | media | RISOLTA |
 | MB-009 | evolutiva | Icone: togliere il fallback `.woff` (180 KB, mai scaricato) e aggiungere lo script che rigenera il subset | bassa | APERTA |
 | MB-010 | evolutiva | Skill Alexa: la nota della spesa chiesta in un turno di dialogo dedicato (phrase slot, `Dialog.ElicitSlot`) | media | RISOLTA |
+| MB-011 | bug | Skill Alexa: le categorie dell'utente caricate a runtime come entità dinamiche, non scolpite nell'interaction model | alta | RISOLTA |
 
 ## Aperte
 
@@ -99,6 +100,49 @@ il rimando.
   stringhe passate a `classList.add/remove`, non solo in `class="..."`: il
   censimento deve cercare `bi-[a-z0-9-]+` ovunque, non solo negli attributi.
 
+### MB-011 — Skill Alexa: categorie dell'utente come entità dinamiche · risolta il 2026-10-20
+
+- **Tipo**: bug (di progettazione)
+- **File toccati**: `alexa-mcp-lambda/lambda_function.py`,
+  `alexa-mcp-lambda/interaction-model.it-IT.json`,
+  `alexa-mcp-lambda/test_dialog.py`, `alexa-mcp-lambda/README.md`
+
+**Problema** — lo slot type `CategoryName` conteneva un elenco di categorie
+scritto nell'interaction model. Sbagliato due volte: l'interaction model è
+**globale per la skill** mentre le categorie sono di ogni singolo account, e
+chi ha categorie diverse da quelle elencate non viene riconosciuto. Si è visto
+con `registra 85 su baby`: `baby` non era tra i valori, e l'NLU non ha associato
+la frase ad `AddMovementIntent` — arriva `FallbackIntent`, la skill risponde
+«non ho capito». Da notare che gli slot type custom *non* sono una whitelist
+chiusa in teoria (Alexa restituisce anche valori fuori elenco), ma se il
+parlato non somiglia a nessun valore noto il match dell'utterance non avviene
+affatto: il fuzzy match del server non entra nemmeno in gioco.
+
+**Soluzione** — `Dialog.UpdateDynamicEntities` (`load_dynamic_entities()`): sulla
+`LaunchRequest` la Lambda chiama `list_categories` e sostituisce
+`CategoryName`/`WalletName` con i valori veri dell'utente, letti dal campo
+`structuredContent` che il server MCP già produceva (`categories[].name`,
+`wallets[].name/.code`) — nessuna modifica lato server. `updateBehavior:
+REPLACE`, valgono per la sessione. Cambiare categorie in PySpendless non
+richiede più di toccare la skill né di rifare il Build Model.
+
+**Note / casi limite** — un'invocazione in un colpo solo («Alexa, chiedi a
+spendless di...») arriva prima che le entità esistano: il primo `FallbackIntent`
+della sessione le carica e chiede di ripetere (flag `entities_loaded` per non
+richiamare il server a ogni fallback). Se l'account non è collegato o il server
+non risponde, il caricamento viene salvato e la skill si apre comunque sui
+valori statici — che restano in repo come segnaposto strutturale, non come dati.
+Costo: una chiamata HTTP in più per sessione, sulla sola apertura.
+
+Nello stesso giro, trovati provando dall'Echo: le utterance pretendevano la
+parola «euro» e le preposizioni `per`/`di`, quindi `registra 85 su baby` non
+sarebbe stata riconosciuta comunque — ora sono 38 e coprono `per`/`di`/`su`/`in`
+con e senza «euro» (`su` è riservato alla categoria: con `su {category}` e
+`su {wallet}` insieme l'NLU non potrebbe distinguerle). Aggiunto anche un
+`LogRequestInterceptor` che logga tipo di richiesta, intent e slot: senza quello
+dai log si vedevano solo invocazioni di pochi millisecondi, senza sapere se
+fossero fallback o altro.
+
 ### MB-010 — Skill Alexa: nota della spesa chiesta a voce · risolta il 2026-10-20
 
 - **Tipo**: evolutiva
@@ -121,9 +165,15 @@ solo è legale). Il primo turno non registra niente, mette il movimento in
 `pending_movement` negli attributi di sessione e chiede «Vuoi aggiungere una
 nota?»; «sì» risponde con `Dialog.ElicitSlot` su `note` e `updatedIntent` che
 riporta gli slot già riempiti; «no» registra subito. Aggiunto il dialog model
-nell'interaction model, obbligatorio per usare quella direttiva
-(`delegationStrategy: SKILL_RESPONSE`, tutti gli slot a `elicitationRequired:
-false`: i prompt li dice il codice).
+nell'interaction model, obbligatorio sia per la direttiva sia per i sample a
+livello di slot (`Slot "note" ... includes samples, which is not supported in a
+skill without a dialog model`). Una trappola: un dialog model con tutti gli slot
+a `elicitationRequired: false` è valido secondo lo schema ma la **console lo
+pota** — non chiede niente, quindi per lei non esiste — e il build torna a
+rifiutare i sample. Serve almeno un `elicitationRequired: true` con un prompt
+vero: lo porta `note` (`Elicit.Slot.Note`). Il comportamento non cambia, perché
+con `delegationStrategy: SKILL_RESPONSE` il controllo resta alla skill e
+`Dialog.ElicitSlot` usa la frase passata dal codice, non i prompt del modello.
 
 **Note / casi limite** — tre trappole coperte:
 

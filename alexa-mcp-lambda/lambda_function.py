@@ -2,12 +2,17 @@ import logging
 import os
 
 import requests
-from ask_sdk_core.dispatch_components import AbstractRequestHandler, AbstractExceptionHandler
+from ask_sdk_core.dispatch_components import (
+    AbstractRequestHandler,
+    AbstractExceptionHandler,
+    AbstractRequestInterceptor,
+)
 from ask_sdk_core.skill_builder import SkillBuilder
 from ask_sdk_core.utils import is_request_type, is_intent_name
 from ask_sdk_core.handler_input import HandlerInput
 from ask_sdk_model import Response, Intent, Slot
-from ask_sdk_model.dialog import ElicitSlotDirective
+from ask_sdk_model.dialog import ElicitSlotDirective, DynamicEntitiesDirective
+from ask_sdk_model.er.dynamic import EntityListItem, Entity, EntityValueAndSynonyms, UpdateBehavior
 from ask_sdk_model.ui import LinkAccountCard
 
 logger = logging.getLogger(__name__)
@@ -26,6 +31,15 @@ GENERIC_ERROR_SPEECH = "Non sono riuscita a contattare PySpendless, riprova tra 
 # di sessione, che Alexa rimanda indietro a ogni turno: la Lambda resta senza
 # stato proprio, nessun database di appoggio.
 PENDING_KEY = "pending_movement"
+
+# Marca che le entità dinamiche (categorie e wallet veri dell'utente) sono già
+# state caricate in questa sessione: evita di richiamare il server a ogni turno.
+ENTITIES_KEY = "entities_loaded"
+
+# Tetto difensivo ai valori spediti in una direttiva di entità dinamiche: Alexa
+# limita la dimensione della richiesta, e un account con centinaia di categorie
+# non deve far fallire la risposta.
+MAX_DYNAMIC_VALUES = 200
 
 ASK_NOTE_SPEECH = "Vuoi aggiungere una nota?"
 ELICIT_NOTE_SPEECH = "Dimmi la nota."
@@ -48,7 +62,7 @@ def get_access_token(handler_input: HandlerInput):
     return handler_input.request_envelope.context.system.user.access_token
 
 
-def call_mcp_tool(access_token: str, tool_name: str, arguments: dict):
+def call_mcp_tool(access_token: str, tool_name: str, arguments: dict, with_structured: bool = False):
     response = requests.post(
         MCP_SERVER_URL,
         headers={"Authorization": "Bearer {}".format(access_token)},
@@ -67,12 +81,84 @@ def call_mcp_tool(access_token: str, tool_name: str, arguments: dict):
 
     body = response.json()
     if "error" in body:
-        return body["error"].get("message", "Errore del server."), True
+        message = body["error"].get("message", "Errore del server.")
+        return (message, True, {}) if with_structured else (message, True)
 
     result = body.get("result", {})
     content = result.get("content") or []
     text = content[0]["text"] if content and "text" in content[0] else "Nessuna risposta dal server."
+    if with_structured:
+        return text, result.get("isError", False), result.get("structuredContent") or {}
     return text, result.get("isError", False)
+
+
+def _entity_list(type_name: str, valori) -> EntityListItem:
+    return EntityListItem(
+        name=type_name,
+        values=[
+            Entity(id=str(i), name=EntityValueAndSynonyms(value=valore, synonyms=[]))
+            for i, valore in enumerate(valori)
+        ],
+    )
+
+
+def load_dynamic_entities(handler_input: HandlerInput) -> bool:
+    """
+    Sostituisce a runtime i valori di CategoryName e WalletName con quelli veri
+    dell'utente, letti da `list_categories` (campo `structuredContent` della
+    risposta MCP).
+
+    È il modo corretto di gestire dati per utente in una skill: l'interaction
+    model è GLOBALE per la skill, mentre categorie e wallet sono di ogni singolo
+    account, quindi non possono stare scolpiti nel modello — i valori statici in
+    `interaction-model.it-IT.json` sono solo un segnaposto strutturale. Le
+    entità dinamiche valgono per la sessione corrente (o 30 minuti).
+
+    Ritorna True se la direttiva è stata aggiunta alla risposta in costruzione.
+    """
+    access_token = get_access_token(handler_input)
+    if not access_token:
+        return False
+
+    try:
+        _, is_error, structured = call_mcp_tool(access_token, "list_categories", {}, with_structured=True)
+    except McpAuthError:
+        # Caso previsto (account da ricollegare, token scaduto): non è un errore
+        # da stack trace. Sarà il primo intent autenticato a mostrare la
+        # LinkAccountCard; qui si rinuncia solo alle entità dinamiche.
+        logger.info("entità dinamiche non caricate: token rifiutato dal server")
+        return False
+    except requests.RequestException:
+        logger.exception("caricamento delle entità dinamiche fallito")
+        return False
+
+    if is_error:
+        logger.info("list_categories ha risposto isError, nessuna entità dinamica")
+        return False
+
+    categorie = [c["name"] for c in (structured.get("categories") or []) if c.get("name")]
+    wallet = []
+    for w in structured.get("wallets") or []:
+        if w.get("name"):
+            wallet.append(w["name"])
+        if w.get("code") and w["code"] != w.get("name"):
+            wallet.append(w["code"])
+
+    if not categorie and not wallet:
+        return False
+
+    tipi = []
+    if categorie:
+        tipi.append(_entity_list("CategoryName", categorie[:MAX_DYNAMIC_VALUES]))
+    if wallet:
+        tipi.append(_entity_list("WalletName", wallet[:MAX_DYNAMIC_VALUES]))
+
+    handler_input.response_builder.add_directive(
+        DynamicEntitiesDirective(update_behavior=UpdateBehavior.REPLACE, types=tipi)
+    )
+    _session(handler_input)[ENTITIES_KEY] = True
+    logger.info("entità dinamiche caricate: %d categorie, %d wallet", len(categorie), len(wallet))
+    return True
 
 
 def _link_account_response(handler_input: HandlerInput) -> Response:
@@ -169,6 +255,11 @@ class LaunchRequestHandler(AbstractRequestHandler):
         return is_request_type("LaunchRequest")(handler_input)
 
     def handle(self, handler_input: HandlerInput) -> Response:
+        # Qui si paga l'unica chiamata extra al server della sessione: carica le
+        # categorie e i wallet dell'utente come entità dinamiche, così le frasi
+        # dette dopo l'apertura vengono riconosciute qualunque sia il loro nome.
+        load_dynamic_entities(handler_input)
+
         speech = "Ciao, sono PySpendless. Puoi dirmi ad esempio: registra una spesa di 20 euro per spesa alimentare."
         return handler_input.response_builder.speak(speech).ask(speech).response
 
@@ -342,7 +433,20 @@ class FallbackIntentHandler(AbstractRequestHandler):
         if _pending(handler_input):
             speech = "Non ho capito. {}".format(ASK_NOTE_SPEECH)
             return handler_input.response_builder.speak(speech).ask(ASK_NOTE_SPEECH).response
-        speech = "Non ho capito. Puoi chiedermi di registrare un movimento o elencare le categorie."
+
+        # Causa tipica: la categoria detta non assomiglia a nessun valore dello
+        # slot type, quindi Alexa non associa la frase a AddMovementIntent. Se è
+        # un'invocazione in un colpo solo («Alexa, chiedi a spendless di...»)
+        # le entità dinamiche non erano ancora in sessione: le carica adesso e
+        # chiede di ripetere, al secondo tentativo la categoria è nota.
+        if not _session(handler_input).get(ENTITIES_KEY) and load_dynamic_entities(handler_input):
+            speech = "Scusa, non ho capito. Puoi ripetere?"
+            return handler_input.response_builder.speak(speech).ask(speech).response
+
+        speech = (
+            "Non ho capito. Prova a dire: registra 20 euro per spesa alimentare. "
+            "Oppure chiedimi di elencare le categorie."
+        )
         return handler_input.response_builder.speak(speech).ask(speech).response
 
 
@@ -366,6 +470,29 @@ class SessionEndedRequestHandler(AbstractRequestHandler):
         return handler_input.response_builder.response
 
 
+class LogRequestInterceptor(AbstractRequestInterceptor):
+    """
+    Logga ogni richiesta in arrivo: tipo, intent e slot riempiti. Serve a
+    distinguere «Alexa non ha associato la frase all'intent» (arriva
+    `FallbackIntent`, con gli slot vuoti) da «l'intent è arrivato ma gli
+    argomenti erano sbagliati» — senza questo si vedono solo invocazioni di
+    pochi millisecondi e non si sa cosa fossero. Non logga mai l'access token.
+    """
+
+    def process(self, handler_input: HandlerInput):
+        request = handler_input.request_envelope.request
+        intent = getattr(request, "intent", None)
+        slots = {}
+        if intent is not None and intent.slots:
+            slots = {nome: slot.value for nome, slot in intent.slots.items() if slot.value}
+        logger.info(
+            "richiesta=%s intent=%s slot=%s",
+            getattr(request, "object_type", "?"),
+            getattr(intent, "name", "-"),
+            slots,
+        )
+
+
 class CatchAllExceptionHandler(AbstractExceptionHandler):
     def can_handle(self, handler_input: HandlerInput, exception: Exception) -> bool:
         return True
@@ -387,6 +514,7 @@ sb.add_request_handler(HelpIntentHandler())
 sb.add_request_handler(CancelOrStopIntentHandler())
 sb.add_request_handler(FallbackIntentHandler())
 sb.add_request_handler(SessionEndedRequestHandler())
+sb.add_global_request_interceptor(LogRequestInterceptor())
 sb.add_exception_handler(CatchAllExceptionHandler())
 
 handler = sb.lambda_handler()

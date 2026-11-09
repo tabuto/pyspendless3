@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>probe-labels</title>
+
+<!--
+  Sonda del task26-0 — il metro di misura della Fase 4 (ps-labels.js).
+
+  Perche' esiste: la grammatica delle label vive in due copie, una Python
+  (pyspendless/labels.py) e una JavaScript (static/js/ps-labels.js). I casi
+  sono gli stessi, in pyspendless/test/fixtures/labels_cases.json: il lato
+  Python li esegue in test_task26_0.py, il lato JS li esegue qui. Il progetto
+  non ha Node (tools/tailwindcss e' una CLI standalone), quindi il JS si
+  verifica nel browser.
+
+  Come si usa:
+      .claude/launch.json -> configurazione "probe" (python3 -m http.server)
+      poi: http://localhost:8765/tools/probe-labels.html
+
+  file:// NON funziona: il fetch delle fixture viene bloccato dalla CORS.
+
+  Due sezioni indipendenti:
+    A. Grammatica: i 112 casi contro window.PsLabels. Rossa finche' la Fase 4
+       non esiste.
+    B. Tom Select: verifica le assunzioni della specifica §9 (creazione di un
+       valore nuovo, chip rimovibili, maxItems, init dentro a un contenitore
+       display:none). Non dipende da ps-labels.js: serve anche in Fase 0, per
+       sapere se la Fase 4 puo' appoggiarsi a Tom Select o deve scrivere un
+       componente a mano.
+
+  Esito leggibile da script: document.title e window.__PROBE__.
+-->
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.default.min.css">
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 1.5rem; max-width: 60rem; }
+  h1 { font-size: 1.1rem; }
+  h2 { font-size: 1rem; margin-top: 2rem; border-bottom: 1px solid #8884; padding-bottom: .25rem; }
+  .ok   { color: #15803d; }
+  .fail { color: #b91c1c; font-weight: 700; }
+  .detail { color: #6b7280; white-space: pre-wrap; margin: 0 0 .25rem 1.5rem; }
+  #summary { margin: 1rem 0; padding: .75rem; border: 2px solid currentColor; font-weight: 700; }
+  .hidden-box { display: none; }
+  table { border-collapse: collapse; }
+  td { padding: 0 .5rem; vertical-align: top; }
+</style>
+</head>
+<body>
+<h1>probe-labels — task26-0</h1>
+<div id="summary">in corso…</div>
+
+<h2>A. Grammatica (fixture condivise con test_task26_0.py)</h2>
+<div id="grammar"></div>
+
+<h2>B. Tom Select — assunzioni della specifica §9</h2>
+<div id="tomselect"></div>
+<!-- Il campo nasce dentro a un contenitore display:none, come nel pannello
+     filtri di /movements: e' la condizione che sbaglia larghezze e dropdown
+     (vedi ps-show-mov.html:527). -->
+<div class="hidden-box" id="box">
+  <label for="labels-probe">Labels</label>
+  <select id="labels-probe" multiple></select>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+<script src="../pyspendless/static/js/ps-labels.js" onerror="window.__PS_LABELS_MISSING__ = true"></script>
+<script>
+const results = { passed: 0, failed: 0, failures: [] };
+
+function emit(target, ok, description, detail) {
+  const row = document.createElement('div');
+  row.className = ok ? 'ok' : 'fail';
+  row.textContent = (ok ? 'OK   ' : 'FAIL ') + description;
+  document.getElementById(target).appendChild(row);
+  if (!ok) {
+    results.failed++;
+    results.failures.push(description);
+    if (detail) {
+      const d = document.createElement('div');
+      d.className = 'detail';
+      d.textContent = detail;
+      document.getElementById(target).appendChild(d);
+    }
+  } else {
+    results.passed++;
+  }
+}
+
+function group(target, description, failures, total) {
+  emit(target, failures.length === 0,
+       description + ' (' + (total - failures.length) + '/' + total + ' casi)',
+       failures.slice(0, 5).join('\n'));
+}
+
+function finish() {
+  const el = document.getElementById('summary');
+  const ok = results.failed === 0;
+  el.className = ok ? 'ok' : 'fail';
+  el.textContent = results.passed + ' controlli superati, ' + results.failed + ' falliti'
+                 + (ok ? '' : '\n' + results.failures.join('\n'));
+  document.title = 'probe-labels: ' + results.passed + ' OK / ' + results.failed + ' FAIL';
+  window.__PROBE__ = results;
+}
+
+// ===== A. Grammatica =====================================================
+
+async function checkGrammar() {
+  let cases;
+  try {
+    const resp = await fetch('../pyspendless/test/fixtures/labels_cases.json');
+    cases = await resp.json();
+  } catch (err) {
+    emit('grammar', false, 'fixture labels_cases.json caricate', String(err)
+         + '\n(serve un server HTTP: vedi il commento in testa al file)');
+    return;
+  }
+
+  const L = window.PsLabels;
+  if (!L) {
+    emit('grammar', false, 'Fase 4 non ancora implementata: static/js/ps-labels.js non definisce window.PsLabels',
+         window.__PS_LABELS_MISSING__ ? 'il file non esiste' : 'il file esiste ma non espone PsLabels');
+    return;
+  }
+
+  const required = ['isValid', 'extract', 'extractNorm', 'hasLabel', 'addLabel',
+                    'removeLabel', 'renameLabel', 'canonicalize', 'normalizeSpace', 'decorate'];
+  const absent = required.filter((fn) => typeof L[fn] !== 'function');
+  if (absent.length) {
+    emit('grammar', false, 'PsLabels espone le funzioni del contratto', 'mancano: ' + absent.join(', '));
+    return;
+  }
+
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const run = (name, fn, argsOf) => {
+    const failures = [];
+    for (const c of cases[name]) {
+      let got;
+      try { got = fn.apply(null, argsOf(c)); }
+      catch (err) { failures.push(JSON.stringify(c) + ' -> eccezione ' + err); continue; }
+      const want = c.expected;
+      const ok = typeof want === 'boolean' ? Boolean(got) === want : eq(got, want);
+      if (!ok) failures.push(JSON.stringify(c) + ' -> ottenuto ' + JSON.stringify(got));
+    }
+    group('grammar', 'PsLabels.' + name, failures, cases[name].length);
+  };
+
+  run('is_valid',       L.isValid,       (c) => [c.name]);
+  run('extract',        L.extract,       (c) => [c.note]);
+  run('extract_norm',   L.extractNorm,   (c) => [c.note]);
+  run('has_label',      L.hasLabel,      (c) => [c.note, c.label]);
+  run('add_label',      L.addLabel,      (c) => [c.note, c.label]);
+  run('remove_label',   L.removeLabel,   (c) => [c.note, c.label]);
+  run('rename_label',   L.renameLabel,   (c) => [c.note, c.old, c.new]);
+  run('canonicalize',   L.canonicalize,  (c) => [c.note, c.mapping]);
+  run('normalize_space', L.normalizeSpace, (c) => [c.text]);
+
+  // decorate(): resa a chip senza innerHTML. Una nota ostile non deve
+  // produrre markup eseguibile (specifica §11).
+  const host = document.createElement('div');
+  host.setAttribute('data-ps-note', '');
+  host.textContent = 'spesa <b>#coop</b> e #buoni';
+  document.body.appendChild(host);
+  L.decorate(host.parentNode);
+  emit('grammar', host.querySelectorAll('a').length === 2,
+       'decorate(): una chip <a> per label', host.innerHTML);
+  emit('grammar', host.querySelector('b') === null,
+       'decorate(): il markup nel testo della nota resta testo (nessun tag creato)', host.innerHTML);
+  const href = (host.querySelector('a') || {}).getAttribute
+             ? host.querySelector('a').getAttribute('href') : '';
+  emit('grammar', /label=coop/.test(href || ''),
+       'decorate(): la chip punta a /movements?label=...', href);
+  host.remove();
+}
+
+// ===== B. Tom Select =====================================================
+
+function checkTomSelect() {
+  if (typeof TomSelect === 'undefined') {
+    emit('tomselect', false, 'Tom Select 2.3.1 caricato dal CDN',
+         'TomSelect non definito: senza rete la Fase 4 non e\' verificabile qui, '
+       + 'ma in produzione il campo deve degradare senza errori (specifica §9)');
+    return;
+  }
+  emit('tomselect', true, 'Tom Select 2.3.1 caricato dal CDN');
+
+  const REGISTRO = ['coop', 'cosmetica', 'buoni', 'vacanza2026'];
+  const isValid = (s) => /^[0-9A-Za-z_][0-9A-Za-z_-]{0,28}[0-9A-Za-z_]$|^[0-9A-Za-z_]{2}$/.test(s || '');
+  let loadCalls = 0;
+
+  const ts = new TomSelect('#labels-probe', {
+    plugins: ['remove_button'],
+    valueField: 'name', labelField: 'name', searchField: 'name',
+    create: true,
+    createFilter: isValid,
+    persist: false,
+    shouldLoad: (q) => q.length >= 1,
+    maxItems: 10,
+    maxOptions: 10,
+    load: function (q, callback) {
+      loadCalls++;
+      // Stub del fetch a /api/labels?q=: la sonda non ha un server Flask.
+      callback(REGISTRO.filter((n) => n.indexOf(q.toLowerCase()) !== -1).map((n) => ({ name: n })));
+    }
+  });
+
+  // Il contenitore era display:none all'init: e' il caso che in /movements
+  // sbaglia larghezza e posizionamento del dropdown.
+  document.getElementById('box').classList.remove('hidden-box');
+
+  emit('tomselect', !!document.querySelector('.ts-wrapper'),
+       'init dentro a un contenitore display:none non solleva');
+
+  // Lezione della Fase 0: addItem() funziona solo su un valore GIA' noto al
+  // controllo. Le label del registro arrivano dal load() remoto, quindi per
+  // aggiungerne una da codice (es. riallineamento dalla textarea) serve
+  // addOption() prima di addItem(). Senza, la chip non compare e non c'e'
+  // nessun errore: il bug piu' probabile della Fase 4.
+  ts.addItem('coop');
+  emit('tomselect', ts.getValue().indexOf('coop') === -1,
+       'addItem() su un valore non ancora caricato NON aggiunge nulla (serve addOption prima)');
+  ts.addOption({ name: 'coop' });
+  ts.addItem('coop');
+  emit('tomselect', ts.getValue().indexOf('coop') !== -1,
+       'addOption() + addItem() aggiunge la chip');
+
+  ts.createItem('nuovissima', function () {});
+  emit('tomselect', ts.getValue().indexOf('nuovissima') !== -1,
+       'create: true -> una label digitata e non in registro diventa una chip');
+
+  ts.createItem('non valida!', function () {});
+  emit('tomselect', ts.getValue().indexOf('non valida!') === -1,
+       'createFilter blocca una grafia non valida', JSON.stringify(ts.getValue()));
+
+  emit('tomselect', document.querySelectorAll('.ts-wrapper .item .remove').length >= 2,
+       'plugin remove_button: ogni chip ha la sua "x"');
+
+  ts.removeItem('coop');
+  emit('tomselect', ts.getValue().indexOf('coop') === -1,
+       'removeItem() toglie la chip (e\' l\'evento su cui si aggancia removeLabel)');
+
+  const before = ts.getValue().length;
+  for (let i = 0; i < 12; i++) ts.createItem('riempi' + i, function () {});
+  emit('tomselect', ts.getValue().length <= 10,
+       'maxItems: 10 rispettato (default P6)', 'prima ' + before + ', dopo ' + ts.getValue().length);
+
+  ts.clear();
+  ts.load('co');
+  // loadThrottle di Tom Select e' 300 ms: il load() remoto NON e' sincrono.
+  // Un test che controlla subito dopo trova zero chiamate.
+  return new Promise(function (resolve) {
+    setTimeout(function () {
+      emit('tomselect', loadCalls > 0,
+           'load() remoto invocato (dropdown da /api/labels) dopo il loadThrottle di 300 ms');
+
+      if (window.innerWidth === 0) {
+        emit('tomselect', true,
+             'larghezza del campo: controllo saltato (pannello del browser non visibile, layout a zero)');
+      } else {
+        const wrapperWidth = document.querySelector('.ts-wrapper').getBoundingClientRect().width;
+        emit('tomselect', wrapperWidth > 50,
+             'larghezza del campo sensata dopo la comparsa del contenitore',
+             'width=' + wrapperWidth + 'px — se fosse ~0, la Fase 4 deve rifare l\'init '
+           + 'alla prima apertura del pannello, come initCategorySelect() in ps-show-mov.html');
+      }
+      resolve();
+    }, 500);
+  });
+}
+
+(async function () {
+  await checkGrammar();
+  try { await checkTomSelect(); }
+  catch (err) { emit('tomselect', false, 'eccezione nella sonda Tom Select', String(err)); }
+  finish();
+})();
+</script>
+</body>
+</html>

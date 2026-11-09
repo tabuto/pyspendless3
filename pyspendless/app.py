@@ -7,13 +7,15 @@ from flask import Flask, render_template, redirect, url_for, session, request, f
 
 # Support both relative and absolute imports
 try:
-    from .conf import load_env, SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI, BASE_URL, ADMIN_USER_ID, get_db_session
-    from .repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, StatsRepository, AdminRepository, RecurrentMovementRepository, ReportRepository, UnauthorizedError
+    from .conf import load_env, SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI, BASE_URL, ADMIN_USER_ID, get_db_session, MAX_NOTE_LENGTH, MAX_LABELS_PER_MOVEMENT
+    from .repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, StatsRepository, AdminRepository, RecurrentMovementRepository, ReportRepository, LabelRepository, UnauthorizedError
+    from .models import Label
     from . import mcp_server
     from . import oauth_server
 except ImportError:
-    from conf import load_env, SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI, BASE_URL, ADMIN_USER_ID, get_db_session
-    from repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, StatsRepository, AdminRepository, RecurrentMovementRepository, ReportRepository, UnauthorizedError
+    from conf import load_env, SECRET_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, OAUTH_REDIRECT_URI, BASE_URL, ADMIN_USER_ID, get_db_session, MAX_NOTE_LENGTH, MAX_LABELS_PER_MOVEMENT
+    from repository import UserRepository, CategoryRepository, WalletRepository, MovementRepository, GroupRepository, AccountRepository, TokenRepository, StatsRepository, AdminRepository, RecurrentMovementRepository, ReportRepository, LabelRepository, UnauthorizedError
+    from models import Label
     import mcp_server
     import oauth_server
 
@@ -479,6 +481,10 @@ def create():
             repeat_source=repeat_source,
             today=_date.today(),
             recurrent_movements=recurrent_movements,
+            # Limiti del campo labels: resi come data-* sul campo, cosi'
+            # ps-labels.js non li duplica (task26-0)
+            max_note_length=MAX_NOTE_LENGTH,
+            max_labels_per_movement=MAX_LABELS_PER_MOVEMENT,
             users=[]  # TODO: implementare quando ci saranno i gruppi
         )
     finally:
@@ -490,6 +496,11 @@ def _parse_movement_filters():
     la pagina /movements e l'export CSV così da restare sempre allineati.
     """
     from datetime import date as _date
+    try:
+        from .labels import is_valid as label_is_valid
+    except ImportError:
+        from labels import is_valid as label_is_valid
+
     today = _date.today()
     default_date_from = today.replace(day=1).isoformat()
     default_date_to   = today.isoformat()
@@ -513,6 +524,11 @@ def _parse_movement_filters():
     keywords_raw  = request.args.get('keywords', default='').strip()
     keywords      = [k.strip() for k in keywords_raw.replace(',', ' ').split() if k.strip()]
 
+    # Label filter: ?label=coop&label=buoni → AND semantics.
+    # Le grafie non valide si ignorano in silenzio (input non fidato).
+    labels_raw = request.args.getlist('label')
+    labels = [l for l in (s.strip().lstrip('#') for s in labels_raw) if label_is_valid(l)]
+
     # Numero di filtri che si discostano dai default: usato dalla pagina
     # /movements per aprire il pannello filtri (chiuso di default) e per il
     # badge con il conteggio, così i filtri attivi restano visibili.
@@ -522,6 +538,7 @@ def _parse_movement_filters():
         1 if category_type else 0,
         1 if category_ids else 0,
         1 if keywords else 0,
+        1 if labels else 0,
     ])
 
     return {
@@ -532,6 +549,8 @@ def _parse_movement_filters():
         'category_ids':  category_ids,
         'keywords':      keywords,
         'keywords_raw':  keywords_raw,
+        'labels':        labels,
+        'labels_raw':    labels_raw,
         'active_count':  active_count,
     }
 
@@ -557,6 +576,7 @@ def movements():
     category_ids  = f['category_ids']
     keywords      = f['keywords']
     keywords_raw  = f['keywords_raw']
+    labels        = f['labels']
 
     db = get_db_session()
     try:
@@ -577,6 +597,7 @@ def movements():
             date_from=date_from,
             date_to=date_to,
             keywords=keywords,
+            labels=labels,
         )
 
         # Recupera statistiche
@@ -588,6 +609,7 @@ def movements():
             date_from=date_from,
             date_to=date_to,
             keywords=keywords,
+            labels=labels,
         )
 
         category_types = [
@@ -609,6 +631,9 @@ def movements():
                 'category_type': category_type,
                 'category_ids':  category_ids,
                 'keywords':      keywords_raw,
+                # Le label attive servono al pannello filtri per ri-selezionarle
+                # dopo il reload (task26-0)
+                'labels':        f['labels'],
                 'active_count':  f['active_count'],
             }
         )
@@ -653,6 +678,103 @@ def api_get_categories():
         db.close()
 
 
+@app.route("/api/labels", methods=['GET'])
+def api_get_labels():
+    """
+    API per recuperare le label dell'account.
+
+    Parametri:
+    - ?q=<str>&limit=10: ricerca per sottostringa (LIKE %q%), prefix-match prima.
+    - ?with_counts=1: restituisce label con conteggio dei movimenti.
+    """
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+
+    account_id = session.get('account_id')
+
+    db = get_db_session()
+    try:
+        labels_repo = LabelRepository(db)
+
+        if request.args.get('with_counts'):
+            # Restituisce tutte le label dell'account con conteggi
+            labels_with_counts = labels_repo.get_labels_with_counts(account_id)
+            return jsonify(labels_with_counts), 200
+        else:
+            # Ricerca per sottostringa
+            q = request.args.get('q', '').strip()
+            limit = min(50, max(1, request.args.get('limit', type=int, default=10)))
+            found = labels_repo.search(account_id, q, limit=limit)
+            result = [{'id': label.id, 'name': label.name} for label in found]
+            return jsonify(result), 200
+    finally:
+        db.close()
+
+
+@app.route("/api/labels/<int:label_id>", methods=['PUT'])
+def api_rename_label(label_id):
+    """
+    API per rinominare una label.
+
+    Body: {'name': '<nuovo_nome>'}
+    """
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+
+    account_id = session.get('account_id')
+    data = request.get_json(silent=True) or {}
+    new_name = data.get('name', '').strip()
+
+    db = get_db_session()
+    try:
+        labels_repo = LabelRepository(db)
+
+        # Verifica che la label appartenga all'account
+        label = db.query(Label).filter_by(id=label_id, account_id=account_id).first()
+        if not label:
+            return jsonify({'error': 'Label non trovata'}), 404
+
+        # Valida il nuovo nome
+        try:
+            from .labels import is_valid as label_is_valid
+        except ImportError:
+            from labels import is_valid as label_is_valid
+
+        if not label_is_valid(new_name):
+            return jsonify({'error': 'Nome non valido'}), 400
+
+        # Rinomina la label; il conteggio dei movimenti riscritti serve alla
+        # pagina di gestione per dire all'utente cosa e' cambiato
+        updated = labels_repo.rename_label(label_id, new_name, account_id)
+        return jsonify({'status': 'ok', 'updated': updated}), 200
+    finally:
+        db.close()
+
+
+@app.route("/api/labels/<int:label_id>", methods=['DELETE'])
+def api_delete_label(label_id):
+    """API per eliminare una label."""
+    if not session.get('user_id'):
+        return jsonify({'error': 'Non autenticato'}), 401
+
+    account_id = session.get('account_id')
+
+    db = get_db_session()
+    try:
+        labels_repo = LabelRepository(db)
+
+        # Verifica che la label appartenga all'account
+        label = db.query(Label).filter_by(id=label_id, account_id=account_id).first()
+        if not label:
+            return jsonify({'error': 'Label non trovata'}), 404
+
+        # Elimina la label
+        updated = labels_repo.delete_label(label_id, account_id)
+        return jsonify({'status': 'ok', 'updated': updated}), 200
+    finally:
+        db.close()
+
+
 @app.route("/api/movements", methods=['GET'])
 def api_get_movements():
     """
@@ -691,6 +813,15 @@ def api_get_movements():
     keywords_raw  = request.args.get('keywords', default='').strip()
     keywords      = [k.strip() for k in keywords_raw.replace(',', ' ').split() if k.strip()]
 
+    # Label filter: ?label=coop&label=buoni → AND semantics.
+    # Le grafie non valide si ignorano in silenzio (input non fidato).
+    try:
+        from .labels import is_valid as label_is_valid
+    except ImportError:
+        from labels import is_valid as label_is_valid
+    labels_raw = request.args.getlist('label')
+    labels = [l for l in (s.strip().lstrip('#') for s in labels_raw) if label_is_valid(l)]
+
     page          = max(1, request.args.get('page',    type=int, default=1))
     per_page      = min(50, max(1, request.args.get('per_page', type=int, default=20)))
 
@@ -705,6 +836,7 @@ def api_get_movements():
             date_from=date_from,
             date_to=date_to,
             keywords=keywords,
+            labels=labels,
         )
 
         total    = len(all_movements)
@@ -764,6 +896,7 @@ def api_export_movements_filtered():
             date_from=f['date_from'],
             date_to=f['date_to'],
             keywords=f['keywords'],
+            labels=f['labels'],
         )
 
         import csv
@@ -845,6 +978,7 @@ def api_bulk_update_movements():
             'date_from':     f['date_from'],
             'date_to':       f['date_to'],
             'keywords':      f['keywords'],
+            'labels':        f['labels'],
         }
 
         updated = movement_repo.bulk_update_movements(
@@ -1134,6 +1268,9 @@ def recurrent_movements_page():
             recurrent_movements=recurrent_movements,
             categories=categories,
             wallets=wallets,
+            # Limiti del campo labels, come in create() (task26-0)
+            max_note_length=MAX_NOTE_LENGTH,
+            max_labels_per_movement=MAX_LABELS_PER_MOVEMENT,
         )
     finally:
         db.close()
@@ -1263,6 +1400,15 @@ def settings_categories():
         flash('Devi effettuare il login', 'warning')
         return redirect(url_for('login'))
     return render_template("ps-setting-categories.html")
+
+
+@app.route("/settings/labels")
+def settings_labels():
+    """Pagina gestione label"""
+    if not session.get('user_id'):
+        flash('Devi effettuare il login', 'warning')
+        return redirect(url_for('login'))
+    return render_template("ps-setting-labels.html")
 
 
 @app.route("/settings/wallets")

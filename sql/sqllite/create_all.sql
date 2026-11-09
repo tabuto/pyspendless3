@@ -9,3 +9,5 @@
 .read sql/sqllite/create_group.sql
 .read sql/sqllite/create_groupmembership.sql
 .read sql/sqllite/create_token.sql
+.read sql/sqllite/create_recurrentmovement.sql
+.read sql/sqllite/create_label.sql

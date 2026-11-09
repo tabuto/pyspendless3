@@ -1,5 +1,10 @@
 {% extends 'ps-nav.html' %}
 
+{% block head %}
+<!-- Tom Select: tema "default" (non piu' il tema del vecchio framework CSS) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.default.min.css">
+{% endblock %}
+
 {% block nav_content %}
 <div class="w-full px-4 mt-4">
   <h1 class="mb-4">Spese Ricorrenti</h1>
@@ -50,6 +55,16 @@
         <div class="mb-3">
           <label for="rm_note" class="ps-label">Nota</label>
           <textarea class="ps-input" id="rm_note" rows="2"></textarea>
+        </div>
+        <div class="mb-3" data-ps-labels-wrap>
+          <label for="labels" class="ps-label">Labels</label>
+          <select id="labels" name="labels" multiple
+                  data-ps-labels
+                  data-ps-labels-target="#rm_note"
+                  data-ps-note-max="{{ max_note_length }}"
+                  data-ps-labels-max="{{ max_labels_per_movement }}"></select>
+          <p class="ps-help" data-ps-labels-message hidden></p>
+          <p class="ps-help">Le label finiscono nella nota, scritte con #.</p>
         </div>
       </div>
       <div class="ps-card-footer flex gap-2">
@@ -177,7 +192,10 @@ function editRecurrent(id, name, movType, categoryId, walletId, amount, note) {
   filterCategories(categoryId);
   document.getElementById('rm_wallet').value = walletId;
   document.getElementById('rm_amount').value = amount;
-  document.getElementById('rm_note').value = note;
+  const noteEl = document.getElementById('rm_note');
+  noteEl.value = note;
+  // Emetti l'evento input per riallineare le chip (ps-labels.js lo ascolta)
+  noteEl.dispatchEvent(new Event('input', { bubbles: true }));
 
   document.getElementById('form-title').textContent = 'Modifica Spesa Ricorrente';
   document.getElementById('cancel-btn').style.display = '';
@@ -285,4 +303,11 @@ function showAlert(message, type) {
   setTimeout(() => { div.classList.remove('show'); setTimeout(() => div.remove(), 150); }, 5000);
 }
 </script>
+
+<!-- Tom Select (multi-select mobile-friendly; lo stylesheet e' nel block "head") -->
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+
+<!-- ps-labels.js per il campo a chip -->
+<script src="{{ url_for('static', filename='js/ps-labels.js') }}"></script>
+
 {% endblock %}

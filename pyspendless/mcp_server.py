@@ -36,13 +36,13 @@ from decimal import Decimal, InvalidOperation
 
 # Support both relative and absolute imports (stesso pattern di app.py)
 try:
-    from .conf import get_db_session, BASE_URL
+    from .conf import get_db_session, BASE_URL, MAX_NOTE_LENGTH
     from .repository import (
         UserRepository, CategoryRepository, WalletRepository,
         MovementRepository, TokenRepository
     )
 except ImportError:
-    from conf import get_db_session, BASE_URL
+    from conf import get_db_session, BASE_URL, MAX_NOTE_LENGTH
     from repository import (
         UserRepository, CategoryRepository, WalletRepository,
         MovementRepository, TokenRepository
@@ -113,7 +113,7 @@ FALLBACK_TOKEN_HEADERS = ('x-api-token', 'x-api-key', 'x-auth-token')
 LOCAL_TIMEZONE = 'Europe/Rome'
 
 # Limiti difensivi sui testi che rientrano nel contesto del modello
-MAX_NOTE_LENGTH = 500
+# MAX_NOTE_LENGTH importata da conf.py (task26-0)
 MAX_LISTED_ITEMS = 200
 
 # Tipi di categoria gestibili dal tool: 'transfer' è escluso (decisione D6)

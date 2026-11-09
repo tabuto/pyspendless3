@@ -4,8 +4,20 @@
     {
       "name": "pyspendless",
       "runtimeExecutable": ".venv/bin/python3",
-      "runtimeArgs": ["pyspendless/app.py"],
+      "runtimeArgs": [
+        "pyspendless/app.py"
+      ],
       "port": 5000
+    },
+    {
+      "name": "probe",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8765"
+      ],
+      "port": 8765
     }
   ]
 }

@@ -1,0 +1,150 @@
+{
+  "_meta": {
+    "task": "26-0",
+    "scopo": "Casi della grammatica delle label, condivisi fra il parser Python (pyspendless/labels.py) e quello JavaScript (static/js/ps-labels.js). Sono il CONTRATTO: due implementazioni della stessa grammatica divergono se non hanno lo stesso metro.",
+    "consumatori": [
+      "pyspendless/test/test_task26_0.py (sezione 'parser')",
+      "tools/probe-labels.html (stessi casi, sul JS, nel browser)"
+    ],
+    "regola": "#  + 2..30 caratteri in [0-9A-Za-z_-], primo e ultimo carattere NON '-'. Delimitata a sinistra da inizio stringa o da un carattere che non e' di parola (Unicode), '#' o '-'; a destra da fine stringa o da un carattere che non e' di parola o '-'. Confronto case-insensitive. Gli accenti non fanno parte del charset e NON vengono troncati: #citta' non e' una label, e non vale come #cit."
+  },
+
+  "is_valid": [
+    {"name": "coop", "expected": true},
+    {"name": "buoni", "expected": true},
+    {"name": "1234", "expected": true, "nota": "le sole cifre sono ammesse"},
+    {"name": "vacanza2026", "expected": true},
+    {"name": "coop-bio", "expected": true, "nota": "'-' ammesso all'interno"},
+    {"name": "coop--bio", "expected": true},
+    {"name": "vacanza_2026", "expected": true},
+    {"name": "_coop", "expected": true},
+    {"name": "coop_", "expected": true},
+    {"name": "ab", "expected": true, "nota": "lunghezza minima"},
+    {"name": "abcdefghijabcdefghijabcdefghij", "expected": true, "nota": "30 caratteri: lunghezza massima"},
+    {"name": "abcdefghijabcdefghijabcdefghijk", "expected": false, "nota": "31 caratteri"},
+    {"name": "a", "expected": false, "nota": "sotto la lunghezza minima"},
+    {"name": "", "expected": false},
+    {"name": "-coop", "expected": false, "nota": "non puo' iniziare con '-'"},
+    {"name": "coop-", "expected": false, "nota": "non puo' finire con '-'"},
+    {"name": "città", "expected": false, "nota": "accento fuori charset"},
+    {"name": "città", "expected": false},
+    {"name": "co op", "expected": false, "nota": "nessuno spazio"},
+    {"name": "co.op", "expected": false},
+    {"name": "#coop", "expected": false, "nota": "is_valid riceve il nome SENZA '#': chi chiama lo toglie prima"}
+  ],
+
+  "extract": [
+    {"note": "", "expected": []},
+    {"note": null, "expected": [], "nota": "note e' nullable: nessuna eccezione"},
+    {"note": "nessuna label qui", "expected": []},
+    {"note": "#coop", "expected": ["coop"]},
+    {"note": "Spesa coop settimanale #buoni #coop", "expected": ["buoni", "coop"], "nota": "ordine di prima comparsa; 'coop' senza '#' non conta"},
+    {"note": "Spesina #coop settimanale con #buoni", "expected": ["coop", "buoni"]},
+    {"note": "spesa #coop, pane", "expected": ["coop"], "nota": "la virgola delimita e resta nel testo"},
+    {"note": "(#coop)", "expected": ["coop"]},
+    {"note": "spesa #coop.", "expected": ["coop"]},
+    {"note": "spesa #coop; pane", "expected": ["coop"]},
+    {"note": "\"#coop\"", "expected": ["coop"]},
+    {"note": "##coop", "expected": [], "nota": "il '#' non e' a inizio parola"},
+    {"note": "email#coop", "expected": []},
+    {"note": "spesa#coop", "expected": []},
+    {"note": "#coop#buoni", "expected": ["coop"], "nota": "il secondo '#' e' preceduto da una lettera"},
+    {"note": "#a", "expected": []},
+    {"note": "#", "expected": []},
+    {"note": "# coop", "expected": []},
+    {"note": "#1234", "expected": ["1234"]},
+    {"note": "#città", "expected": [], "nota": "nessun troncamento a #cit"},
+    {"note": "#però che spesa", "expected": []},
+    {"note": "#coop-bio", "expected": ["coop-bio"]},
+    {"note": "#-coop", "expected": [], "nota": "candidato '-coop' scartato da is_valid"},
+    {"note": "#coop-", "expected": [], "nota": "candidato 'coop-' scartato da is_valid"},
+    {"note": "#vacanza_2026", "expected": ["vacanza_2026"]},
+    {"note": "#coop #COOP", "expected": ["coop"], "nota": "dedup case-insensitive: vince la prima grafia incontrata"},
+    {"note": "#COOP #coop", "expected": ["COOP"]},
+    {"note": "#coop pane #coop latte #coop", "expected": ["coop"]},
+    {"note": "riga uno #coop\nriga due #buoni", "expected": ["coop", "buoni"], "nota": "il newline delimita"},
+    {"note": "tab\t#coop\tfine", "expected": ["coop"]},
+    {"note": "Spesa #Coop", "expected": ["Coop"], "nota": "extract restituisce la grafia come scritta, non la canonica"},
+    {"note": "#abcdefghijabcdefghijabcdefghijk", "expected": [], "nota": "31 caratteri"},
+    {"note": "<script>#coop</script>", "expected": ["coop"], "nota": "il parser non interpreta markup; la resa in elenco usa nodi DOM"}
+  ],
+
+  "extract_norm": [
+    {"note": "#COOP #Buoni", "expected": ["coop", "buoni"]},
+    {"note": "#coop #COOP", "expected": ["coop"]}
+  ],
+
+  "has_label": [
+    {"note": "spesa #coop", "label": "coop", "expected": true},
+    {"note": "spesa #COOP", "label": "coop", "expected": true},
+    {"note": "spesa #coop", "label": "COOP", "expected": true},
+    {"note": "spesa #coop", "label": "#coop", "expected": true, "nota": "il '#' davanti e' tollerato in input"},
+    {"note": "spesa #coopx", "label": "coop", "expected": false, "nota": "e' il caso che il LIKE '%#coop%' sbaglierebbe"},
+    {"note": "spesa #coop-bio", "label": "coop", "expected": false},
+    {"note": "spesa coop", "label": "coop", "expected": false},
+    {"note": null, "label": "coop", "expected": false},
+    {"note": "spesa #coop", "label": "", "expected": false}
+  ],
+
+  "add_label": [
+    {"note": "", "label": "coop", "expected": "#coop"},
+    {"note": null, "label": "coop", "expected": "#coop"},
+    {"note": "spesa", "label": "coop", "expected": "spesa #coop"},
+    {"note": "spesa ", "label": "coop", "expected": "spesa #coop", "nota": "nessuno spazio doppio"},
+    {"note": "spesa", "label": "#coop", "expected": "spesa #coop"},
+    {"note": "spesa #coop", "label": "coop", "expected": "spesa #coop", "nota": "idempotente"},
+    {"note": "spesa #COOP", "label": "coop", "expected": "spesa #COOP", "nota": "non duplica e non riscrive: la grafia la sistema canonicalize, lato server"},
+    {"note": "spesa #coopx", "label": "coop", "expected": "spesa #coopx #coop"},
+    {"note": "Spesina #coop settimanale", "label": "buoni", "expected": "Spesina #coop settimanale #buoni", "nota": "sempre in coda, mai in mezzo"},
+    {"note": "riga uno\nriga due", "label": "coop", "expected": "riga uno\nriga due #coop"}
+  ],
+
+  "remove_label": [
+    {"note": "Spesina #coop settimanale con #buoni", "label": "coop", "expected": "Spesina settimanale con #buoni", "nota": "il caso del requisito A3"},
+    {"note": "#coop spesa", "label": "coop", "expected": "spesa"},
+    {"note": "spesa #coop", "label": "coop", "expected": "spesa"},
+    {"note": "#coop", "label": "coop", "expected": "", "nota": "nota vuota: Movement.note e' nullable"},
+    {"note": "spesa #coop, pane", "label": "coop", "expected": "spesa, pane", "nota": "nessuno spazio prima della virgola"},
+    {"note": "spesa #coop. pane", "label": "coop", "expected": "spesa. pane"},
+    {"note": "a #coop b #coop c", "label": "coop", "expected": "a b c", "nota": "TUTTE le occorrenze (default P2)"},
+    {"note": "spesa #COOP", "label": "coop", "expected": "spesa", "nota": "case-insensitive"},
+    {"note": "spesa #coopx", "label": "coop", "expected": "spesa #coopx", "nota": "non tocca la label simile"},
+    {"note": "spesa #coop-bio", "label": "coop", "expected": "spesa #coop-bio"},
+    {"note": "(#coop)", "label": "coop", "expected": "()", "nota": "le parentesi rimaste vuote NON si ripuliscono: toccare la punteggiatura dell'utente oltre lo spazio e' fuori mandato"},
+    {"note": "riga uno #coop\nriga due", "label": "coop", "expected": "riga uno\nriga due", "nota": "il newline sopravvive: normalize_space collassa spazi e tab, non le righe"},
+    {"note": "spesa", "label": "coop", "expected": "spesa", "nota": "label assente: nota invariata"},
+    {"note": null, "label": "coop", "expected": ""}
+  ],
+
+  "rename_label": [
+    {"note": "spesa #coopp", "old": "coopp", "new": "coop", "expected": "spesa #coop"},
+    {"note": "spesa #COOPP settimanale", "old": "coopp", "new": "Coop", "expected": "spesa #Coop settimanale", "nota": "la vecchia si trova case-insensitive, la nuova si scrive come passata"},
+    {"note": "spesa #coopp e #coop", "old": "coopp", "new": "coop", "expected": "spesa e #coop", "nota": "MERGE: la nuova label era GIA' presente, quindi l'occorrenza vecchia si RIMUOVE invece di sostituirla. Sostituirla e cancellare la seconda lascerebbe 'spesa #coop e', con la congiunzione sospesa."},
+    {"note": "#coopp #coopp", "old": "coopp", "new": "coop", "expected": "#coop", "nota": "stessa regola: la prima si sostituisce, le successive si rimuovono"},
+    {"note": "spesa #coopx", "old": "coop", "new": "nuova", "expected": "spesa #coopx", "nota": "non tocca la label simile"},
+    {"note": "spesa", "old": "coop", "new": "nuova", "expected": "spesa"}
+  ],
+
+  "canonicalize": [
+    {"note": "spesa #Coop e #BUONI", "mapping": {"coop": "coop", "buoni": "buoni"}, "expected": "spesa #coop e #buoni", "nota": "decisione D4"},
+    {"note": "spesa #coop", "mapping": {"coop": "Coop"}, "expected": "spesa #Coop"},
+    {"note": "spesa #coop", "mapping": {}, "expected": "spesa #coop", "nota": "label non in registro: grafia invariata"},
+    {"note": "#coopx #coop", "mapping": {"coop": "Coop"}, "expected": "#coopx #Coop"},
+    {"note": "#coop #COOP", "mapping": {"coop": "Coop"}, "expected": "#Coop #Coop", "nota": "tutte le occorrenze, anche quelle duplicate: canonicalize non deduplica"},
+    {"note": null, "mapping": {"coop": "Coop"}, "expected": ""}
+  ],
+
+  "normalize_space": [
+    {"text": "a  b", "expected": "a b"},
+    {"text": "a     b", "expected": "a b"},
+    {"text": " a b ", "expected": "a b"},
+    {"text": "a , b", "expected": "a, b"},
+    {"text": "a ; b", "expected": "a; b"},
+    {"text": "a .", "expected": "a."},
+    {"text": "( a )", "expected": "(a)"},
+    {"text": "a\n\nb", "expected": "a\n\nb", "nota": "le righe vuote dell'utente si rispettano"},
+    {"text": "a  \n  b", "expected": "a\nb", "nota": "spazi a fine e inizio riga: via"},
+    {"text": "a\t\tb", "expected": "a b"},
+    {"text": "", "expected": ""}
+  ]
+}

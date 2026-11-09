@@ -76,7 +76,7 @@
                 <tr>
                   <td>{{ mov.move_date.strftime('%d/%m/%Y') }}</td>
                   <td>{{ mov.category_obj.name if mov.category_obj else mov.category }}</td>
-                  <td>{{ mov.note or '-' }}</td>
+                  <td data-ps-note>{{ mov.note or '-' }}</td>
                   <td>{{ mov.wallet_obj.name if mov.wallet_obj else mov.wallet }}</td>
                   <td class="text-right ps-amount-income">
                     {% if mov.income %}
@@ -170,6 +170,9 @@
     </div>
   </div>
 </div>
+
+<!-- ps-labels.js: componente per la resa delle label come chip cliccabili -->
+<script src="{{ url_for('static', filename='js/ps-labels.js') }}"></script>
 
 <script>
 async function deleteMovement(movementId) {
@@ -292,7 +295,7 @@ function showAlert(message, type) {
           '</div>' +
           '<div class="flex justify-between items-center mt-1">' +
             '<span class="ps-muted">' + escHtml(mov.move_date) + '</span>' +
-            (note ? '<span class="ps-muted italic truncate ml-2" style="max-width:50%">' + note + '</span>' : '') +
+            (note ? '<span class="ps-muted italic truncate ml-2" data-ps-note style="max-width:50%">' + note + '</span>' : '') +
           '</div>' +
           '<div class="mt-2 text-right">' +
             '<a href="/create?movement_id=' + encodeURIComponent(mov.id) + '" class="ps-btn ps-btn-sm ps-btn-outline-primary py-0 px-2 mr-1" title="Modifica">' +
@@ -326,6 +329,11 @@ function showAlert(message, type) {
         noResults.classList.remove('hidden');
       } else {
         renderCards(data.movements);
+        // Task26-0 Fase 6: le card appena rese hanno data-ps-note, richiama decorate
+        // sul container per convertire le label in chip cliccabili.
+        if (typeof PsLabels !== 'undefined' && PsLabels.decorate) {
+          PsLabels.decorate(container);
+        }
         if (!hasMore) {
           noMore.classList.remove('hidden');
         }
@@ -346,5 +354,14 @@ function showAlert(message, type) {
 
   observer.observe(trigger);
 })();
+
+// ── Decorate label chips on page load ────────────────────────────────────
+// La tabella desktop e le card mobile (se già caricate) hanno data-ps-note;
+// decorate() le converte in chip cliccabili.
+document.addEventListener('DOMContentLoaded', function() {
+  if (typeof PsLabels !== 'undefined' && PsLabels.decorate) {
+    PsLabels.decorate();
+  }
+});
 </script>
 {% endblock %}

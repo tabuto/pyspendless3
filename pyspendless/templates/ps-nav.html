@@ -16,9 +16,9 @@
   Tailwind di default), sidebar fissa da `lg` in su. Il drawer e' il
   componente generico di ps-ui.js (PsDrawer).
 
-  Le 13 destinazioni e il loro ordine sono il contratto di
+  Le 14 destinazioni e il loro ordine sono il contratto di
   pyspendless/test/test_task19_0.py (NAV_LINKS_ORDER): non riordinare, non
-  rimuovere. "Profilo" (Impostazioni) non e' fra le 13 perche' il test lo
+  rimuovere. "Profilo" (Impostazioni) non e' fra le 14 perche' il test lo
   ignora, non perche' sia facoltativo: esisteva anche nella shell precedente,
   quindi resta. Rimuoverlo sarebbe un cambio funzionale, non un restyling.
 
@@ -120,6 +120,12 @@
               <a href="{{ url_for('settings_categories') }}" class="ps-nav-link pl-10">
                 <i class="bi bi-tag" aria-hidden="true"></i>
                 <span>Categorie</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('settings_labels') }}" class="ps-nav-link pl-10">
+                <i class="bi bi-hash" aria-hidden="true"></i>
+                <span>Labels</span>
               </a>
             </li>
             <li>

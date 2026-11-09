@@ -5,7 +5,7 @@ Costanti, configurazioni e funzioni per il database
 
 import os
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
 from contextlib import contextmanager
 
@@ -94,10 +94,40 @@ ADMIN_USER_ID = os.getenv('ADMIN_USER_ID')
 # ===== MAINTENANCE MODE =====
 MAINTENANCE_MODE = os.getenv('MAINTENANCE_MODE', '0') == '1'
 
+# ===== LABEL E NOTA (task26-0) =====
+MAX_NOTE_LENGTH = 500
+MAX_LABELS_PER_MOVEMENT = 10
+
 # ===== DATABASE ENGINE E SESSION =====
 # Engine globale per l'applicazione
 _engine = None
 _SessionLocal = None
+
+
+def register_sqlite_functions(engine):
+    """Registra funzioni SQL personalizzate per SQLite (task26-0).
+
+    Registra ps_has_label per il filtro per label sui movimenti.
+    Deve essere chiamata subito dopo create_engine e prima che la connessione
+    venga usata.
+    """
+    # Lo stesso schema di app.py/mcp_server.py: il WSGI di PythonAnywhere
+    # importa il progetto come PACKAGE, e un import piatto qui fa fallire con
+    # ModuleNotFoundError ogni pagina che tocca il database.
+    try:
+        from .labels import has_label
+    except ImportError:
+        from labels import has_label
+
+    @event.listens_for(engine, "connect")
+    def _on_connect(dbapi_conn, _record):
+        """Registra la funzione ps_has_label sulla connessione."""
+        fn = lambda note, name: 1 if has_label(note, name) else 0
+        try:
+            dbapi_conn.create_function("ps_has_label", 2, fn, deterministic=True)
+        except TypeError:  # sqlite3 troppo vecchio per deterministic
+            dbapi_conn.create_function("ps_has_label", 2, fn)
+
 
 def get_db_engine():
     """Ritorna l'engine del database (singleton)"""
@@ -114,6 +144,8 @@ def get_db_engine():
             connect_args=connect_args,
             echo=FLASK_ENV == 'development'  # Log SQL queries in development
         )
+        # Registra le funzioni SQL personalizzate per SQLite
+        register_sqlite_functions(_engine)
     return _engine
 
 def get_session_factory():

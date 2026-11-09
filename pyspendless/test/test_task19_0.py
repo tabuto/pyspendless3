@@ -283,6 +283,7 @@ NAV_LINKS_ORDER = [
     "/dashboard/yearly",
     "/reports",
     "/settings/categories",
+    "/settings/labels",
     "/settings/wallets",
     "/settings/group",
     "/settings/import-export",

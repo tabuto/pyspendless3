@@ -1,0 +1,309 @@
+{% extends 'ps-nav.html' %}
+
+{% block nav_content %}
+<div class="w-full px-4 mt-4">
+  <h1 class="mb-4">Gestione Label</h1>
+
+  <!-- Alert per messaggi -->
+  <div id="alertContainer"></div>
+
+  <!-- Avviso sul rischio R1: correzione massiva cancella le label -->
+  <div class="ps-alert ps-alert-info mb-4">
+    <i class="bi bi-info-circle"></i>
+    <strong>Nota:</strong> La correzione massiva dei movimenti (in /movements) sostituisce integralmente la nota, quindi rimuove tutte le label dei movimenti filtrati. Se usi quella funzione, le label andranno perse.
+  </div>
+
+  <!-- Card con la tabella -->
+  <div class="ps-card">
+    <div class="ps-card-header">
+      <div>Label dei movimenti</div>
+    </div>
+    <div class="ps-card-body">
+      <table class="ps-table">
+        <thead>
+          <tr>
+            <th>Label</th>
+            <th style="width: 150px; text-align: right;">Movimenti</th>
+            <th style="width: 150px;">Azioni</th>
+          </tr>
+        </thead>
+        <tbody id="labelsTableBody">
+          <!-- Popolato dinamicamente -->
+        </tbody>
+      </table>
+      <div id="emptyState" class="text-center py-8" style="display: none;">
+        <p>Nessuna label ancora creata. Le label nascono usandole nei movimenti.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Rinomina Label -->
+<dialog class="ps-modal" id="renameLabelModal">
+  <div class="ps-modal-panel">
+    <div class="ps-modal-header">
+      <h5 class="ps-modal-title">Rinomina Label</h5>
+      <button type="button" class="ps-btn-close" aria-label="Chiudi" data-bs-dismiss="modal"></button>
+    </div>
+    <div class="ps-modal-body">
+      <form id="renameLabelForm">
+        <input type="hidden" id="renameLabelId">
+        <input type="hidden" id="renameLabelOldName">
+        <div class="mb-3">
+          <label for="renameLabelName" class="ps-label">Nuovo nome</label>
+          <input type="text" class="ps-input" id="renameLabelName" placeholder="#nuova" required>
+          <small class="ps-help">
+            Non includere il #: verrà aggiunto automaticamente.
+          </small>
+        </div>
+        <!-- Messaggio di merge se la label esiste già (aggiunto dinamicamente) -->
+        <div id="mergeWarning" style="display: none;" class="ps-alert ps-alert-warning mb-3">
+          <i class="bi bi-exclamation-triangle"></i>
+          <strong id="mergeWarningText"></strong>
+        </div>
+        <!-- Conteggio movimenti interessati -->
+        <div class="ps-alert ps-alert-info">
+          <i class="bi bi-info-circle"></i>
+          <strong id="renameMovementsText"></strong>
+        </div>
+      </form>
+    </div>
+    <div class="ps-modal-footer">
+      <button type="button" class="ps-btn ps-btn-secondary" data-bs-dismiss="modal">Annulla</button>
+      <button type="button" class="ps-btn ps-btn-primary" onclick="confirmRenameLabel()">Salva</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- Modal Elimina Label -->
+<dialog class="ps-modal" id="deleteLabelModal">
+  <div class="ps-modal-panel">
+    <div class="ps-modal-header" style="background-color: color-mix(in srgb, var(--ps-expense) 12%, var(--ps-surface)); color: var(--ps-expense);">
+      <h5 class="ps-modal-title">
+        <i class="bi bi-exclamation-triangle"></i> Elimina Label
+      </h5>
+      <button type="button" class="ps-btn-close" aria-label="Chiudi" data-bs-dismiss="modal"></button>
+    </div>
+    <div class="ps-modal-body">
+      <div class="ps-alert ps-alert-warning">
+        <i class="bi bi-info-circle"></i>
+        <strong id="deleteLabelWarningText"></strong>
+      </div>
+      <p id="deleteLabelMessage"></p>
+      <input type="hidden" id="deleteLabelId">
+    </div>
+    <div class="ps-modal-footer">
+      <button type="button" class="ps-btn ps-btn-secondary" data-bs-dismiss="modal">Annulla</button>
+      <button type="button" class="ps-btn ps-btn-danger" onclick="confirmDeleteLabel()">
+        <i class="bi bi-trash"></i> Elimina
+      </button>
+    </div>
+  </div>
+</dialog>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allLabels = [];
+
+// Carica le label all'avvio
+document.addEventListener('DOMContentLoaded', function() {
+  loadLabels();
+});
+
+function showAlert(message, type = 'success') {
+  const alertClass = type === 'success' ? 'ps-alert-success'
+    : type === 'danger' ? 'ps-alert-danger'
+    : type === 'warning' ? 'ps-alert-warning'
+    : 'ps-alert-info';
+  const alertDiv = document.createElement('div');
+  alertDiv.className = `ps-alert ${alertClass} ps-alert-dismissible fade show`;
+  alertDiv.innerHTML = `
+    ${message}
+    <button type="button" class="ps-btn-close" data-bs-dismiss="alert" aria-label="Chiudi"></button>
+  `;
+  document.getElementById('alertContainer').appendChild(alertDiv);
+
+  setTimeout(() => {
+    alertDiv.remove();
+  }, 5000);
+}
+
+function loadLabels() {
+  fetch('/api/labels?with_counts=1')
+    .then(response => response.json())
+    .then(labels => {
+      allLabels = labels;
+      renderLabels();
+    })
+    .catch(error => {
+      console.error('Errore:', error);
+      showAlert('Errore durante il caricamento delle label', 'danger');
+    });
+}
+
+function renderLabels() {
+  const tbody = document.getElementById('labelsTableBody');
+  const emptyState = document.getElementById('emptyState');
+
+  tbody.innerHTML = '';
+
+  if (allLabels.length === 0) {
+    tbody.style.display = 'none';
+    emptyState.style.display = 'block';
+    return;
+  }
+
+  tbody.style.display = '';
+  emptyState.style.display = 'none';
+
+  // Ordina alfabeticamente per nome
+  const sorted = [...allLabels].sort((a, b) => a.name.localeCompare(b.name));
+
+  sorted.forEach(label => {
+    const row = createLabelRow(label);
+    tbody.appendChild(row);
+  });
+}
+
+function createLabelRow(label) {
+  const row = document.createElement('tr');
+  row.innerHTML = `
+    <td>#${label.name}</td>
+    <td style="text-align: right;">${label.movements_count}</td>
+    <td>
+      <div class="flex flex-nowrap gap-1">
+        <button class="ps-btn ps-btn-sm ps-btn-warning" onclick='openRenameModal(${label.id}, "${label.name}", ${label.movements_count})'>
+          <i class="bi bi-pencil"></i>
+        </button>
+        <button class="ps-btn ps-btn-sm ps-btn-danger" onclick="openDeleteModal(${label.id}, '${label.name}', ${label.movements_count})">
+          <i class="bi bi-trash"></i>
+        </button>
+      </div>
+    </td>
+  `;
+  return row;
+}
+
+function openRenameModal(id, name, movementsCount) {
+  document.getElementById('renameLabelId').value = id;
+  document.getElementById('renameLabelOldName').value = name;
+  document.getElementById('renameLabelName').value = '';
+  document.getElementById('renameLabelName').focus();
+
+  // Nascondi il messaggio di merge inizialmente
+  document.getElementById('mergeWarning').style.display = 'none';
+
+  // Mostra il conteggio
+  document.getElementById('renameMovementsText').textContent =
+    `Questa label è usata in ${movementsCount} ${movementsCount !== 1 ? 'movimenti' : 'movimento'}.`;
+
+  // Listener sul campo input per rilevare merge
+  const inputField = document.getElementById('renameLabelName');
+  inputField.addEventListener('input', function() {
+    const newName = this.value.trim().toLowerCase();
+    const oldName = document.getElementById('renameLabelOldName').value;
+
+    // Controlla se il nuovo nome (case-insensitive) coincide con un'altra label
+    const existingLabel = allLabels.find(l =>
+      l.name_norm === newName && l.id !== parseInt(document.getElementById('renameLabelId').value)
+    );
+
+    if (existingLabel && newName) {
+      // C'è un merge
+      document.getElementById('mergeWarning').style.display = 'block';
+      document.getElementById('mergeWarningText').textContent =
+        `#${existingLabel.name} esiste già: i ${movementsCount} movimenti di #${oldName} verranno uniti.`;
+    } else {
+      document.getElementById('mergeWarning').style.display = 'none';
+    }
+  });
+
+  const modal = new bootstrap.Modal(document.getElementById('renameLabelModal'));
+  modal.show();
+}
+
+function confirmRenameLabel() {
+  const id = document.getElementById('renameLabelId').value;
+  const newName = document.getElementById('renameLabelName').value.trim();
+
+  if (!newName) {
+    showAlert('Il nome è obbligatorio', 'warning');
+    return;
+  }
+
+  fetch(`/api/labels/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ name: newName })
+  })
+  .then(response => {
+    if (response.status === 400) {
+      return response.json().then(data => {
+        throw new Error(data.error || 'Nome non valido');
+      });
+    }
+    if (response.status === 404) {
+      throw new Error('Label non trovata');
+    }
+    return response.json();
+  })
+  .then(data => {
+    if (data.error) {
+      showAlert(data.error, 'danger');
+    } else {
+      const updated = data.updated || 0;
+      showAlert(`Label rinominata. ${updated} ${updated !== 1 ? 'movimenti aggiornati' : 'movimento aggiornato'}.`, 'success');
+      loadLabels();
+      bootstrap.Modal.getInstance(document.getElementById('renameLabelModal')).hide();
+    }
+  })
+  .catch(error => {
+    console.error('Errore:', error);
+    showAlert(error.message || 'Errore durante la rinomina della label', 'danger');
+  });
+}
+
+function openDeleteModal(id, name, movementsCount) {
+  document.getElementById('deleteLabelId').value = id;
+  document.getElementById('deleteLabelWarningText').textContent =
+    `La label "#${name}" ha ${movementsCount} ${movementsCount !== 1 ? 'movimenti associati' : 'movimento associato'}.`;
+  document.getElementById('deleteLabelMessage').textContent =
+    `La label verrà rimossa dal testo delle note di ${movementsCount} ${movementsCount !== 1 ? 'movimenti' : 'movimento'}. Questa operazione è irreversibile.`;
+
+  const modal = new bootstrap.Modal(document.getElementById('deleteLabelModal'));
+  modal.show();
+}
+
+function confirmDeleteLabel() {
+  const id = document.getElementById('deleteLabelId').value;
+
+  fetch(`/api/labels/${id}`, {
+    method: 'DELETE'
+  })
+  .then(response => {
+    if (response.status === 404) {
+      throw new Error('Label non trovata');
+    }
+    return response.json();
+  })
+  .then(data => {
+    if (data.error) {
+      showAlert(data.error, 'danger');
+    } else {
+      const updated = data.updated || 0;
+      showAlert(`Label eliminata. ${updated} ${updated !== 1 ? 'movimenti aggiornati' : 'movimento aggiornato'}.`, 'success');
+      loadLabels();
+      bootstrap.Modal.getInstance(document.getElementById('deleteLabelModal')).hide();
+    }
+  })
+  .catch(error => {
+    console.error('Errore:', error);
+    showAlert(error.message || 'Errore durante l\'eliminazione della label', 'danger');
+  });
+}
+</script>
+{% endblock %}

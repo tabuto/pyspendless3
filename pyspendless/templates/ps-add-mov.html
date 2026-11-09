@@ -1,5 +1,10 @@
 {% extends 'ps-nav.html' %}
 
+{% block head %}
+<!-- Tom Select: tema "default" per il campo labels -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.default.min.css">
+{% endblock %}
+
 {% block nav_content %}
 {# `src` è il movimento che fornisce i valori del form:
    - in modifica    → il movimento stesso (`movement`)
@@ -99,6 +104,16 @@
               <label for="note" class="ps-label">Nota</label>
               <textarea class="ps-input" id="note" name="note" rows="2">{% if src %}{{ src.note or '' }}{% endif %}</textarea>
             </div>
+            <div class="mb-3" data-ps-labels-wrap>
+              <label for="labels" class="ps-label">Labels</label>
+              <select id="labels" name="labels" multiple
+                      data-ps-labels
+                      data-ps-labels-target="#note"
+                      data-ps-note-max="{{ max_note_length }}"
+                      data-ps-labels-max="{{ max_labels_per_movement }}"></select>
+              <p class="ps-help" data-ps-labels-message hidden></p>
+              <p class="ps-help">Le label finiscono nella nota, scritte con #.</p>
+            </div>
           </div>
           <div class="ps-card-footer text-right">
             <button type="submit" class="ps-btn ps-btn-primary" id="submit-btn">Salva Movimento</button>
@@ -108,6 +123,12 @@
     </div>
   </div>
 </div>
+
+<!-- Tom Select (multi-select mobile-friendly; lo stylesheet è nel block "head") -->
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+
+<!-- ps-labels.js: componente labels per il form movimento -->
+<script src="{{ url_for('static', filename='js/ps-labels.js') }}"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -203,6 +224,10 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('wallet').value = walletId;
     document.getElementById('amount').value = amount;
     document.getElementById('note').value = note;
+    // Riallinea le chip del campo labels: il listener di ps-labels.js ascolta
+    // l'evento 'input' della textarea, che NON scatta su un'assegnazione da JS.
+    // Senza questo event, le chip resterebbero quelle di prima.
+    document.getElementById('note').dispatchEvent(new Event('input'));
     // La data NON viene toccata
   });
 

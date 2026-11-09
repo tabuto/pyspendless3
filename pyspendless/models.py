@@ -1,10 +1,10 @@
 """
 SQLAlchemy Models per PySpendless
-Definizione delle entità: Account, User, Wallet, Category, CategoryTemplate, 
-EmailWhitelist, Movement, UserGroup, GroupMembership
+Definizione delle entità: Account, User, Wallet, Category, CategoryTemplate,
+EmailWhitelist, Movement, UserGroup, GroupMembership, Label
 """
 
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Numeric, Date, CheckConstraint
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Numeric, Date, CheckConstraint, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -15,17 +15,18 @@ Base = declarative_base()
 class Account(Base):
     """Rappresenta un account che può avere più utenti e wallet"""
     __tablename__ = 'Account'
-    
+
     id = Column(Integer, primary_key=True)
     name = Column(Text, nullable=False)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    
+
     # Relationships
     users = relationship('User', back_populates='account')
     wallets = relationship('Wallet', back_populates='account')
     categories = relationship('Category', back_populates='account')
     groups = relationship('UserGroup', back_populates='account')
     recurrent_movements = relationship('RecurrentMovement', back_populates='account')
+    labels = relationship('Label', back_populates='account')
 
 
 class User(Base):
@@ -209,14 +210,37 @@ class RecurrentMovement(Base):
 class Token(Base):
     """Token per inviti e link di condivisione"""
     __tablename__ = 'Token'
-    
+
     uuid = Column(Text, primary_key=True)
     type = Column(Text, nullable=False)
     create_date = Column(DateTime, nullable=False, default=datetime.utcnow)
     expire_date = Column(DateTime, nullable=False)
     status = Column(Text, nullable=False, default='PENDING')
     payload = Column(Text, nullable=False)  # JSON string
-    
+
     __table_args__ = (
         CheckConstraint("status IN ('PENDING','USED','EXPIRED')", name='check_token_status'),
     )
+
+
+class Label(Base):
+    """Registro delle label di un account (task26-0).
+
+    NON è un'associazione con i movimenti: l'appartenenza di una label a un
+    movimento vive nel testo di Movement.note e solo lì. Questa tabella
+    serve all'autocompletamento, alla forma canonica e alla pagina di
+    gestione (task26-0, decisione D1).
+    """
+    __tablename__ = 'Label'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(Text, nullable=False)      # forma canonica, come va scritta nelle note
+    name_norm = Column(Text, nullable=False)  # name.lower(), chiave di unicità e di ricerca
+    account_id = Column(Integer, ForeignKey('Account.id'), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint('account_id', 'name_norm', name='uq_label_account_name'),
+    )
+
+    account = relationship('Account', back_populates='labels')

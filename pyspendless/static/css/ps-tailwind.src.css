@@ -550,6 +550,21 @@
   .ps-badge-brand   { color: #fff; background-color: var(--ps-brand); }
   .ps-badge-neutral { background-color: var(--ps-surface-2); color: var(--ps-text-muted); }
 
+  /* Chip delle label nelle note (task26-0, §11): stesso aspetto di
+     .ps-badge-neutral (è un badge) più cursor:pointer e stato hover, perché
+     a differenza dei badge è un link cliccabile che filtra /movements. */
+  .ps-label-chip {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold;
+    background-color: var(--ps-surface-2);
+    color: var(--ps-text-muted);
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .ps-label-chip:hover {
+    background-color: color-mix(in srgb, var(--ps-brand) 15%, var(--ps-surface-2));
+    color: var(--ps-text);
+  }
+
   /* Bilancio ≥0 / <0 (bg-info / bg-warning su ps-show-mov.html:110) */
   .ps-balance-positive { color: #fff; background-color: var(--ps-info); }
   .ps-balance-negative { color: #fff; background-color: var(--ps-warning); }

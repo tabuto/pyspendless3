@@ -10,22 +10,23 @@ import hmac
 import base64
 from datetime import datetime, timedelta, date
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy import func, text
 from typing import Optional, List, Dict, Any
+from collections import Counter
 
 # Support both relative and absolute imports
 try:
     from .models import (
-        Account, User, Wallet, Category, CategoryTemplate, 
+        Account, User, Wallet, Category, CategoryTemplate,
         EmailWhitelist, Movement, UserGroup, GroupMembership, Token,
-        RecurrentMovement
+        RecurrentMovement, Label
     )
 except ImportError:
     from models import (
-        Account, User, Wallet, Category, CategoryTemplate, 
+        Account, User, Wallet, Category, CategoryTemplate,
         EmailWhitelist, Movement, UserGroup, GroupMembership, Token,
-        RecurrentMovement
+        RecurrentMovement, Label
     )
 
 
@@ -672,6 +673,313 @@ class CategoryRepository:
             raise e
 
 
+class LabelRepository:
+    """Repository per la gestione delle label (task26-0)"""
+
+    def __init__(self, db_session: Session):
+        self.db = db_session
+
+    def sync_from_note(self, account_id: int, note: Optional[str]) -> str:
+        """Estrae label dalla nota, crea/riusa le righe, ritorna la nota canonicalizzata.
+
+        Estrae le label dal testo, per ognuna trova o crea la riga in Label,
+        e ritorna la nota riscritta con le grafie canoniche. Il valore ritornato
+        è quello che va salvato nel database.
+
+        La corsa sul vincolo UNIQUE si gestisce con un savepoint: due sessioni
+        che creano la stessa label insieme fanno scattare l'IntegrityError, ma
+        il savepoint viene rollbacked e la riga viene riletta.
+
+        Args:
+            account_id: ID dell'account.
+            note: Testo della nota, o None.
+
+        Returns:
+            str: La nota con le label canonicalizzate.
+        """
+        try:
+            import labels
+        except ImportError:
+            from . import labels  # type: ignore
+
+        if not note:
+            return ""
+
+        # Estrae le label dal testo
+        extracted = labels.extract(note)
+        if not extracted:
+            return note
+
+        # Costruisce il mapping {name_norm: forma_canonica}
+        mapping = {}
+        for name in extracted:
+            name_norm = name.lower()
+            if name_norm not in mapping:
+                # Cerca o crea la riga per questa label
+                existing = self.db.query(Label).filter_by(
+                    account_id=account_id, name_norm=name_norm
+                ).first()
+
+                if existing:
+                    # Riusa la forma canonica del registro
+                    mapping[name_norm] = existing.name
+                else:
+                    # Crea una nuova riga
+                    savepoint = self.db.begin_nested()
+                    try:
+                        new_label = Label(
+                            account_id=account_id,
+                            name=name,
+                            name_norm=name_norm,
+                            created_at=datetime.utcnow()
+                        )
+                        self.db.add(new_label)
+                        self.db.flush()
+                        mapping[name_norm] = new_label.name
+                        savepoint.commit()
+                    except IntegrityError:
+                        # Un'altra sessione ha creato la stessa label nel frattempo
+                        savepoint.rollback()
+                        existing = self.db.query(Label).filter_by(
+                            account_id=account_id, name_norm=name_norm
+                        ).first()
+                        if existing:
+                            mapping[name_norm] = existing.name
+                        else:
+                            # Improbabile ma possibile: retry con la grafia originale
+                            mapping[name_norm] = name
+
+        # Canonicalizza le grafie nella nota
+        canonicalized = labels.canonicalize(note, mapping)
+        return canonicalized
+
+    def search(self, account_id: int, q: str, limit: int = 10) -> List[Label]:
+        """Ricerca label con LIKE %q% su name_norm, prefix-match prima.
+
+        Args:
+            account_id: ID dell'account.
+            q: Stringa di ricerca.
+            limit: Numero massimo di risultati (default: 10, max: 50).
+
+        Returns:
+            List[Label]: Label corrispondenti.
+        """
+        from sqlalchemy import case
+
+        limit = min(limit, 50)
+        query = self.db.query(Label).filter_by(account_id=account_id)
+        order = [Label.name_norm]
+        if q:
+            # La ricerca e' per SOTTOSTRINGA (LIKE %q%): digitando 'oop' si
+            # deve trovare '#coop'. I caratteri jolly di LIKE vanno sottratti
+            # all'utente, altrimenti un '%' digitato per sbaglio restituisce
+            # tutto il registro.
+            needle = (q.lower()
+                      .replace('\\', '\\\\')
+                      .replace('%', '\\%')
+                      .replace('_', '\\_'))
+            query = query.filter(Label.name_norm.like('%{}%'.format(needle), escape='\\'))
+            # Chi corrisponde dall'inizio viene prima: e' l'ordine che si
+            # aspetta chi sta digitando.
+            order = [case((Label.name_norm.like('{}%'.format(needle), escape='\\'), 0), else_=1),
+                     Label.name_norm]
+        return query.order_by(*order).limit(limit).all()
+
+    def get_labels_with_counts(self, account_id: int) -> List[Dict[str, Any]]:
+        """Restituisce tutte le label dell'account con il conteggio dei movimenti.
+
+        Una sola query sui movimenti (id, note) e conteggio in Python con Counter,
+        non una query per label.
+
+        Args:
+            account_id: ID dell'account.
+
+        Returns:
+            List[dict]: Ogni dict ha {id, name, name_norm, movements_count}.
+        """
+        try:
+            import labels
+        except ImportError:
+            from . import labels  # type: ignore
+
+        # Recupera tutte le label dell'account
+        label_rows = self.db.query(Label).filter_by(account_id=account_id).all()
+        label_dict = {label.name_norm: label for label in label_rows}
+
+        # Recupera tutti i movimenti dell'account (id, note)
+        movements = self.db.query(Movement.id, Movement.note).filter_by(
+            account_id=account_id
+        ).all()
+
+        # Conta le occorrenze di ogni label
+        label_counts = Counter()
+        for movement_id, note in movements:
+            if note:
+                extracted = labels.extract_norm(note)
+                for name_norm in extracted:
+                    label_counts[name_norm] += 1
+
+        # Costruisce il risultato
+        result = []
+        for label in label_rows:
+            result.append({
+                'id': label.id,
+                'name': label.name,
+                'name_norm': label.name_norm,
+                'movements_count': label_counts.get(label.name_norm, 0)
+            })
+
+        return result
+
+    def rename_label(self, label_id: int, new_name: str, account_id: int) -> int:
+        """Rinomina una label e riscrive le note dei movimenti coinvolti.
+
+        Se new_name collide (case-insensitive) con un'altra label, esegue un merge:
+        le note dei movimenti della label sorgente vengono deduplicate rispetto alla
+        label target, e la riga sorgente viene cancellata.
+
+        Operazione in una sola transazione: o tutte le note sono riscritte, o nessuna.
+
+        Args:
+            label_id: ID della label da rinominare.
+            new_name: Nuovo nome della label.
+            account_id: ID dell'account (per la verifica di appartenenza).
+
+        Returns:
+            int: Numero di movimenti riscritti.
+        """
+        try:
+            import labels
+        except ImportError:
+            from . import labels  # type: ignore
+
+        # Recupera la label da rinominare
+        label = self.db.query(Label).filter_by(
+            id=label_id, account_id=account_id
+        ).first()
+        if not label:
+            return 0
+
+        if not labels.is_valid(new_name):
+            # Nome non valido: non fare nulla
+            return 0
+
+        new_norm = new_name.lower()
+        old_norm = label.name_norm
+
+        # Controlla se il nuovo nome collide con un'altra label (merge)
+        target = self.db.query(Label).filter_by(
+            account_id=account_id, name_norm=new_norm
+        ).first()
+
+        if target and target.id != label_id:
+            # Merge: rinomina tutte le occorrenze usando rename_label con
+            # deduplicazione per gestire il caso in cui entrambe sono già presenti
+            old_name = label.name
+
+            # Recupera i movimenti che contengono la label sorgente
+            movements = self.db.query(Movement).filter_by(
+                account_id=account_id
+            ).all()
+
+            touched = 0
+            for m in movements:
+                if m.note and labels.has_label(m.note, old_norm):
+                    new_note = labels.rename_label(m.note, old_norm, new_name)
+                    if new_note != (m.note or ''):
+                        m.note = new_note
+                        touched += 1
+
+            # Cancella la riga sorgente
+            self.db.delete(label)
+            self.db.commit()
+            return touched
+        else:
+            # Rinomina semplice: costruisci un mapping e canonicalizza
+            # (non usare labels.rename_label perché interpreterebbe new_norm==old_norm come merge)
+
+            # Recupera i movimenti che contengono la label
+            movements = self.db.query(Movement).filter_by(
+                account_id=account_id
+            ).all()
+
+            # Precarica il mapping di tutte le label per evitare query nel loop
+            all_labels = self.db.query(Label).filter_by(account_id=account_id).all()
+            label_name_map = {l.name_norm: l.name for l in all_labels}
+
+            touched = 0
+            for m in movements:
+                if m.note and labels.has_label(m.note, old_norm):
+                    # Estrai le label dalla nota
+                    extracted = labels.extract(m.note)
+                    # Costruisci il mapping per canonicalize: se è la label che stiamo
+                    # rinominando, usa il nuovo nome; altrimenti usa il nome del registro
+                    mapping = {}
+                    for name in extracted:
+                        name_norm = name.lower()
+                        if name_norm == old_norm:
+                            mapping[name_norm] = new_name
+                        else:
+                            mapping[name_norm] = label_name_map.get(name_norm, name)
+
+                    # Canonicalizza la nota
+                    new_note = labels.canonicalize(m.note, mapping)
+                    if new_note != (m.note or ''):
+                        m.note = new_note
+                        touched += 1
+
+            # Aggiorna la riga della label
+            label.name = new_name
+            label.name_norm = new_norm
+
+            self.db.commit()
+            return touched
+
+    def delete_label(self, label_id: int, account_id: int) -> int:
+        """Rimuove una label dalle note e cancella la riga.
+
+        Operazione in una sola transazione: o tutte le note sono riscritte, o nessuna.
+
+        Args:
+            label_id: ID della label da cancellare.
+            account_id: ID dell'account (per la verifica di appartenenza).
+
+        Returns:
+            int: Numero di movimenti riscritti.
+        """
+        try:
+            import labels
+        except ImportError:
+            from . import labels  # type: ignore
+
+        # Recupera la label
+        label = self.db.query(Label).filter_by(
+            id=label_id, account_id=account_id
+        ).first()
+        if not label:
+            return 0
+
+        # Recupera i movimenti che contengono la label
+        movements = self.db.query(Movement).filter_by(
+            account_id=account_id
+        ).all()
+
+        touched = 0
+        for m in movements:
+            # Usa remove_label con il name_norm (case-insensitive)
+            if m.note and labels.has_label(m.note, label.name_norm):
+                new_note = labels.remove_label(m.note, label.name_norm)
+                # Confronta prima/dopo: scrivi solo se cambiato
+                if new_note != (m.note or ''):
+                    m.note = new_note
+                    touched += 1
+
+        # Cancella la riga
+        self.db.delete(label)
+        self.db.commit()
+        return touched
+
+
 class MovementRepository:
     """Repository per gestione movimenti (spese/entrate)"""
     
@@ -691,9 +999,11 @@ class MovementRepository:
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
         keywords: Optional[List[str]] = None,    # ricerca LIKE su note
+        labels: Optional[List[str]] = None,      # filtro per label (task26-0), AND semantics
     ) -> List[Movement]:
-        """
-        Recupera i movimenti di un account con filtri opzionali
+        """Recupera i movimenti di un account con filtri opzionali.
+
+        Il filtro per label applica la semantica AND: ogni label restringe i risultati.
         """
         from sqlalchemy import or_
 
@@ -724,6 +1034,12 @@ class MovementRepository:
         if category_type:
             query = query.join(Category, Movement.category_id == Category.id).filter(Category.type == category_type)
 
+        # Filtro per label (task26-0): AND semantics, applicato dopo gli altri filtri
+        # (ps_has_label è una scansione, conviene che veda meno righe possibile)
+        if labels:
+            for name in labels:
+                query = query.filter(func.ps_has_label(Movement.note, name) == 1)
+
         return query.order_by(Movement.move_date.desc()).all()
     
     def get_movement(self, movement_id: str) -> Optional[Movement]:
@@ -735,22 +1051,44 @@ class MovementRepository:
         return self.db.query(Movement).filter_by(id=movement_id, account_id=account_id).first()
     
     def create_movement(self, data: Dict[str, Any]) -> Movement:
-        """Crea un nuovo movimento"""
+        """Crea un nuovo movimento.
+
+        L'hook sync_from_note registra le label dal testo della nota (task26-0).
+        """
+        # Registra le label e canonicalizza la nota
+        account_id = data.get('account_id')
+        note = data.get('note')
+        if account_id and note is not None:
+            label_repo = LabelRepository(self.db)
+            data['note'] = label_repo.sync_from_note(account_id, note)
+
         movement = Movement(**data)
         self.db.add(movement)
         self.db.commit()
         return movement
     
     def update_movement(self, movement_id: str, data: Dict[str, Any]) -> Optional[Movement]:
-        """Aggiorna un movimento"""
+        """Aggiorna un movimento.
+
+        L'hook sync_from_note registra le label dal testo della nota, se 'note'
+        è fra i campi aggiornati (task26-0).
+        """
         movement = self.get_movement(movement_id)
         if not movement:
             return None
-        
+
+        # Registra le label e canonicalizza la nota, se 'note' è fra i dati
+        if 'note' in data:
+            account_id = movement.account_id
+            note = data['note']
+            if account_id and note is not None:
+                label_repo = LabelRepository(self.db)
+                data['note'] = label_repo.sync_from_note(account_id, note)
+
         for key, value in data.items():
             if hasattr(movement, key):
                 setattr(movement, key, value)
-        
+
         self.db.commit()
         return movement
     
@@ -762,12 +1100,19 @@ class MovementRepository:
         category_id: Optional[int] = None,
         note: Optional[str] = None,
     ) -> int:
-        """
-        Applica categoria e/o nota a tutti i movimenti di account_id che
+        """Applica categoria e/o nota a tutti i movimenti di account_id che
         soddisfano i filtri (stessi filtri di get_movements_for_account),
         in un unico commit. Ritorna il numero di movimenti aggiornati.
+
+        L'hook sync_from_note registra le label dal testo della nota, se
+        nota è not None (task26-0).
         """
         movements = self.get_movements_for_account(account_id=account_id, **filters)
+
+        # Canonicalizza la nota se presente
+        if note is not None:
+            label_repo = LabelRepository(self.db)
+            note = label_repo.sync_from_note(account_id, note)
 
         for m in movements:
             if category_id is not None:
@@ -889,9 +1234,10 @@ class MovementRepository:
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
         keywords: Optional[List[str]] = None,
+        labels: Optional[List[str]] = None,      # filtro per label (task26-0), AND semantics
     ) -> Dict[str, Any]:
-        """
-        Calcola statistiche aggregate sui movimenti
+        """Calcola statistiche aggregate sui movimenti.
+
         Returns:
             Dict con: total_income, total_expense, balance, expenses_by_category
         """
@@ -910,6 +1256,7 @@ class MovementRepository:
             date_from=date_from,
             date_to=date_to,
             keywords=keywords,
+            labels=labels,
         )
         
         # Calcola totali
@@ -964,7 +1311,13 @@ class MovementRepository:
             query = query.filter(or_(*kw_filters))
         if category_type:
             query = query.filter(Category.type == category_type)
-        
+        # Il filtro per label vale anche qui: senza, il grafico "Spese per
+        # Categoria" mostrerebbe TUTTE le categorie del periodo mentre la
+        # tabella sotto e' filtrata -- due numeri diversi nella stessa pagina.
+        if labels:
+            for label_name in labels:
+                query = query.filter(func.ps_has_label(Movement.note, label_name) == 1)
+
         expenses_by_category = query.group_by(Category.name).all()
         
         return {
@@ -1976,7 +2329,15 @@ class RecurrentMovementRepository:
 
     def create(self, account_id: int, name: str, category_id: int, wallet_id: int,
                movement_type: str, amount: float, note: Optional[str] = None) -> RecurrentMovement:
-        """Crea una nuova spesa ricorrente"""
+        """Crea una nuova spesa ricorrente.
+
+        L'hook sync_from_note registra le label dal testo della nota (task26-0).
+        """
+        # Registra le label e canonicalizza la nota
+        if note is not None:
+            label_repo = LabelRepository(self.db)
+            note = label_repo.sync_from_note(account_id, note)
+
         rm = RecurrentMovement(
             name=name,
             category_id=category_id,
@@ -1992,7 +2353,11 @@ class RecurrentMovementRepository:
         return rm
 
     def update(self, rm_id: int, account_id: int, data: Dict[str, Any]) -> Optional[RecurrentMovement]:
-        """Aggiorna una spesa ricorrente esistente"""
+        """Aggiorna una spesa ricorrente esistente.
+
+        L'hook sync_from_note registra le label dal testo della nota, se 'note'
+        è fra i campi aggiornati (task26-0).
+        """
         rm = self.get_by_id(rm_id, account_id)
         if not rm:
             return None
@@ -2004,7 +2369,12 @@ class RecurrentMovementRepository:
         if 'wallet_id' in data:
             rm.wallet_id = data['wallet_id']
         if 'note' in data:
-            rm.note = data.get('note')
+            note = data.get('note')
+            # Registra le label e canonicalizza la nota
+            if note is not None:
+                label_repo = LabelRepository(self.db)
+                note = label_repo.sync_from_note(account_id, note)
+            rm.note = note
 
         movement_type = data.get('movement_type')
         amount = data.get('amount')

@@ -72,7 +72,7 @@
             {% endfor %}
           </select>
         </div>
-        <!-- Riga 2: multi-selezione categorie + keywords + pulsante -->
+        <!-- Riga 2: categorie + label + keywords (4+4+4); il pulsante va a capo -->
         <div class="col-span-12 md:col-span-4">
           <label for="category_id" class="ps-label">Categorie</label>
           <select id="category_id" name="category_id" multiple
@@ -89,7 +89,16 @@
             <a href="#" id="cat-deselect-all" class="text-sm ps-muted">Deseleziona</a>
           </div>
         </div>
-        <div class="col-span-12 md:col-span-6">
+        <div class="col-span-12 md:col-span-4">
+          <label for="label_id" class="ps-label">Label (tutte selezionate)</label>
+          <select id="label_id" name="label" multiple
+                  placeholder="Tutte le label">
+            {% for label_name in filters.labels %}
+              <option value="{{ label_name }}" selected>{{ label_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-span-12 md:col-span-4">
           <label for="keywords" class="ps-label">
             Parole chiave
             <span class="ps-muted">(separate da spazio o virgola)</span>
@@ -215,7 +224,7 @@
                   <td data-order="{{ mov.move_date.isoformat() }}">{{ mov.move_date.strftime('%d/%m/%Y') }}</td>
                   <td>{{ mov.category }}</td>
                   <td>{{ mov.wallet_obj.name if mov.wallet_obj else mov.wallet }}</td>
-                  <td>{{ mov.note if mov.note else '-' }}</td>
+                  <td data-ps-note>{{ mov.note if mov.note else '-' }}</td>
                   <td>{{ mov.user }}</td>
                   <td class="text-right ps-amount-income">
                     {% if mov.income %}€ {{ "%.2f"|format(mov.income) }}{% else %}-{% endif %}
@@ -328,28 +337,38 @@
 <!-- Tom Select (multi-select mobile-friendly; lo stylesheet e' nel block "head") -->
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 
+<!-- ps-labels.js: resa a chip delle label nelle note (task26-0) -->
+<script src="{{ url_for('static', filename='js/ps-labels.js') }}"></script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   // Inizializza DataTables solo su desktop (la tabella è nascosta su mobile)
   if (window.matchMedia('(min-width: 768px)').matches) {
-  $('#movementsTable').DataTable({
-    language: {
-      url: 'https://cdn.datatables.net/plug-ins/1.13.7/i18n/it-IT.json'
-    },
-    order: [[0, 'desc']], // Ordina per data decrescente
-    pageLength: 25,
-    responsive: true,
-    columnDefs: [
-      { responsivePriority: 1, targets: 0 }, // Data — sempre visibile
-      { responsivePriority: 2, targets: 7 }, // Azioni — sempre visibile
-      { responsivePriority: 3, targets: 5 }, // Entrata
-      { responsivePriority: 3, targets: 6 }, // Uscita
-      { responsivePriority: 4, targets: 1 }, // Categoria
-      { responsivePriority: 5, targets: 2 }, // Wallet
-      { responsivePriority: 6, targets: 3 }, // Nota — collassabile
-      { responsivePriority: 6, targets: 4 }, // Utente — collassabile
-    ]
-  });
+    const dt = $('#movementsTable').DataTable({
+      language: {
+        url: 'https://cdn.datatables.net/plug-ins/1.13.7/i18n/it-IT.json'
+      },
+      order: [[0, 'desc']], // Ordina per data decrescente
+      pageLength: 25,
+      responsive: true,
+      columnDefs: [
+        { responsivePriority: 1, targets: 0 }, // Data — sempre visibile
+        { responsivePriority: 2, targets: 7 }, // Azioni — sempre visibile
+        { responsivePriority: 3, targets: 5 }, // Entrata
+        { responsivePriority: 3, targets: 6 }, // Uscita
+        { responsivePriority: 4, targets: 1 }, // Categoria
+        { responsivePriority: 5, targets: 2 }, // Wallet
+        { responsivePriority: 6, targets: 3 }, // Nota — collassabile
+        { responsivePriority: 6, targets: 4 }, // Utente — collassabile
+      ]
+    });
+    // Task26-0 Fase 6: DataTables ridisegna le celle ad ogni cambio pagina/ordinamento.
+    // Richiama decorate() su draw.dt per rirenderizzare le chip delle label.
+    dt.on('draw.dt', function () {
+      if (typeof PsLabels !== 'undefined' && PsLabels.decorate) {
+        PsLabels.decorate(document.getElementById('movementsTable'));
+      }
+    });
   } // end matchMedia desktop
 
   // Prepara dati per il grafico
@@ -565,6 +584,61 @@ document.addEventListener('DOMContentLoaded', function() {
     tsCategories.clear();
   });
 
+  // ── Tom Select — multi-select label ────────────────────────────────────
+  // Stessa strategia: init rimandato alla prima apertura del pannello filtri.
+  let tsLabels = null;
+
+  function initLabelSelect() {
+    if (tsLabels) return;
+    // Le label gia' attive arrivano come <option> rese dal server (servono
+    // anche senza JavaScript, perche' sono quelle che il form rimanda). Tom
+    // Select pero' legge le option del DOM come {value, text}: senza il campo
+    // `name` del valueField, il render stampa "undefined". Quindi gliele
+    // ripassiamo nella forma che si aspetta.
+    const preselezionate = Array.prototype.map.call(
+      document.querySelectorAll('#label_id option'), function (o) { return o.value; }
+    ).filter(Boolean);
+
+    tsLabels = new TomSelect('#label_id', {
+      plugins: ['remove_button'],
+      // Le righe di /api/labels sono {id, name}: senza questi tre campi Tom
+      // Select cerca 'value'/'text', non trova nulla e scarta le opzioni.
+      valueField: 'name',
+      labelField: 'name',
+      searchField: 'name',
+      create: false,
+      placeholder: 'Tutte le label',
+      maxOptions: null,
+      closeAfterSelect: false,
+      options: preselezionate.map(function (n) { return { name: n }; }),
+      items: preselezionate,
+      shouldLoad: function (q) { return q.length >= 1; },
+      maxItems: null,
+      load: function (q, callback) {
+        fetch('/api/labels?q=' + encodeURIComponent(q))
+          .then(function (resp) { return resp.ok ? resp.json() : []; })
+          .then(function (rows) { callback(rows); })
+          .catch(function () { callback(); });
+      },
+      render: {
+        option: function(data, escape) {
+          return '<div>' + escape(data.name || data.text) + '</div>';
+        },
+        item: function(data, escape) {
+          return '<div>' + escape(data.name || data.text) + '</div>';
+        }
+      }
+    });
+  }
+
+  if (filtersCollapse.classList.contains('show')) {
+    // Pannello già aperto: init subito
+    initLabelSelect();
+  } else {
+    // Init rimandato alla prima apertura
+    filtersCollapse.addEventListener('shown.bs.collapse', initLabelSelect, { once: true });
+  }
+
   // ── Infinite scroll card list (mobile) ──────────────────────────────────
   (function () {
     // L'IntersectionObserver non scatta se il contenitore è display:none (desktop),
@@ -616,7 +690,7 @@ document.addEventListener('DOMContentLoaded', function() {
             '</div>' +
             '<div class="flex justify-between items-center mt-1">' +
               '<span class="ps-muted">' + escHtml(mov.move_date) + '</span>' +
-              (note ? '<span class="ps-muted italic truncate ml-2" style="max-width:50%">' + note + '</span>' : '') +
+              (note ? '<span class="ps-muted italic truncate ml-2" style="max-width:50%" data-ps-note>' + note + '</span>' : '') +
             '</div>' +
             '<div class="mt-2 text-right">' +
               '<a href="/create?movement_id=' + encodeURIComponent(mov.id) + '" class="ps-btn ps-btn-sm ps-btn-outline-primary py-0 px-2 mr-1" title="Modifica">' +
@@ -648,6 +722,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
         renderCards(data.movements);
 
+        // Task26-0 Fase 6: le card appena rese hanno data-ps-note, richiama decorate
+        // sul frammento appena appeso per renderizzare le chip delle label.
+        if (typeof PsLabels !== 'undefined' && PsLabels.decorate) {
+          PsLabels.decorate(container);
+        }
+
         if (!hasMore) {
           noMore.classList.remove('hidden');
         }
@@ -668,6 +748,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     observer.observe(trigger);
   })();
+
+  // Task26-0 Fase 6: Renderizza le chip delle label al caricamento iniziale.
+  // La tabella desktop e le card mobile hanno data-ps-note; decorate() le
+  // trasforma in link cliccabili (il cui click filtra per quella label).
+  if (typeof PsLabels !== 'undefined' && PsLabels.decorate) {
+    PsLabels.decorate();
+  }
 
 }); // end DOMContentLoaded
 </script>

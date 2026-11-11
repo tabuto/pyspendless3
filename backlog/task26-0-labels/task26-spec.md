@@ -646,7 +646,7 @@ passi di schema** sul server, da eseguire nella console Bash di PythonAnywhere
 dopo il `git pull` e **prima** del Reload:
 
 ```
-sqlite3 /home/tabuto/pyspendless3/data/pyspendless3.db < sql/sqllite/NEXT_RELEASE/create_label.sql
+sqlite3 /home/tabuto/data/pyspendless3.db < sql/sqllite/NEXT_RELEASE/create_label.sql
 python migrations/backfill_labels.py
 ```
 

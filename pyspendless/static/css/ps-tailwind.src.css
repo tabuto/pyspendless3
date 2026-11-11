@@ -787,12 +787,29 @@
 
   /* Tom Select — tema "default": si ridipinge controllo e dropdown con i
      token del design system, compreso il .no-results generato da
-     ps-show-mov.html (render.no_results). */
+     ps-show-mov.html (render.no_results).
+
+     PERCHE' TUTTO `!important`. Il foglio del CDN
+     (tom-select.default.min.css, caricato nel block "head", quindi PRIMA di
+     questo file) e' *unlayered*; queste regole stanno in `@layer components`,
+     e una regola in un layer perde contro una regola senza layer QUALUNQUE
+     sia la specificita' e l'ordine. L'unico modo di vincere dall'interno di
+     un layer e' `!important`.
+
+     E' il difetto che in dark mode dava testo scuro su fondo scuro: le
+     proprieta' con `!important` (sfondo e bordo del controllo) passavano, i
+     `color` no, e restava il `#303030` di `.ts-control,.ts-control input,
+     .ts-dropdown` del CDN. Stessa storia per lo sfondo del dropdown (bianco
+     anche al buio) e per i `background-image`/`box-shadow`/`text-shadow` che
+     ridipingevano le chip in azzurro Tom Select sopra il nostro colore.
+     Morale: qui dentro ogni proprieta' che il tema "default" tocca va
+     dichiarata `!important`, altrimenti non ha effetto. */
   .ts-wrapper .ts-control {
     @apply rounded-lg;
     background-color: var(--ps-surface) !important;
+    background-image: none !important;
     border-color: var(--ps-border) !important;
-    color: var(--ps-text);
+    color: var(--ps-text) !important;
     box-shadow: none !important;
   }
   .ts-wrapper.focus .ts-control {
@@ -800,31 +817,44 @@
     outline-offset: 2px;
     box-shadow: none !important;
   }
-  .ts-control > input {
-    color: var(--ps-text);
+  /* Il testo che si sta digitando: senza `!important` resta il #303030 del
+     tema "default", illeggibile sul fondo scuro. */
+  .ts-control > input,
+  .ts-control > input:focus {
+    color: var(--ps-text) !important;
+  }
+  .ts-control > input::placeholder {
+    color: var(--ps-text-muted) !important;
   }
   .ts-wrapper.multi .ts-control > div {
     background-color: color-mix(in srgb, var(--ps-brand) 12%, var(--ps-surface)) !important;
+    background-image: none !important;
     color: var(--ps-text) !important;
     border: none !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
   }
   .ts-wrapper.plugin-remove_button .item .remove {
     border-left-color: var(--ps-border) !important;
-    color: var(--ps-text-muted);
+    /* Nessun `color` qui: il tema "default" dichiara `color: inherit` sulla
+       "x", quindi eredita il colore della chip ed e' leggibile in entrambi i
+       temi. Forzarla a --ps-text-muted la porterebbe a 3.97:1 sul fondo
+       chiaro della chip in light mode. */
   }
   .ts-dropdown {
-    background-color: var(--ps-surface);
+    background-color: var(--ps-surface) !important;
     border-color: var(--ps-border) !important;
-    color: var(--ps-text);
+    color: var(--ps-text) !important;
   }
   .ts-dropdown .option,
   .ts-dropdown .optgroup-header,
   .ts-dropdown .no-results,
   .ts-dropdown .create {
-    color: var(--ps-text);
+    background-color: transparent !important;
+    color: var(--ps-text) !important;
   }
   .ts-dropdown .no-results {
-    color: var(--ps-text-muted);
+    color: var(--ps-text-muted) !important;
   }
   .ts-dropdown [data-selectable].option:hover,
   .ts-dropdown .active {

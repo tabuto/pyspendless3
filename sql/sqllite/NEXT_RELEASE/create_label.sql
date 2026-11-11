@@ -1,7 +1,7 @@
 -- Migration: nuova tabella Label
 -- Task: 26.0 - Labels sui movimenti
 -- Da eseguire sul DB esistente PRIMA del Reload della web app:
---   sqlite3 /home/tabuto/pyspendless3/data/pyspendless3.db < sql/sqllite/NEXT_RELEASE/create_label.sql
+--   sqlite3 /home/tabuto/data/pyspendless3.db < sql/sqllite/NEXT_RELEASE/create_label.sql
 --
 -- Idempotente (IF NOT EXISTS su tabella e indici): rieseguirlo non fa danni.
 -- Non tocca nessuna tabella esistente e nessun dato: puo' essere eseguito

@@ -54,6 +54,7 @@ il rimando.
 | MB-009 | evolutiva | Icone: togliere il fallback `.woff` (180 KB, mai scaricato) e aggiungere lo script che rigenera il subset | bassa | APERTA |
 | MB-010 | evolutiva | Skill Alexa: la nota della spesa chiesta in un turno di dialogo dedicato (phrase slot, `Dialog.ElicitSlot`) | media | RISOLTA |
 | MB-011 | bug | Skill Alexa: le categorie dell'utente caricate a runtime come entità dinamiche, non scolpite nell'interaction model | alta | RISOLTA |
+| MB-012 | bug | Dark mode: testo scuro su fondo scuro nel campo labels — lo skin di Tom Select sta in un `@layer`, il CSS del CDN no | media | RISOLTA |
 
 ## Aperte
 
@@ -99,6 +100,54 @@ il rimando.
 - `bi-chevron-right` / `bi-chevron-down` compaiono in `ps-nav.html` anche come
   stringhe passate a `classList.add/remove`, non solo in `class="..."`: il
   censimento deve cercare `bi-[a-z0-9-]+` ovunque, non solo negli attributi.
+
+### MB-012 — Dark mode: il campo labels scriveva scuro su scuro · risolta il 2026-11-11
+
+- **Tipo**: bug
+- **File toccati**: `pyspendless/static/css/ps-tailwind.src.css` (blocco "Tom
+  Select"), `pyspendless/static/css/ps-tailwind.css` (ricompilato)
+
+**Problema** — in tema scuro, nel campo Labels di "Crea Movimento", il testo che
+si sta digitando era `#303030` su fondo `#111827`: contrasto 1.2:1, di fatto
+invisibile. Nello stesso giro, non segnalati ma presenti: il **dropdown dei
+suggerimenti restava bianco** anche al buio (con la riga "Aggiungi ..." chiara
+sopra, quindi illeggibile), e le **chip** erano dipinte dell'azzurro `#1da7ee`
+di Tom Select — con tanto di gradiente, `box-shadow` e `text-shadow` del tema
+"default" — invece che dei colori del design system. In tema chiaro non si
+notava nulla: il `#303030` del CDN è scuro, e su fondo bianco funziona per caso.
+
+**Causa** — non la specificità, i **cascade layer**. Lo skin di Tom Select vive
+in `@layer components` (Tailwind v4 dichiara i layer in `@import "tailwindcss"`),
+mentre `tom-select.default.min.css` arriva dal CDN **senza layer**. Una regola
+dentro un layer perde SEMPRE contro una regola senza layer, qualunque sia la
+specificità e l'ordine dei file. Delle dichiarazioni dello skin passavano quindi
+solo quelle con `!important` — ed erano proprio quelle che qualcuno aveva dovuto
+aggiungere a tentativi (sfondo e bordo del controllo), mentre i `color` erano
+rimasti "puliti" e inerti. Il colpevole lato CDN è
+`.ts-control,.ts-control input,.ts-dropdown{color:#303030}`.
+
+**Soluzione** — `!important` su ogni proprietà dello skin che il tema "default"
+tocca (i `color`, lo sfondo del dropdown) più `background-image: none`,
+`box-shadow: none` e `text-shadow: none` per scoprire i colori del design system
+sotto il tema del CDN. Il commento in testa al blocco ora spiega il meccanismo,
+così la prossima aggiunta non ripete l'errore.
+
+**Note / casi limite**
+
+- Nessun `color` sulla "×" di rimozione: il tema "default" le dà
+  `color: inherit`, quindi eredita il colore della chip ed è leggibile in
+  entrambi i temi. Forzarla a `--ps-text-muted` — che era l'intenzione mai
+  realizzata della regola precedente — la porterebbe a 3.97:1 sul fondo chiaro
+  della chip in light mode.
+- Misurato il contrasto di input, chip, "×", dropdown, opzione e riga "Aggiungi
+  ..." nei due temi: tutto ≥ 5.8:1 (era 1.2:1). Verificato sia in isolamento
+  (`tools/probe-labels.html` con `ps-tailwind.css` iniettato) sia sulle pagine
+  reali — `/create` e il pannello filtri di `/movements`, dove Tom Select serve
+  anche le categorie.
+- Lo skin è condiviso: la correzione vale anche per `ps-recurrent-mov.html`,
+  `ps-search-mov.html` e il multi-select categorie di `/movements`.
+- **Il CSS compilato è versionato**: `./tools/build-css.sh` è già stato
+  eseguito, `ps-tailwind.css` fa parte della modifica.
 
 ### MB-011 — Skill Alexa: categorie dell'utente come entità dinamiche · risolta il 2026-10-20
 

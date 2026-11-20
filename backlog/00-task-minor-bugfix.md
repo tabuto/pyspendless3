@@ -55,6 +55,7 @@ il rimando.
 | MB-010 | evolutiva | Skill Alexa: la nota della spesa chiesta in un turno di dialogo dedicato (phrase slot, `Dialog.ElicitSlot`) | media | RISOLTA |
 | MB-011 | bug | Skill Alexa: le categorie dell'utente caricate a runtime come entità dinamiche, non scolpite nell'interaction model | alta | RISOLTA |
 | MB-012 | bug | Dark mode: testo scuro su fondo scuro nel campo labels — lo skin di Tom Select sta in un `@layer`, il CSS del CDN no | media | RISOLTA |
+| MB-013 | evolutiva | MCP/Alexa: dedurre il movimento ricorrente da categoria + wallet, così una spesa dettata a voce chiude la proposta del task27-0 | bassa | APERTA |
 
 ## Aperte
 
@@ -100,6 +101,44 @@ il rimando.
 - `bi-chevron-right` / `bi-chevron-down` compaiono in `ps-nav.html` anche come
   stringhe passate a `classList.add/remove`, non solo in `class="..."`: il
   censimento deve cercare `bi-[a-z0-9-]+` ovunque, non solo negli attributi.
+
+### MB-013 — MCP/Alexa: dedurre la spesa ricorrente da categoria + wallet
+
+- **Tipo**: evolutiva
+- **Priorità**: bassa
+- **Dove**: `pyspendless/mcp_server.py:706` (costruzione del movimento),
+  `pyspendless/repository.py` (`RecurrentMovementRepository`).
+- **Origine**: conseguenza dichiarata del task27-0, opzione A (vedi
+  `backlog/task27-0-ricorrenti-attese/task27-spec.md` §5).
+- **Dipende da**: task27-0. Prima di quello non c'è niente da chiudere.
+
+**Problema** — il task27-0 propone una spesa ricorrente finché non esiste un
+movimento del mese corrente con `recurrent_movement_id` uguale al template. Quel
+campo è valorizzato **solo** dalla select "Spesa Ricorrente" del form web:
+`mcp_server.py` costruisce il movimento senza toccarlo. Quindi una spesa
+registrata a voce (*"Alexa, ho pagato l'affitto"*) **non chiude la proposta**, e
+l'utente la ritrova in home il giorno dopo.
+
+Non è un difetto del task27-0: è il prezzo, accettato e dichiarato, di non usare
+un'euristica. L'alternativa scartata (stessa categoria + stesso wallet nel mese
+⇒ considerata registrata) produce falsi positivi invisibili — una spesa "Casa"
+qualunque chiuderebbe la proposta dell'affitto.
+
+**Proposta** — in `mcp_server.py`, dopo aver risolto categoria e wallet e
+**prima** di creare il movimento: cercare i template dell'account con quella
+coppia `(category_id, wallet_id)`. Se e **solo se** ne esiste **esattamente
+uno**, valorizzare `recurrent_movement_id`. Zero, oppure due o più → non
+valorizzare niente, come oggi.
+
+L'unicità è ciò che rende la deduzione sicura: con un solo candidato non c'è
+scelta da sbagliare, e il caso ambiguo degrada al comportamento attuale
+(proposta che resta aperta, chiudibile con "Ignora questo mese").
+
+**Note / casi limite** — non toccare il percorso OAuth né l'interaction model
+della skill: è una riga nella costruzione del movimento, e il tool
+`add_movement` non cambia firma. Un template senza `due_day` resta comunque
+collegabile: la deduzione non guarda lo stato della proposta, solo la coppia
+categoria/wallet.
 
 ### MB-012 — Dark mode: il campo labels scriveva scuro su scuro · risolta il 2026-11-11
 
